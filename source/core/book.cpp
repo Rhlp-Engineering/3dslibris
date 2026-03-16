@@ -14,6 +14,7 @@
 #include "book.h"
 
 #include "app.h"
+#include "inline_image_flow.h"
 #include "main.h"
 #include "parse.h"
 #include <algorithm>
@@ -346,6 +347,37 @@ bool blankline(parsedata_t *p) {
   return (p->buf[p->buflen - 1] == '\n') && (p->buf[p->buflen - 2] == '\n');
 }
 
+static bool ParsedAtScreenStart(parsedata_t *p) {
+  if (!p || !p->app || !p->app->ts)
+    return false;
+  Text *ts = p->app->ts;
+  return !p->linebegan && p->pen.x == ts->margin.left &&
+         p->pen.y == (ts->margin.top + ts->GetHeight());
+}
+
+static void AdvanceParsedScreen(parsedata_t *p) {
+  if (!p || !p->app || !p->app->ts || !p->book)
+    return;
+
+  Text *ts = p->app->ts;
+  if (p->screen == 1) {
+    Page *page = p->book->AppendPage();
+    page->SetBuffer(p->buf, p->buflen);
+    p->buflen = 0;
+    if (p->italic)
+      p->buf[p->buflen++] = TEXT_ITALIC_ON;
+    if (p->bold)
+      p->buf[p->buflen++] = TEXT_BOLD_ON;
+    p->screen = 0;
+  } else {
+    p->screen = 1;
+  }
+
+  p->pen.x = ts->margin.left;
+  p->pen.y = ts->margin.top + ts->GetHeight();
+  p->linebegan = false;
+}
+
 void instruction(void *data, const char *target, const char *pidata) {}
 
 void start(void *data, const char *el, const char **attr) {
@@ -495,6 +527,13 @@ void start(void *data, const char *el, const char **attr) {
 
     if (!resolved.empty() && p->book) {
       u16 image_id = p->book->RegisterInlineImage(resolved);
+      InlineImageFlowPlan image_flow =
+          PlanInlineImageFlow(p->screen, ParsedAtScreenStart(p));
+
+      // Mirror the renderer: if the cursor is mid-screen, move the image to
+      // the next logical screen before reserving its full-screen slot.
+      if (image_flow.advance_before)
+        AdvanceParsedScreen(p);
 
       // Inline image as one-screen block: token + id.
       if (p->buflen + 4 < PAGEBUFSIZE) {
