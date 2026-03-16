@@ -20,7 +20,7 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `1.0.4`
+- Current app version: `1.1.0`
 - Focus: stable daily reading on 3DS hardware and Citra/Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
@@ -95,7 +95,7 @@ Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
-- GitHub Releases: pushing a tag like `v1.0.4` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, and `dist/3dslibris-sdmc.zip` to the release
+- GitHub Releases: pushing a tag like `v1.1.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, and `dist/3dslibris-sdmc.zip` to the release
 
 ## Library controls
 - `D-Pad`: move the current selection around the library grid
