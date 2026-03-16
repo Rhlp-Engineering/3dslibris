@@ -27,6 +27,7 @@
 #include <3ds.h>
 
 #include "book.h"
+#include "browser_nav.h"
 #include "book_error.h"
 #include "button.h"
 #include "chapter_menu.h"
@@ -957,33 +958,36 @@ void App::browser_handleevent() {
     return;
   }
 
-  if (keys & (KEY_A | key.down)) {
-    // Open selected book.
+  auto navigateSelection = [&](BrowserNavMove move) {
+    if (bookcount <= 0)
+      return;
+    // D-Pad changes the focused book; shoulder buttons keep page jumps.
+    BrowserNavState state = {GetBookIndex(bookselected), (int)browserstart};
+    state = BrowserNavMoveSelection(state, bookcount, APP_BROWSER_BUTTON_COUNT,
+                                    kBrowserGridCols, move);
+    if (state.selected_index < 0 || state.selected_index >= bookcount)
+      return;
+    browserstart = (u8)state.page_start;
+    bookselected = books[state.selected_index];
+    browser_view_dirty = true;
+  };
+
+  if (keys & KEY_A) {
+    // Open selected book with the primary confirm button.
     OpenBook();
   }
-
-  else if (keys & (key.left | key.l)) {
-    // Select next book.
-    int b = GetBookIndex(bookselected);
-    if (b < bookcount - 1) {
-      b++;
-      bookselected = books[b];
-      if (b >= browserstart + APP_BROWSER_BUTTON_COUNT)
-        browser_nextpage();
-      browser_view_dirty = true;
-    }
-  }
-
-  else if (keys & (key.right | key.r)) {
-    // Select previous book.
-    int b = GetBookIndex(bookselected);
-    if (b > 0) {
-      b--;
-      bookselected = books[b];
-      if (b < browserstart)
-        browser_prevpage();
-      browser_view_dirty = true;
-    }
+  else if (keys & key.left) {
+    navigateSelection(BROWSER_NAV_LEFT);
+  } else if (keys & key.right) {
+    navigateSelection(BROWSER_NAV_RIGHT);
+  } else if (keys & key.up) {
+    navigateSelection(BROWSER_NAV_UP);
+  } else if (keys & key.down) {
+    navigateSelection(BROWSER_NAV_DOWN);
+  } else if (keys & key.l) {
+    browser_prevpage();
+  } else if (keys & key.r) {
+    browser_nextpage();
   }
 
   else if (keys & (KEY_SELECT | KEY_Y)) {
