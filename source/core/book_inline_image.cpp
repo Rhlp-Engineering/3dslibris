@@ -336,6 +336,10 @@ const std::string *Book::GetInlineImagePath(u16 id) const {
   return &inline_images[id].path;
 }
 
+u32 Book::GetInlineImageCount() const {
+  return (u32)inline_images.size();
+}
+
 void Book::ClearInlineImageCache() {
   inline_image_cache.clear();
   inline_image_cache_bytes = 0;
