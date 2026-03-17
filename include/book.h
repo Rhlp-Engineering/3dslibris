@@ -181,6 +181,7 @@ public:
   const std::unordered_map<std::string, u16> &GetChapterDocStartPages() const;
   void ClearChapterDocStartPages();
   const std::string *GetInlineImagePath(u16 id) const;
+  u32 GetInlineImageCount() const;
   bool GetInlineImageMetadata(u16 id, InlineImageMetadata *out);
   void ClearInlineImages();
   void SetInlineImageProbeZip(void *uf);

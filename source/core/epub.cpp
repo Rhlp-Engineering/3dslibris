@@ -56,7 +56,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 static const char *kEpubCacheBaseDir = "sdmc:/3ds/3dslibris/cache";
 static const char *kEpubCacheDir = "sdmc:/3ds/3dslibris/cache/epub";
 static const u32 kEpubPageCacheMagic = 0x45504347U; // "EPCG"
-static const u16 kEpubPageCacheVersion = 1;
+static const u16 kEpubPageCacheVersion = 2;
 
 struct EpubPageCacheHeader {
   u32 magic;
@@ -65,6 +65,7 @@ struct EpubPageCacheHeader {
   u32 page_count;
   u32 chapter_count;
   u32 doc_start_count; // chapter_doc_start_pages entries
+  u32 image_count;     // inline_images entries
 };
 
 static const size_t EPUB_TOC_MAX_BYTES = 192 * 1024;
@@ -164,7 +165,8 @@ static bool TryLoadEpubPageCache(Book *book, const char *book_path, App *app) {
   if (hdr.magic != kEpubPageCacheMagic ||
       hdr.version != kEpubPageCacheVersion || hdr.page_count == 0 ||
       hdr.page_count > 20000 || hdr.chapter_count > 4000 ||
-      hdr.title_len > 1000 || hdr.doc_start_count > 4000) {
+      hdr.title_len > 1000 || hdr.doc_start_count > 4000 ||
+      hdr.image_count > 65535) {
     fclose(fp);
     remove(cache_path.c_str());
     return false;
@@ -240,6 +242,24 @@ static bool TryLoadEpubPageCache(Book *book, const char *book_path, App *app) {
     }
   }
 
+  if (ok) {
+    for (u32 i = 0; i < hdr.image_count; i++) {
+      u16 path_len = 0;
+      if (fread(&path_len, 1, sizeof(path_len), fp) != sizeof(path_len) ||
+          path_len == 0 || path_len > 2048) {
+        ok = false;
+        break;
+      }
+      std::string imgpath;
+      imgpath.resize(path_len);
+      if (fread(&imgpath[0], 1, path_len, fp) != path_len) {
+        ok = false;
+        break;
+      }
+      book->RegisterInlineImage(imgpath);
+    }
+  }
+
   fclose(fp);
   if (!ok) {
     book->Close();
@@ -277,6 +297,7 @@ static void SaveEpubPageCache(Book *book, const char *book_path, App *app) {
   hdr.page_count = book->GetPageCount();
   hdr.chapter_count = (u32)chapters.size();
   hdr.doc_start_count = (u32)doc_starts.size();
+  hdr.image_count = book->GetInlineImageCount();
 
   FILE *fp = fopen(cache_path.c_str(), "wb");
   if (!fp)
@@ -335,6 +356,26 @@ static void SaveEpubPageCache(Book *book, const char *book_path, App *app) {
       }
       if (path_len > 0 &&
           fwrite(kv.first.data(), 1, path_len, fp) != path_len) {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  if (ok) {
+    u32 img_count = book->GetInlineImageCount();
+    for (u32 i = 0; i < img_count; i++) {
+      const std::string *imgpath = book->GetInlineImagePath((u16)i);
+      if (!imgpath || imgpath->empty()) {
+        ok = false;
+        break;
+      }
+      u16 path_len = (u16)std::min<size_t>(imgpath->size(), 2048);
+      if (fwrite(&path_len, 1, sizeof(path_len), fp) != sizeof(path_len)) {
+        ok = false;
+        break;
+      }
+      if (fwrite(imgpath->data(), 1, path_len, fp) != path_len) {
         ok = false;
         break;
       }
