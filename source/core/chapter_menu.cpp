@@ -463,7 +463,11 @@ bool ChapterMenu::ResolveTargetPage(u8 index, u16 *page_out) {
   // larger jumps.  For structured (strong/mixed) TOCs the hint is usually
   // close but can still be off by a few pages because of the linear
   // byte-to-page estimation used by MOBI; allow a tighter correction.
-  const int max_delta = (q == TOC_QUALITY_HEURISTIC) ? 32 : 8;
+  // 24 is a safety net wide enough to absorb the residual error from the
+  // linear fallback when the precise OPT-A mapping tables are unavailable
+  // (e.g. page-cache loads), without being so wide that we jump to a wrong
+  // chapter of a similar name.
+  const int max_delta = (q == TOC_QUALITY_HEURISTIC) ? 32 : 24;
 
   if (approx_page_cache[index] >= 0) {
     *page_out = (u16)approx_page_cache[index];
