@@ -39,7 +39,10 @@ static const char *kMobiCacheDir = "sdmc:/3ds/3dslibris/cache/mobi";
 static const u32 kMobiPageCacheMagic = 0x4D504347U; // "MPCG"
 // Bump when serialized MOBI pages become semantically incompatible with the
 // current text cleanup or TOC mapping logic.
-static const u16 kMobiPageCacheVersion = 3;
+// v3→v4: added precise html→text→page mapping tables for TOC chapter
+//         positioning; old caches used an inaccurate linear ratio that placed
+//         chapters dozens of pages away from their actual location.
+static const u16 kMobiPageCacheVersion = 4;
 
 struct MobiPageCacheHeader {
   u32 magic;
@@ -1178,6 +1181,11 @@ struct PlainTextStreamState {
   bool detect_heuristic_headings;
   bool initialized;
   bool completed;
+  // Running count of text bytes fed to chardata() so far.  Used together with
+  // text_cursor_per_page (in ContinuePlainTextStreamState) to record the exact
+  // text byte offset at the start of each page, enabling precise MOBI TOC
+  // html-pos → page mapping later.
+  size_t text_bytes_fed;
 };
 
 static PlainLineChunk ReadNextLineChunk(const std::string &text,
@@ -1218,6 +1226,7 @@ static bool InitPlainTextStreamState(Book *book, const std::string &text_utf8,
   out->detect_heuristic_headings = detect_heuristic_headings;
   out->initialized = false;
   out->completed = false;
+  out->text_bytes_fed = 0;
   out->curr.text.clear();
   out->curr.has_newline = false;
   out->curr.valid = false;
@@ -1237,15 +1246,22 @@ static bool InitPlainTextStreamState(Book *book, const std::string &text_utf8,
   return true;
 }
 
+// text_cursor_per_page: if non-null, receives one entry per page created
+// during this call — the text byte offset at the start of that page.
+// Together with html_to_text_map (built in ExtractMobiMarkupToText), this
+// allows MobiHtmlPosToPage() to convert MOBI TOC byte positions into accurate
+// page numbers without the lossy linear ratio that was used before.
 static bool ContinuePlainTextStreamState(PlainTextStreamState *state,
                                          const std::string &text_utf8,
                                          u32 budget_ms, u16 page_budget,
-                                         u16 min_pages_before_stop) {
+                                         u16 min_pages_before_stop,
+                                         std::vector<u32> *text_cursor_per_page) {
   if (!state || !state->initialized || state->completed)
     return true;
 
   const u64 t_begin = osGetTime();
   const u16 page_start = state->parsedata.book->GetPageCount();
+  u16 last_page_count = state->parsedata.book->GetPageCount();
 
   while (state->curr.valid) {
     bool curr_blank = IsBlankLine(state->curr.text);
@@ -1269,12 +1285,23 @@ static bool ContinuePlainTextStreamState(PlainTextStreamState *state,
       AddChapterIfUnique(state->parsedata.book, state->curr.text, 0);
     }
 
+    const size_t bytes_before = state->text_bytes_fed;
     if (!state->curr.text.empty()) {
       xml::book::chardata(&state->parsedata, state->curr.text.c_str(),
                           (int)state->curr.text.size());
+      state->text_bytes_fed += state->curr.text.size();
     }
     if (state->curr.has_newline) {
       xml::book::chardata(&state->parsedata, "\n", 1);
+      state->text_bytes_fed += 1;
+    }
+
+    if (text_cursor_per_page) {
+      const u16 new_page_count = state->parsedata.book->GetPageCount();
+      while (last_page_count < new_page_count) {
+        text_cursor_per_page->push_back((u32)bytes_before);
+        last_page_count++;
+      }
     }
 
     state->prev_blank = curr_blank;
@@ -1315,7 +1342,7 @@ static u8 ParsePlainTextBuffer(Book *book, const std::string &text_utf8,
   if (!InitPlainTextStreamState(book, text_utf8, detect_heuristic_headings,
                                 &state))
     return 1;
-  ContinuePlainTextStreamState(&state, text_utf8, 0, 0, 0);
+  ContinuePlainTextStreamState(&state, text_utf8, 0, 0, 0, nullptr);
   return 0;
 }
 
@@ -2194,6 +2221,9 @@ struct MobiDeferredState {
   std::string text_utf8;
   std::vector<MobiHeadingHint> heading_hints;
   std::vector<MobiStructuredTocEntry> structured_toc;
+  // OPT-A mapping tables — built during fresh parse, empty on cache loads.
+  std::vector<std::pair<u32, u32>> html_to_text_map;
+  std::vector<u32> text_cursor_per_page;
   bool have_structured_toc;
   bool structured_from_filepos;
   bool used_utf8_guess;
@@ -2306,15 +2336,84 @@ FindMobiHeadingNearPage(const std::vector<std::vector<std::string>> &page_lines,
   return -1;
 }
 
+// Convert a MOBI TOC pos (byte offset into decompressed HTML) to a page index.
+//
+// The old approach used a simple linear ratio (pos / text_len * page_count)
+// which assumed uniform tag density.  In practice HTML tags, scripts, styles
+// and entities are stripped non-uniformly by ExtractMobiMarkupToText, so the
+// ratio drifted by 66-436 pages on large books (e.g. Obama's "A Promised
+// Land", 1336 pages, 31 chapters).
+//
+// This function does two piecewise-linear lookups instead:
+//   1. html_to_text_map: html_pos → text_pos  (sampled every ~4KB in HTML)
+//   2. text_cursor_per_page: text_pos → page   (recorded during pagination)
+static int MobiHtmlPosToPage(
+    u32 html_pos,
+    const std::vector<std::pair<u32, u32>> &html_to_text_map,
+    const std::vector<u32> &text_cursor_per_page) {
+  if (html_to_text_map.size() < 2 || text_cursor_per_page.empty())
+    return -1;
+
+  // html_pos → text_pos via piecewise-linear interpolation on the sampling
+  // table.  Each sample is (html_byte_offset, text_byte_offset).
+  size_t lo = 0, hi = html_to_text_map.size() - 1;
+  while (lo + 1 < hi) {
+    size_t mid = (lo + hi) / 2;
+    if (html_to_text_map[mid].first <= html_pos)
+      lo = mid;
+    else
+      hi = mid;
+  }
+  const u32 h0 = html_to_text_map[lo].first;
+  const u32 t0 = html_to_text_map[lo].second;
+  const u32 h1 = html_to_text_map[hi].first;
+  const u32 t1 = html_to_text_map[hi].second;
+  u32 text_pos;
+  if (h1 == h0)
+    text_pos = t0;
+  else {
+    double frac = (double)(html_pos - h0) / (double)(h1 - h0);
+    if (frac < 0.0)
+      frac = 0.0;
+    if (frac > 1.0)
+      frac = 1.0;
+    text_pos = t0 + (u32)(frac * (double)(t1 - t0));
+  }
+
+  // text_pos → page via binary search on text_cursor_per_page.
+  // text_cursor_per_page[i] = text byte offset at the start of page i.
+  // We want the last page whose start offset <= text_pos.
+  lo = 0;
+  hi = text_cursor_per_page.size();
+  while (lo + 1 < hi) {
+    size_t mid = (lo + hi) / 2;
+    if (text_cursor_per_page[mid] <= text_pos)
+      lo = mid;
+    else
+      hi = mid;
+  }
+  return (int)lo;
+}
+
 static size_t BuildMobiChaptersFromStructuredToc(
     Book *book, const std::vector<MobiStructuredTocEntry> &entries,
-    u32 text_len, size_t *direct_out, bool refine_with_heading_search) {
+    u32 text_len, size_t *direct_out, bool refine_with_heading_search,
+    const std::vector<std::pair<u32, u32>> &html_to_text_map,
+    const std::vector<u32> &text_cursor_per_page) {
   if (direct_out)
     *direct_out = 0;
   if (!book || entries.empty() || book->GetPageCount() == 0)
     return 0;
 
   const u16 page_count = book->GetPageCount();
+  const bool have_precise_map =
+      html_to_text_map.size() >= 2 && !text_cursor_per_page.empty();
+
+  // Heading search is used to verify/correct page estimates.  When loading
+  // from page cache, both mapping tables are empty (pagination was skipped),
+  // so we fall through to the linear ratio and rely on the wider heading
+  // search or runtime remap in ResolveTargetPage (chapter_menu.cpp).
+
   bool needs_heading_search = refine_with_heading_search;
   if (!needs_heading_search) {
     for (size_t i = 0; i < entries.size(); i++) {
@@ -2349,18 +2448,30 @@ static size_t BuildMobiChaptersFromStructuredToc(
     int best_page = -1;
 
     if (has_pos) {
-      double ratio = (double)entries[i].pos / (double)denom;
-      if (ratio < 0.0)
-        ratio = 0.0;
-      if (ratio > 1.0)
-        ratio = 1.0;
-      const u16 guess = (u16)(ratio * (double)(page_count - 1));
-      best_page = (int)guess;
+      // Prefer the precise dual-lookup when mapping tables are available
+      // (fresh parse).  Fall back to the linear ratio for page-cache loads
+      // where the tables were never built.
+      if (have_precise_map) {
+        int precise = MobiHtmlPosToPage(entries[i].pos, html_to_text_map,
+                                        text_cursor_per_page);
+        if (precise >= 0 && precise < page_count)
+          best_page = precise;
+      }
+      if (best_page < 0) {
+        double ratio = (double)entries[i].pos / (double)denom;
+        if (ratio < 0.0)
+          ratio = 0.0;
+        if (ratio > 1.0)
+          ratio = 1.0;
+        best_page = (int)((u16)(ratio * (double)(page_count - 1)));
+      }
 
-      // Refine around the expected position when title appears in heading
-      // lines.
       if (needs_heading_search) {
-        int refined = FindMobiHeadingNearPage(page_lines, needle, guess, 32);
+        // Radius reduced from ±32 to ±4: with the precise mapping the initial
+        // estimate is close enough that a wide scan would risk matching a
+        // wrong heading further away.
+        int refined = FindMobiHeadingNearPage(page_lines, needle,
+                                              (u16)best_page, 4);
         if (refined >= 0)
           best_page = refined;
       }
@@ -2415,6 +2526,8 @@ static void FinalizeMobiPreparedToc(
     const std::vector<MobiStructuredTocEntry> &structured_toc,
     bool have_structured_toc, bool structured_from_filepos,
     const std::vector<MobiHeadingHint> &heading_hints, u32 text_len_for_pos,
+    const std::vector<std::pair<u32, u32>> &html_to_text_map,
+    const std::vector<u32> &text_cursor_per_page,
     MobiTocFinalizeResult *out) {
   if (!book)
     return;
@@ -2436,7 +2549,7 @@ static void FinalizeMobiPreparedToc(
     book->ClearChapters();
     mapped_structured = BuildMobiChaptersFromStructuredToc(
         book, structured_toc, text_len_for_pos, &structured_direct,
-        !structured_from_filepos);
+        !structured_from_filepos, html_to_text_map, text_cursor_per_page);
     if (mapped_structured >= 2) {
       structured_used = true;
       PruneMobiFrontMatterTocCluster(book, app);
@@ -3084,9 +3197,15 @@ static bool LoadDeferredMobiStructuredToc(
   return false;
 }
 
-static std::string
-ExtractMobiMarkupToText(const std::string &in,
-                        std::vector<MobiHeadingHint> *heading_hints) {
+// html_to_text_map: if non-null, receives (html_byte_offset, text_byte_offset)
+// samples captured every ~4KB of HTML input.  Because this function strips tags,
+// scripts, styles, and entities at highly non-uniform rates, a global linear
+// ratio (html_pos / html_len) is a poor proxy for the corresponding text
+// position.  The sampling table lets MobiHtmlPosToPage() do piecewise-linear
+// interpolation instead.
+static std::string ExtractMobiMarkupToText(
+    const std::string &in, std::vector<MobiHeadingHint> *heading_hints,
+    std::vector<std::pair<u32, u32>> *html_to_text_map) {
   std::string out;
   out.reserve(in.size());
   bool in_script = false;
@@ -3095,7 +3214,22 @@ ExtractMobiMarkupToText(const std::string &in,
   int heading_level = -1;
   std::string heading_text;
 
+  // Build a sampling table mapping HTML byte offsets to output text offsets.
+  // Record a sample every ~4KB of HTML input for reasonable resolution.
+  const size_t kSampleInterval = 4096;
+  size_t next_sample = 0;
+  if (html_to_text_map) {
+    html_to_text_map->clear();
+    html_to_text_map->reserve(in.size() / kSampleInterval + 2);
+    html_to_text_map->push_back({0, 0});
+  }
+
   for (size_t i = 0; i < in.size();) {
+    if (html_to_text_map && i >= next_sample) {
+      html_to_text_map->push_back(
+          {(u32)i, (u32)out.size()});
+      next_sample = i + kSampleInterval;
+    }
     unsigned char c = (unsigned char)in[i];
     if (c == '<') {
       size_t close = in.find('>', i + 1);
@@ -3243,6 +3377,9 @@ ExtractMobiMarkupToText(const std::string &in,
       heading_text.append(in, i, (size_t)step);
     i += (size_t)step;
   }
+
+  if (html_to_text_map)
+    html_to_text_map->push_back({(u32)in.size(), (u32)out.size()});
 
   return out;
 }
@@ -3407,7 +3544,9 @@ static u8 ParseMobiFile(Book *book, const char *path) {
   const u64 t_after_decode = osGetTime();
 
   std::vector<MobiHeadingHint> heading_hints;
-  std::string text = ExtractMobiMarkupToText(utf8, &heading_hints);
+  std::vector<std::pair<u32, u32>> html_to_text_map;
+  std::string text = ExtractMobiMarkupToText(utf8, &heading_hints,
+                                             &html_to_text_map);
   NormalizeNewlines(&text);
   // Mixed-quality MOBIs can contain isolated UTF-8 mojibake fragments even
   // when most of the book decodes correctly; repair those before layout.
@@ -3423,6 +3562,7 @@ static u8 ParseMobiFile(Book *book, const char *path) {
   deferred.source_path = path;
   deferred.text_utf8.swap(text);
   deferred.heading_hints.swap(heading_hints);
+  deferred.html_to_text_map.swap(html_to_text_map);
   // Resolve MOBI TOC after the first pages are visible so large inline/filepos
   // TOCs do not block the initial open path.
   deferred.structured_toc.clear();
@@ -3450,7 +3590,8 @@ static u8 ParseMobiFile(Book *book, const char *path) {
   book->MarkMobiRenderSettingsApplied(deferred.line_wrap_fix_applied);
 
   const bool pages_done_initial = ContinuePlainTextStreamState(
-      &deferred.stream, deferred.text_utf8, 1200, 96, 1);
+      &deferred.stream, deferred.text_utf8, 1200, 96, 1,
+      &deferred.text_cursor_per_page);
   deferred.t_after_pages = osGetTime();
 
   if (!pages_done_initial) {
@@ -3486,7 +3627,8 @@ static u8 ParseMobiFile(Book *book, const char *path) {
   FinalizeMobiPreparedToc(
       book, app, deferred.structured_toc, deferred.have_structured_toc,
       deferred.structured_from_filepos, deferred.heading_hints,
-      deferred.text_len_for_pos, &toc_result);
+      deferred.text_len_for_pos, deferred.html_to_text_map,
+      deferred.text_cursor_per_page, &toc_result);
   deferred.t_after_toc = osGetTime();
 
   if (app) {
@@ -3810,7 +3952,8 @@ static bool FinalizeDeferredMobiState(Book *book, MobiDeferredState *state) {
   FinalizeMobiPreparedToc(book, app, state->structured_toc,
                           state->have_structured_toc,
                           state->structured_from_filepos, state->heading_hints,
-                          state->text_len_for_pos, &toc_result);
+                          state->text_len_for_pos, state->html_to_text_map,
+                          state->text_cursor_per_page, &toc_result);
   state->t_after_toc = osGetTime();
   state->finalized = true;
 
@@ -3865,7 +4008,8 @@ static bool ContinueDeferredMobiState(Book *book, MobiDeferredState *state,
 
   const u16 pages_before = book->GetPageCount();
   const bool done = ContinuePlainTextStreamState(
-      &state->stream, state->text_utf8, budget_ms, page_budget, 0);
+      &state->stream, state->text_utf8, budget_ms, page_budget, 0,
+      &state->text_cursor_per_page);
   if (book->GetPageCount() > pages_before)
     state->t_after_pages = osGetTime();
 
