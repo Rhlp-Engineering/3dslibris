@@ -22,5 +22,7 @@ int MeasureTextRun(const std::vector<ShapedGlyph> &run, size_t start,
                    size_t end);
 size_t FindLineBreak(const std::vector<ShapedGlyph> &run, size_t start,
                      int max_width);
+size_t FindPreformattedLineBreak(const std::vector<ShapedGlyph> &run,
+                                 size_t start, int max_width);
 
 } // namespace text_layout_utils

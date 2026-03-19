@@ -70,4 +70,26 @@ size_t FindLineBreak(const std::vector<ShapedGlyph> &run, size_t start,
   return i;
 }
 
+size_t FindPreformattedLineBreak(const std::vector<ShapedGlyph> &run,
+                                 size_t start, int max_width) {
+  if (start >= run.size())
+    return run.size();
+
+  int width = 0;
+  size_t i = start;
+  for (; i < run.size(); i++) {
+    const ShapedGlyph &glyph = run[i];
+    if (glyph.text.codepoint == '\r')
+      continue;
+    if (glyph.text.codepoint == '\n')
+      return i;
+
+    width += glyph.advance;
+    if (width > max_width)
+      return (i > start) ? i : (i + 1);
+  }
+
+  return i;
+}
+
 } // namespace text_layout_utils
