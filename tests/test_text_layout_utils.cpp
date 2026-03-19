@@ -61,10 +61,27 @@ void TestFindLineBreaks() {
            text_layout_utils::FindLineBreak(run, 0, 5), (size_t)4);
 }
 
+void TestFindPreformattedBreaks() {
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  ExpectTrue("shape preformatted ascii",
+             text_layout_utils::ShapeTextRunUtf8(">>> abcdef", 10, NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("preformatted wraps at width without waiting for whitespace",
+           text_layout_utils::FindPreformattedLineBreak(run, 0, 5), (size_t)5);
+
+  run.clear();
+  ExpectTrue("shape preformatted keeps later segment",
+             text_layout_utils::ShapeTextRunUtf8("foo bar", 7, NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("preformatted second break starts from current point",
+           text_layout_utils::FindPreformattedLineBreak(run, 4, 3), (size_t)7);
+}
+
 } // namespace
 
 int main() {
   TestShapeAndMeasure();
   TestFindLineBreaks();
+  TestFindPreformattedBreaks();
   return 0;
 }

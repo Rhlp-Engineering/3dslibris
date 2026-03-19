@@ -134,6 +134,13 @@ void TestSoftBreakDoesNotSplitOversizedWrite() {
   ExpectTrue("overflow set for oversized write", parse_page_buffer_overflowed(&p));
 }
 
+void TestParseInitDisablesPreformattedWrapByDefault() {
+  parsedata_t p{};
+  parse_init(&p);
+  ExpectFalse("preformatted wrap disabled by default",
+              p.preformatted_wrap_enabled);
+}
+
 } // namespace
 
 int main() {
@@ -142,5 +149,6 @@ int main() {
   TestResetClearsOverflow();
   TestSoftBreakForSmallPendingWrite();
   TestSoftBreakDoesNotSplitOversizedWrite();
+  TestParseInitDisablesPreformattedWrapByDefault();
   return 0;
 }

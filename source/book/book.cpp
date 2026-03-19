@@ -571,8 +571,10 @@ void start(void *data, const char *el, const char **attr) {
         p->pen.x += p->app->ts->GetAdvance(' ');
       }
     }
-  } else if (!strcmp(el, "pre"))
+  } else if (!strcmp(el, "pre")) {
     parse_push(p, TAG_PRE);
+    p->preformatted_wrap_enabled = true;
+  }
   else if (!strcmp(el, "li")) {
     parse_push(p, TAG_UNKNOWN);
     if (parse_in(p, TAG_UL) && !parse_in(p, TAG_OL)) {
@@ -795,17 +797,83 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
   }
 
   if (parse_in(p, TAG_PRE)) {
-    for (int i = 0; i < txtlen; i++) {
-      if (txt[i] == '\r')
+    if (!p->preformatted_wrap_enabled) {
+      for (int i = 0; i < txtlen; i++) {
+        if (txt[i] == '\r')
+          continue;
+        AppendParsedByte(p, txt[i]);
+        if (txt[i] == '\n') {
+          p->pen.x = ts->margin.left;
+          p->pen.y += (lineheight + linespacing);
+        } else {
+          p->pen.x += spaceadvance;
+        }
+        AdvanceParsedPageOnOverflow(p, lineheight);
+      }
+      return;
+    }
+
+    std::vector<text_layout_utils::ShapedGlyph> pre_run;
+    if (!text_layout_utils::ShapeTextRunUtf8(txt, (size_t)txtlen, NULL,
+                                             MeasureParsedTextAdvance, ts,
+                                             &pre_run)) {
+      return;
+    }
+
+    const int maxPreLineWidth =
+        ts->display.width - ts->margin.right - ts->margin.left;
+    size_t unit_index = 0;
+    while (unit_index < pre_run.size()) {
+      const text_layout_utils::ShapedGlyph &unit = pre_run[unit_index];
+      if (unit.text.codepoint == '\r') {
+        unit_index++;
         continue;
-      AppendParsedByte(p, txt[i]);
-      if (txt[i] == '\n') {
+      }
+
+      if (unit.text.codepoint == '\n') {
+        AppendParsedByte(p, '\n');
         p->pen.x = ts->margin.left;
         p->pen.y += (lineheight + linespacing);
-      } else {
-        p->pen.x += spaceadvance;
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+        unit_index++;
+        continue;
       }
-      AdvanceParsedPageOnOverflow(p, lineheight);
+
+      size_t segment_end_index = text_layout_utils::FindPreformattedLineBreak(
+          pre_run, unit_index, maxPreLineWidth);
+      if (segment_end_index <= unit_index)
+        segment_end_index = unit_index + 1;
+
+      size_t segment_start = pre_run[unit_index].text.byte_offset;
+      size_t segment_end =
+          pre_run[segment_end_index - 1].text.byte_offset +
+          pre_run[segment_end_index - 1].text.byte_length;
+      const int advance = text_layout_utils::MeasureTextRun(
+          pre_run, unit_index, segment_end_index);
+
+      if ((p->pen.x + advance) > (ts->display.width - ts->margin.right) &&
+          p->pen.x > ts->margin.left) {
+        AppendParsedByte(p, '\n');
+        p->pen.x = ts->margin.left;
+        p->pen.y += (lineheight + linespacing);
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+      }
+
+      AppendParsedBytes(p, txt + segment_start, segment_end - segment_start);
+      p->pen.x += advance;
+      p->linebegan = true;
+      unit_index = segment_end_index;
+
+      if (unit_index < pre_run.size() &&
+          pre_run[unit_index].text.codepoint != '\n') {
+        AppendParsedByte(p, '\n');
+        p->pen.x = ts->margin.left;
+        p->pen.y += (lineheight + linespacing);
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+      }
     }
     return;
   }
@@ -986,6 +1054,8 @@ void end(void *data, const char *el) {
     linefeed(p);
   } else if (!strcmp(el, "h3") || !strcmp(el, "h4") || !strcmp(el, "h5") ||
              !strcmp(el, "h6") || !strcmp(el, "hr") || !strcmp(el, "pre")) {
+    if (!strcmp(el, "pre"))
+      p->preformatted_wrap_enabled = false;
     linefeed(p);
     linefeed(p);
   } else if (!strcmp(el, "li") || !strcmp(el, "ul") || !strcmp(el, "ol")) {
