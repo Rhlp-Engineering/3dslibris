@@ -20,28 +20,29 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `1.2.0`
+- Current app version: `2.0.0`
 - Focus: stable daily reading on 3DS hardware and Citra/Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia`
 
-## v1.2.0 release notes
-- Adds MuPDF-backed PDF reading with zoomed top-screen viewing, full-page preview on the bottom screen, outline navigation when available, and touch-controlled viewport movement.
-- Introduces a progressive PDF rendering pipeline: preview first, interactive cache next, then full-page refinement in the background instead of a single blocking render.
-- Adds progressive strip rendering for zoomed PDF pages, with strips composited on screen as they complete.
-- Uses a dedicated PDF worker thread on the New Nintendo 3DS extra core when available, while keeping an automatic synchronous fallback path for Old 3DS hardware.
-- Improves PDF cache behavior by stabilizing preview viewport updates, accelerating cache reuse, and deferring expensive prefetch work until page turns or idle periods.
-- Tightens PDF release documentation and licensing notes for MuPDF-enabled builds, including corresponding-source guidance for release packaging.
+## v2.0.0 release notes
+- Adds MuPDF-backed fixed-layout reading for `PDF`, `CBZ`, and `XPS`.
+- Ships a progressive fixed-layout pipeline with preview-first rendering, strip refinement, worker-thread acceleration on New 3DS, and stronger cache reuse.
+- Expands the reflow stack with asynchronous MOBI open/reflow on New 3DS, better persistent caches, and a much faster deferred TOC path for large books.
+- Improves EPUB and FB2 layout instrumentation and shared text-layout performance while keeping existing reader behavior stable.
+- Keeps the CIA packaging flow self-contained by bundling default runtime assets through `romfs`.
+- Full release notes: [.github/release-notes/v2.0.0.md](.github/release-notes/v2.0.0.md)
 
-Commits already included in the `v1.2.0` line:
+Commits already included in the `v2.0.0` line:
+- `2e9b5d6` `fix: bundle CIA runtime assets via romfs`
 - `983be1f` `feat: integrate MuPDF-backed PDF reader`
-- `ee6fcc9` `docs: add AGPL compliance for PDF-enabled releases`
-- `57737ac` `fix: stabilize PDF preview viewport rendering`
-- `a756191` `perf: accelerate PDF render caching`
-- `b326c54` `perf: defer PDF prefetch until page turns`
-- `c422eca` `perf: add progressive PDF page rendering`
+- `7b1e91f` `feat: finalize v1.2.0 PDF progressive rendering`
+- `3ad063d` `feat: add native cbz reader`
+- `b3d2f2c` `feat: add xps support via mupdf`
+- `8be3c1f` `Optimize async MOBI parsing and deferred reflow`
+- `cc5ffb6` `Optimize shared EPUB/FB2 layout instrumentation`
 
 ## Supported formats
 
@@ -125,7 +126,7 @@ Generated install package targets:
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
 - `make source-release` creates `dist/3dslibris-source.tar.gz`
-- GitHub Releases: pushing a tag like `v1.2.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
+- GitHub Releases: pushing a tag like `v2.0.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Library controls
 - `D-Pad`: move the current selection around the library grid
