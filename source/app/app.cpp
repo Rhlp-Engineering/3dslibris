@@ -451,6 +451,11 @@ int App::Run(void) {
     }
   };
 
+  auto haltOnFatalBootStatus = [&]() -> int {
+    halt(-1);
+    return 0;
+  };
+
   // Start up typesetter.
   printf("Loading fonts...\n");
   if (ts->Init() != ok) {
@@ -481,7 +486,7 @@ int App::Run(void) {
       lines.push_back(extra);
     }
     drawBootStatus("Instalacion incompleta", lines, true);
-    return 1;
+    return haltOnFatalBootStatus();
   }
 
   // Construct library.
@@ -496,7 +501,7 @@ int App::Run(void) {
                     "y extraelo en sdmc:/",
                     "Debe existir sdmc:/3ds/3dslibris/book"},
                    true);
-    return 1;
+    return haltOnFatalBootStatus();
   }
   if (BookCount() == 0) {
     PrintStatus("error: no epub files found");
@@ -504,7 +509,7 @@ int App::Run(void) {
                    {"Coloca tus EPUB/FB2/TXT/RTF/ODT",
                     "en sdmc:/3ds/3dslibris/book"},
                    true);
-    return 1;
+    return haltOnFatalBootStatus();
   }
 #ifdef DSLIBRIS_DEBUG
   DBG_LOGF(this, "TIMING: scan_books=%llums count=%u",
