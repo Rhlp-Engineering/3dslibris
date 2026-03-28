@@ -39,10 +39,12 @@ BUILD		?=	build
 SOURCES		:=	source source/core source/app source/shared source/ui source/menus \
 			source/library source/reader source/settings source/book \
 			source/formats/common source/formats/epub source/formats/fb2 \
-			source/formats/mobi source/expat third_party/utf8proc \
+			source/formats/mobi source/formats/pdf source/formats/cbz \
+			source/formats/mupdf source/expat third_party/utf8proc \
 			third_party/libunibreak/src
 DATA		:=	data
-INCLUDES	:=	include third_party/stb third_party/utf8proc third_party/libunibreak/src
+INCLUDES	:=	include third_party/stb third_party/utf8proc third_party/libunibreak/src \
+			third_party/mupdf/include
 GRAPHICS	:=
 ifneq ($(wildcard $(TOPDIR)/gfx),)
 GRAPHICS	:=	gfx
@@ -69,8 +71,13 @@ SDMC_DISTROOT	:=	$(DISTDIR)/sdmc
 SDMC_APPDIR	:=	$(SDMC_DISTROOT)/3ds/$(TARGET)
 SDMC_TEMPLATE_APPDIR := $(SDMC_TEMPLATE)/3ds/$(TARGET)
 SDMC_ZIP	:=	$(DISTDIR)/$(TARGET)-sdmc.zip
+SOURCE_ZIP	:=	$(DISTDIR)/$(BASE_TARGET)-source.tar.gz
 ROMFS		:=	$(DISTDIR)/romfs
 ROMFS_RUNTIME_APPDIR := $(ROMFS)/3ds/$(BASE_TARGET)
+MUPDF_ROOT	:=	third_party/mupdf
+MUPDF_OUT	:=	$(MUPDF_ROOT)/build/3ds-minimal
+MUPDF_LIB_A	:=	$(MUPDF_OUT)/libmupdf.a
+MUPDF_LIB_THIRD_A := $(MUPDF_OUT)/libmupdf-third.a
 #GFXBUILD	:=	$(ROMFS)/gfx
 
 #---------------------------------------------------------------------------------
@@ -129,7 +136,7 @@ endif
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lfreetype -lpng -lbz2 -lminizip -lz -lm -lctru
+LIBS	:= -lmupdf -lmupdf-third -lfreetype -lpng -lbz2 -lminizip -lz -lm -lctru
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -205,7 +212,8 @@ export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
 			-I$(CURDIR)/$(BUILD)
 
-export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
+export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib) \
+			-L$(CURDIR)/$(MUPDF_OUT)
 
 export _3DSXDEPS	:=	$(if $(NO_SMDH),,$(OUTPUT).smdh)
 
@@ -230,10 +238,10 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean package-sdmc zip-sdmc debug-3dsx cia stage-romfs
+.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx cia stage-romfs mupdf-minimal
 
 #---------------------------------------------------------------------------------
-all: stage-romfs $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
+all: stage-romfs mupdf-minimal $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 $(BUILD):
@@ -256,12 +264,23 @@ stage-romfs:
 	@mkdir -p "$(ROMFS_RUNTIME_APPDIR)"
 	@rsync -a --delete "$(SDMC_TEMPLATE)/3ds/$(BASE_TARGET)/font/" "$(ROMFS_RUNTIME_APPDIR)/font/"
 	@rsync -a --delete "$(SDMC_TEMPLATE)/3ds/$(BASE_TARGET)/resources/" "$(ROMFS_RUNTIME_APPDIR)/resources/"
+	@mkdir -p "$(ROMFS_RUNTIME_APPDIR)/licenses"
+	@cp LICENSE "$(ROMFS_RUNTIME_APPDIR)/licenses/LICENSE.txt"
+	@cp THIRD_PARTY_NOTICES.md "$(ROMFS_RUNTIME_APPDIR)/licenses/THIRD_PARTY_NOTICES.md"
+	@cp docs/PDF_SOURCE_RELEASE.md "$(ROMFS_RUNTIME_APPDIR)/licenses/PDF_SOURCE_RELEASE.md"
+	@cp LICENSES/GPL-2.0-or-later.txt "$(ROMFS_RUNTIME_APPDIR)/licenses/GPL-2.0-or-later.txt"
+	@cp LICENSES/AGPL-3.0-or-later.txt "$(ROMFS_RUNTIME_APPDIR)/licenses/AGPL-3.0-or-later.txt"
+mupdf-minimal: $(MUPDF_LIB_A) $(MUPDF_LIB_THIRD_A)
+
+$(MUPDF_LIB_A) $(MUPDF_LIB_THIRD_A): $(CURDIR)/scripts/build_mupdf_minimal.sh
+	@echo building mupdf minimal ...
+	@sh "$(CURDIR)/scripts/build_mupdf_minimal.sh"
 
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
 	@rm -fr $(BUILD) $(DEBUG_BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf \
-		$(GFXBUILD) $(DISTDIR) \
+		$(GFXBUILD) $(DISTDIR) $(MUPDF_OUT) build-tests/mupdf \
 		$(BASE_TARGET).3dsx $(BASE_TARGET).smdh $(BASE_TARGET).elf \
 		$(BASE_TARGET).cia $(BASE_TARGET)-debug.cia \
 		$(DEBUG_TARGET).3dsx $(DEBUG_TARGET).smdh $(DEBUG_TARGET).elf
@@ -286,6 +305,12 @@ package-sdmc: all
 	@rsync -a --delete $(SDMC_TEMPLATE)/ $(SDMC_DISTROOT)/
 	@rm -f $(SDMC_APPDIR)/$(TARGET).3dsx
 	@cp $(OUTPUT).3dsx $(SDMC_APPDIR)/$(TARGET).3dsx
+	@mkdir -p $(SDMC_APPDIR)/licenses
+	@cp LICENSE $(SDMC_APPDIR)/licenses/LICENSE.txt
+	@cp THIRD_PARTY_NOTICES.md $(SDMC_APPDIR)/licenses/THIRD_PARTY_NOTICES.md
+	@cp docs/PDF_SOURCE_RELEASE.md $(SDMC_APPDIR)/licenses/PDF_SOURCE_RELEASE.md
+	@cp LICENSES/GPL-2.0-or-later.txt $(SDMC_APPDIR)/licenses/GPL-2.0-or-later.txt
+	@cp LICENSES/AGPL-3.0-or-later.txt $(SDMC_APPDIR)/licenses/AGPL-3.0-or-later.txt
 	@echo staged ... $(SDMC_APPDIR)
 
 #---------------------------------------------------------------------------------
@@ -296,6 +321,31 @@ zip-sdmc: package-sdmc
 	@rm -f $(SDMC_ZIP)
 	@cd $(DISTDIR) && zip -qr $(TARGET)-sdmc.zip sdmc
 	@echo built ... $(SDMC_ZIP)
+
+#---------------------------------------------------------------------------------
+source-release:
+#---------------------------------------------------------------------------------
+	@echo building source release ...
+	@mkdir -p $(DISTDIR)
+	@rm -f $(SOURCE_ZIP)
+	@tmpdir="$$(mktemp -d)"; \
+	prefix="$(BASE_TARGET)-source"; \
+	mkdir -p "$$tmpdir/$$prefix"; \
+	rsync -a \
+		--exclude '.git' \
+		--exclude 'build' \
+		--exclude 'build-debug' \
+		--exclude 'build-tests' \
+		--exclude 'dist' \
+		--exclude 'third_party/mupdf/build' \
+		--exclude '*.cia' \
+		--exclude '*.3dsx' \
+		--exclude '*.elf' \
+		--exclude '*.smdh' \
+		"$(CURDIR)/" "$$tmpdir/$$prefix/"; \
+	tar -C "$$tmpdir" -czf "$(SOURCE_ZIP)" "$$prefix"; \
+	rm -rf "$$tmpdir"
+	@echo built ... $(SOURCE_ZIP)
 
 #---------------------------------------------------------------------------------
 cia: all
@@ -315,6 +365,8 @@ else
 # main targets
 #---------------------------------------------------------------------------------
 $(OUTPUT).3dsx	:	$(OUTPUT).elf $(_3DSXDEPS)
+
+$(OUTPUT).elf	:	$(TOPDIR)/$(MUPDF_LIB_A) $(TOPDIR)/$(MUPDF_LIB_THIRD_A)
 
 $(OFILES_SOURCES) : $(HFILES)
 

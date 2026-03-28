@@ -29,6 +29,13 @@ void ExpectEq(const char *label, const T &actual, const T &expected) {
   }
 }
 
+void ExpectFloatEq(const char *label, float actual, float expected) {
+  const float delta = actual - expected;
+  if (delta < -0.0001f || delta > 0.0001f) {
+    Fail(std::string(label) + ": expected float equality");
+  }
+}
+
 void TestDetectBookFormat() {
   using app_flow_utils::BookFileFormat;
 
@@ -40,8 +47,82 @@ void TestDetectBookFormat() {
            BookFileFormat::XhtmlLike);
   ExpectEq("mobi", app_flow_utils::DetectBookFormat("book.mobi"),
            BookFileFormat::XhtmlLike);
-  ExpectEq("unsupported", app_flow_utils::DetectBookFormat("book.pdf"),
+  ExpectEq("pdf", app_flow_utils::DetectBookFormat("book.pdf"),
+           BookFileFormat::MuPdf);
+  ExpectEq("xps", app_flow_utils::DetectBookFormat("book.xps"),
+           BookFileFormat::MuPdf);
+  ExpectEq("oxps", app_flow_utils::DetectBookFormat("book.oxps"),
+           BookFileFormat::MuPdf);
+  ExpectTrue("cbz support enabled", app_flow_utils::CbzSupportEnabled());
+  ExpectEq("cbz enabled", app_flow_utils::DetectBookFormat("comic.cbz"),
+           BookFileFormat::Cbz);
+  ExpectEq("cbr unsupported", app_flow_utils::DetectBookFormat("comic.cbr"),
            BookFileFormat::Unsupported);
+}
+
+void TestMuPdfDocumentKindHelpers() {
+  using app_flow_utils::MuPdfDocumentKind;
+
+  ExpectEq("pdf kind",
+           app_flow_utils::DetectMuPdfDocumentKind("book.pdf"),
+           MuPdfDocumentKind::Pdf);
+  ExpectEq("xps kind",
+           app_flow_utils::DetectMuPdfDocumentKind("book.xps"),
+           MuPdfDocumentKind::Xps);
+  ExpectEq("oxps kind",
+           app_flow_utils::DetectMuPdfDocumentKind("book.oxps"),
+           MuPdfDocumentKind::Xps);
+  ExpectEq("cbz not a mupdf kind anymore",
+           app_flow_utils::DetectMuPdfDocumentKind("comic.cbz"),
+           MuPdfDocumentKind::Unknown);
+  ExpectEq("cbr kind unknown",
+           app_flow_utils::DetectMuPdfDocumentKind("comic.cbr"),
+           MuPdfDocumentKind::Unknown);
+
+  ExpectEq("pdf label",
+           std::string(app_flow_utils::GetMuPdfDocumentLabel(
+               MuPdfDocumentKind::Pdf)),
+           std::string("PDF"));
+  ExpectEq("xps label",
+           std::string(app_flow_utils::GetMuPdfDocumentLabel(
+               MuPdfDocumentKind::Xps)),
+           std::string("XPS"));
+  ExpectEq("unknown label",
+           std::string(app_flow_utils::GetMuPdfDocumentLabel(
+               MuPdfDocumentKind::Unknown)),
+           std::string("MuPDF"));
+
+  ExpectFloatEq("pdf base zoom",
+                app_flow_utils::GetMuPdfReadingBaseZoom(
+                    MuPdfDocumentKind::Pdf),
+                1.5f);
+  ExpectFloatEq("xps base zoom",
+                app_flow_utils::GetMuPdfReadingBaseZoom(
+                    MuPdfDocumentKind::Xps),
+                1.5f);
+  ExpectFloatEq("unknown base zoom",
+                app_flow_utils::GetMuPdfReadingBaseZoom(
+                    MuPdfDocumentKind::Unknown),
+                1.5f);
+
+  ExpectTrue("pdf final render",
+             app_flow_utils::MuPdfWantsFinalQualityRender(
+                 MuPdfDocumentKind::Pdf));
+  ExpectTrue("xps final render",
+             app_flow_utils::MuPdfWantsFinalQualityRender(
+                 MuPdfDocumentKind::Xps));
+  ExpectFalse("unknown no final render",
+              app_flow_utils::MuPdfWantsFinalQualityRender(
+                  MuPdfDocumentKind::Unknown));
+  ExpectTrue("pdf prefetch",
+             app_flow_utils::MuPdfShouldPrefetchAdjacent(
+                 MuPdfDocumentKind::Pdf));
+  ExpectTrue("xps prefetch",
+             app_flow_utils::MuPdfShouldPrefetchAdjacent(
+                 MuPdfDocumentKind::Xps));
+  ExpectFalse("unknown no prefetch",
+              app_flow_utils::MuPdfShouldPrefetchAdjacent(
+                  MuPdfDocumentKind::Unknown));
 }
 
 void TestShouldIndexBookFilename() {
@@ -49,9 +130,30 @@ void TestShouldIndexBookFilename() {
              app_flow_utils::ShouldIndexBookFilename("book.epub"));
   ExpectFalse("dotfile skipped",
               app_flow_utils::ShouldIndexBookFilename(".hidden.epub"));
-  ExpectFalse("unsupported skipped",
-              app_flow_utils::ShouldIndexBookFilename("notes.pdf"));
+  ExpectTrue("pdf indexed",
+             app_flow_utils::ShouldIndexBookFilename("notes.pdf"));
+  ExpectTrue("xps indexed",
+             app_flow_utils::ShouldIndexBookFilename("notes.xps"));
+  ExpectTrue("cbz indexed",
+             app_flow_utils::ShouldIndexBookFilename("comic.cbz"));
   ExpectFalse("empty skipped", app_flow_utils::ShouldIndexBookFilename(""));
+}
+
+void TestSupportsMetadataIndexing() {
+  using app_flow_utils::BookFileFormat;
+
+  ExpectTrue("epub metadata indexing",
+             app_flow_utils::SupportsMetadataIndexing(BookFileFormat::Epub));
+  ExpectTrue("mupdf metadata indexing",
+             app_flow_utils::SupportsMetadataIndexing(BookFileFormat::MuPdf));
+  ExpectFalse("cbz metadata indexing disabled in v1",
+              app_flow_utils::SupportsMetadataIndexing(BookFileFormat::Cbz));
+  ExpectFalse("xhtml-like no metadata indexing",
+              app_flow_utils::SupportsMetadataIndexing(
+                  BookFileFormat::XhtmlLike));
+  ExpectFalse("unsupported no metadata indexing",
+              app_flow_utils::SupportsMetadataIndexing(
+                  BookFileFormat::Unsupported));
 }
 
 void TestSdmcToArchiveRelPath() {
@@ -218,7 +320,9 @@ void TestComputeStatusSnapshot() {
 
 int main() {
   TestDetectBookFormat();
+  TestMuPdfDocumentKindHelpers();
   TestShouldIndexBookFilename();
+  TestSupportsMetadataIndexing();
   TestSdmcToArchiveRelPath();
   TestNeedsBookRelayout();
   TestFindBookmarkJumpTarget();

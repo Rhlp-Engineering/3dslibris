@@ -15,18 +15,31 @@
 #pragma once
 
 #include "book/inline_image_layout.h"
+#include "shared/app_flow_utils.h"
 #include <3ds.h>
 #include <list>
+#include <memory>
 #include <stddef.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-typedef enum { FORMAT_UNDEF, FORMAT_XHTML, FORMAT_EPUB } format_t;
+typedef enum {
+  FORMAT_UNDEF,
+  FORMAT_XHTML,
+  FORMAT_EPUB,
+  FORMAT_PDF,
+  FORMAT_CBZ
+} format_t;
 
 class App;
 class Page;
 class Text;
+struct CbzPageEntry;
+struct fz_context;
+struct fz_document;
+struct fz_display_list;
+struct fz_outline;
 
 struct ChapterEntry {
   u16 page; // page index where chapter starts
@@ -47,6 +60,10 @@ enum TocQuality {
 //! App maintains a vector of Book to represent the available library.
 
 class Book {
+public:
+  struct MuPdfState;
+  struct CbzState;
+  struct ReflowWorkerState;
   struct InlineImageEntry {
     std::string path;
     bool metadata_probed;
@@ -70,6 +87,7 @@ class Book {
     std::vector<u16> pixels;
   };
 
+private:
   std::string filename;
   std::string foldername;
   std::string title;
@@ -98,6 +116,9 @@ class Book {
   u16 toc_heuristic_count;
   u16 toc_unresolved_count;
   std::vector<Page *> pages;
+  MuPdfState *mupdf_state;
+  CbzState *cbz_state;
+  ReflowWorkerState *reflow_worker_state;
   App *app; //! pointer to the App instance.
   unsigned int layout_revision;
 
@@ -105,6 +126,9 @@ class Book {
   bool LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
                              std::string *resolved_path = NULL);
   bool EnsureInlineImageMetadata(u16 image_id, InlineImageMetadata *out);
+  void ResetMuPdfState();
+  void ResetCbzState();
+  void ResetReflowWorkerState();
 
 public:
   //! Cover thumbnail for library grid (RGB565, scaled to fit)
@@ -187,6 +211,12 @@ public:
                        const InlineImageLayoutPlan *plan = NULL);
   void AddChapter(u16 page, const std::string &title, u8 level = 0);
   void ClearChapters();
+  bool IsPdf() const;
+  bool IsCbz() const;
+  bool IsFixedLayout() const;
+  const char *GetFixedLayoutLabel() const;
+  bool UsesTextLayoutSettings() const;
+  bool SupportsBookmarks() const;
   const char *GetFileName(void);
   const char *GetFolderName(void);
   Page *GetPage();
@@ -202,12 +232,54 @@ public:
   void SetPosition(int pos);
   void SetTitle(const char *title);
   Page *AppendPage();
+  void DrawCurrentView(Text *ts);
+  void DrawCurrentMuPdfView(Text *ts);
+  void DrawCurrentCbzView(Text *ts);
+  void PrepareForOpen();
+  u8 OpenPrepared();
+  void InitMuPdfView(u16 page_count, fz_context *ctx, fz_document *doc,
+                     fz_outline *outline, bool is_new_3ds,
+                     app_flow_utils::MuPdfDocumentKind document_kind);
+  void InitCbzView(const std::string &archive_path,
+                   const std::vector<CbzPageEntry> &entries,
+                   bool is_new_3ds);
+  void SetFixedLayoutViewportInteraction(bool active);
+  bool ChangeFixedLayoutZoom(int delta);
+  bool MoveFixedLayoutViewportToPreview(int touch_x, int touch_y);
+  bool JumpFixedLayoutChapter(int delta);
+  bool HasPendingFixedLayoutDeferredWork() const;
+  u32 GetFixedLayoutDeferredDelayMs() const;
+  bool PumpDeferredFixedLayoutWork(u32 budget_ms);
+  void CancelFixedLayoutDeferredWork();
+  void SetCbzViewportInteraction(bool active);
+  bool ChangeCbzZoom(int delta);
+  bool MoveCbzViewportToPreview(int touch_x, int touch_y);
+  bool JumpCbzChapter(int delta);
+  bool HasPendingCbzDeferredWork() const;
+  u32 GetCbzDeferredDelayMs() const;
+  bool PumpDeferredCbzWork(u32 budget_ms);
+  void CancelCbzDeferredWork();
+  void SetMuPdfViewportInteraction(bool active);
+  bool ChangeMuPdfZoom(int delta);
+  bool MoveMuPdfViewportToPreview(int touch_x, int touch_y);
+  bool JumpMuPdfChapter(int delta);
+  void PrefetchAdjacentMuPdfPage();
+  bool HasPendingMuPdfDeferredWork() const;
+  u32 GetMuPdfDeferredDelayMs() const;
+  bool PumpDeferredMuPdfWork(u32 budget_ms);
+  void CancelMuPdfIncrementalRender();
   void Close();
   u8 Index();
   void IndexHTML();
   u8 Open();
   u8 Parse(bool fulltext = true);
   int ParseHTML();
+  bool SupportsAsyncReflowOpen() const;
+  bool StartAsyncReflowOpen();
+  bool PumpAsyncReflowOpen();
+  bool IsAsyncReflowOpenPending() const;
+  u8 ConsumeAsyncReflowOpenResult();
+  void CancelAsyncReflowOpen();
   bool HasDeferredMobiParse() const;
   bool ContinueDeferredMobiParse(u32 budget_ms, u16 page_budget = 0);
   void CancelDeferredMobiParse();
@@ -219,3 +291,6 @@ public:
   unsigned int GetLayoutRevision() const;
   void SetLayoutRevision(unsigned int revision);
 };
+
+#include "formats/cbz/cbz_state.h"
+#include "formats/mupdf/mupdf_state.h"
