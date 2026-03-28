@@ -20,6 +20,7 @@
 #include "book/heading_layout.h"
 #include "main.h"
 #include "formats/mobi/mobi.h"
+#include "formats/mobi/mobi_cache_utils.h"
 #include "formats/mobi/mobi_heading_markers.h"
 #include "formats/mobi/mobi_markup_tag.h"
 #include "formats/mobi/mobi_position_map.h"
@@ -3401,14 +3402,20 @@ static bool LoadDeferredMobiStructuredToc(
     bool *structured_from_filepos, App *app) {
   if (!out)
     return false;
-  out->clear();
   if (structured_from_filepos)
     *structured_from_filepos = false;
 
-  if (state.have_structured_toc && !state.structured_toc.empty()) {
-    *out = state.structured_toc;
+  if (mobi_cache_utils::CopyCachedVectorIfReady(state.structured_toc,
+                                                state.have_structured_toc,
+                                                out)) {
+    if (app) {
+      DBG_LOGF(app, "MOBI: deferred structured TOC reuse entries=%u",
+               (unsigned)out->size());
+    }
     return true;
   }
+
+  out->clear();
 
   if (!state.markup_utf8.empty() &&
       ParseMobiInlineFileposToc(state.markup_utf8, state.text_len_for_pos, out,
