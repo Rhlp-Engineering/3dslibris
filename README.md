@@ -20,12 +20,28 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `1.1.0`
+- Current app version: `1.2.0`
 - Focus: stable daily reading on 3DS hardware and Citra/Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia`
+
+## v1.2.0 release notes
+- Adds MuPDF-backed PDF reading with zoomed top-screen viewing, full-page preview on the bottom screen, outline navigation when available, and touch-controlled viewport movement.
+- Introduces a progressive PDF rendering pipeline: preview first, interactive cache next, then full-page refinement in the background instead of a single blocking render.
+- Adds progressive strip rendering for zoomed PDF pages, with strips composited on screen as they complete.
+- Uses a dedicated PDF worker thread on the New Nintendo 3DS extra core when available, while keeping an automatic synchronous fallback path for Old 3DS hardware.
+- Improves PDF cache behavior by stabilizing preview viewport updates, accelerating cache reuse, and deferring expensive prefetch work until page turns or idle periods.
+- Tightens PDF release documentation and licensing notes for MuPDF-enabled builds, including corresponding-source guidance for release packaging.
+
+Commits already included in the `v1.2.0` line:
+- `983be1f` `feat: integrate MuPDF-backed PDF reader`
+- `ee6fcc9` `docs: add AGPL compliance for PDF-enabled releases`
+- `57737ac` `fix: stabilize PDF preview viewport rendering`
+- `a756191` `perf: accelerate PDF render caching`
+- `b326c54` `perf: defer PDF prefetch until page turns`
+- `c422eca` `perf: add progressive PDF page rendering`
 
 ## Supported formats
 
@@ -46,6 +62,11 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
   - Inline MOBI images now reuse the same smart `inline / band / page` layout pipeline used by EPUB/FB2, with better caption flow on mixed photo spreads
   - Includes an optional per-book `line wrap fix` for badly converted files that hard-wrap prose line by line, while preserving embedded image markers during cleanup
   - Empty or corrupt books are reported with a readable error instead of a raw numeric code
+- `PDF`
+  - Viewer-only path with MuPDF-backed rendering
+  - Top screen shows a zoomed page region; bottom screen shows the full-page preview and viewport box
+  - `A/B` control zoom, `Left/Right` move page, `Up/Down` move through outline entries when available, and touch moves the viewport
+  - PDF-enabled builds in this branch are distributed with AGPL-driven notice and source-release requirements; see the license section below
 
 ## Known limitations
 - Some EPUB files have malformed anchors; index jumps can be approximate when source metadata is broken.
@@ -66,7 +87,7 @@ docker run --rm \
   -e DEVKITPRO=/opt/devkitpro \
   -e DEVKITARM=/opt/devkitpro/devkitARM \
   3dslibris-build \
-  sh -lc 'make clean && make -j2 && make zip-sdmc && make debug-3dsx && make cia'
+  sh -lc 'make clean && make -j2 && make zip-sdmc && make debug-3dsx && make cia && make source-release'
 ```
 
 The Dockerfile in [`docker/Dockerfile.cia`](docker/Dockerfile.cia) matches the
@@ -78,6 +99,7 @@ Expected outputs:
 - `3dslibris-debug.3dsx`
 - `3dslibris.smdh`
 - `3dslibris.elf`
+- `dist/3dslibris-source.tar.gz`
 
 ## Install
 
@@ -102,7 +124,8 @@ Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
-- GitHub Releases: pushing a tag like `v1.1.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, and `dist/3dslibris-sdmc.zip` to the release
+- `make source-release` creates `dist/3dslibris-source.tar.gz`
+- GitHub Releases: pushing a tag like `v1.2.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Library controls
 - `D-Pad`: move the current selection around the library grid
@@ -146,12 +169,21 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 ## Documentation
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+- PDF source-release guide: [docs/PDF_SOURCE_RELEASE.md](docs/PDF_SOURCE_RELEASE.md)
 
 Internal planning, release notes, and working docs are kept out of the public repo.
 
 ## License
-This project is distributed under **GNU GPL v2 or later**.
-See [LICENSE](LICENSE).
+This repository now carries a split licensing model:
+
+- inherited and base 3dslibris code remains under **GNU GPL v2 or later**
+- PDF-enabled builds in this branch combine that code with MuPDF and must be
+  distributed with the AGPL-related obligations documented in:
+  - [LICENSE](LICENSE)
+  - [LICENSES/GPL-2.0-or-later.txt](LICENSES/GPL-2.0-or-later.txt)
+  - [LICENSES/AGPL-3.0-or-later.txt](LICENSES/AGPL-3.0-or-later.txt)
+  - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+  - [docs/PDF_SOURCE_RELEASE.md](docs/PDF_SOURCE_RELEASE.md)
 
 ## Credits
 - Original `dslibris`: Ray Haleblian
