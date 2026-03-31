@@ -4422,7 +4422,7 @@ static bool BuildMobiMergedText(const std::string &raw,
   return mobi_record_decode::BuildMergedText(raw, header.offsets, rec0, merged);
 }
 
-static void CleanupDecodedMobiText(std::string *text,
+static void CleanupDecodedMobiText(App *app, std::string *text,
                                    std::vector<std::pair<u32, u32>> *html_map,
                                    bool line_wrap_fix_applied) {
   if (!text)
@@ -4476,7 +4476,8 @@ static void BuildMobiTocMetadataFromUtf8(
 
   std::string text = ExtractMobiMarkupToText(book, deps, utf8, heading_hints,
                                              html_to_text_map);
-  CleanupDecodedMobiText(&text, html_to_text_map, line_wrap_fix_applied);
+  CleanupDecodedMobiText(deps.app, &text, html_to_text_map,
+                         line_wrap_fix_applied);
 }
 
 static void DecodeAndCleanupMobiText(Book *book, const BookIoDeps &deps,
@@ -4504,7 +4505,7 @@ static void DecodeAndCleanupMobiText(Book *book, const BookIoDeps &deps,
       collect_toc_metadata ? &decoded->html_to_text_map : NULL);
   if (t_after_markup_scan)
     *t_after_markup_scan = osGetTime();
-  CleanupDecodedMobiText(&decoded->text,
+  CleanupDecodedMobiText(deps.app, &decoded->text,
                          collect_toc_metadata ? &decoded->html_to_text_map
                                               : NULL,
                          book->GetMobiLineWrapFix());

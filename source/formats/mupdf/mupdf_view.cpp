@@ -5,7 +5,6 @@
 #include "app/app.h"
 #include "book/page.h"
 #include "ui/text.h"
-#include "debug_log.h"
 
 namespace {
 
@@ -445,10 +444,6 @@ bool Book::ChangeMuPdfZoom(int delta) {
                  mupdf_state->document_kind)) {
     mupdf_state->final_cache_pending = false;
   }
-  DBG_LOGF(app, "%s: zoom page=%d zoom_index=%d final_pending=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           position, mupdf_state->zoom_index,
-           mupdf_state->final_cache_pending ? 1 : 0);
   return true;
 }
 
@@ -483,12 +478,6 @@ bool Book::MoveMuPdfViewportToPreview(int touch_x, int touch_y) {
     return false;
   mupdf_state->viewport_center_x = center.x;
   mupdf_state->viewport_center_y = center.y;
-  DBG_LOGF(app,
-           "%s: viewport_move page=%d touch=(%d,%d) center=(%.3f,%.3f) "
-           "zoom_index=%d final_pending=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           position, touch_x, touch_y, center.x, center.y,
-           mupdf_state->zoom_index, mupdf_state->final_cache_pending ? 1 : 0);
   return true;
 }
 
@@ -593,9 +582,6 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   mupdf_state->final_cache_pending = wants_final_cache && !has_final_cache;
   const bool high_quality_viewport =
       !mupdf_state->viewport_interaction_active;
-#ifdef DSLIBRIS_DEBUG
-  const char *top_source = "none";
-#endif
   const float preview_source_width =
       std::max(1.0f, (float)mupdf_state->current_preview.bitmap_width);
   const float preview_source_height =
@@ -619,9 +605,6 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   ts->ClearScreen();
 
   if (has_final_cache) {
-#ifdef DSLIBRIS_DEBUG
-    top_source = "final";
-#endif
     BlitBitmapCacheViewport(ts, ts->screenleft, kPdfZoomScreenHeight,
                             kPdfZoomScreenWidth, kPdfZoomScreenHeight,
                             mupdf_state->current_final_zoom, viewport,
@@ -629,9 +612,6 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   } else if (mupdf_state->incremental.active &&
              mupdf_state->incremental.strips_completed > 0 &&
              mupdf_state->incremental.target_page == page_index) {
-#ifdef DSLIBRIS_DEBUG
-    top_source = "incremental";
-#endif
     Book::MuPdfState::IncrementalRenderState &inc = mupdf_state->incremental;
     const int rendered_h = (inc.strips_completed * inc.partial_height) /
                            inc.strips_total;
@@ -671,17 +651,11 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
       }
     }
   } else if (has_interactive_tile) {
-#ifdef DSLIBRIS_DEBUG
-    top_source = "interactive";
-#endif
     BlitBitmapCacheViewport(ts, ts->screenleft, kPdfZoomScreenHeight,
                             kPdfZoomScreenWidth, kPdfZoomScreenHeight,
                             mupdf_state->current_interactive_tile, viewport,
                             high_quality_viewport);
   } else if (BitmapCacheValid(mupdf_state->current_preview, page_index)) {
-#ifdef DSLIBRIS_DEBUG
-    top_source = "preview";
-#endif
     BlitBitmapCacheViewport(ts, ts->screenleft, kPdfZoomScreenHeight,
                             kPdfZoomScreenWidth, kPdfZoomScreenHeight,
                             mupdf_state->current_preview, viewport,
@@ -690,14 +664,6 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
     ts->SetPen(18, 28);
     ts->PrintString("MuPDF render unavailable");
   }
-  char top_msg[48];
-  snprintf(top_msg, sizeof(top_msg), "%s %u/%u  %.1fx",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           (unsigned)(page_index + 1), (unsigned)mupdf_state->page_count,
-           pdf_view_utils::ZoomForIndex(mupdf_state->zoom_index));
-  ts->SetPen(12, 18);
-  ts->PrintString(top_msg);
-
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
   if (app)
@@ -732,21 +698,6 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
       1, (int)(std::min(1.0f, viewport.height) * preview_layout.height + 0.5f));
   ts->DrawRect((u16)viewport_x, (u16)viewport_y, (u16)(viewport_x + viewport_w),
                (u16)(viewport_y + viewport_h), kPdfAccent);
-  DBG_LOGF(app,
-           "%s: draw page=%d source=%s zoom_index=%d final_pending=%d "
-           "final=%d interactive=%d preview=%d inc=%d/%d "
-           "viewport=(%.3f,%.3f %.3fx%.3f)",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           page_index, top_source, mupdf_state->zoom_index,
-           mupdf_state->final_cache_pending ? 1 : 0,
-           has_final_cache ? 1 : 0, has_interactive_tile ? 1 : 0,
-           BitmapCacheValid(mupdf_state->current_preview, page_index) ? 1 : 0,
-           (mupdf_state->incremental.active && mupdf_state->incremental.target_page == page_index)
-               ? mupdf_state->incremental.strips_completed : 0,
-           (mupdf_state->incremental.active && mupdf_state->incremental.target_page == page_index)
-               ? mupdf_state->incremental.strips_total : 0,
-           viewport.left, viewport.top, viewport.width, viewport.height);
-
   ts->SetStyle(saved_style);
   ts->SetColorMode(saved_color);
   ts->SetScreen(saved_screen);
@@ -772,28 +723,9 @@ bool Book::PumpDeferredMuPdfWork(u32 budget_ms) {
   if (!HasPendingMuPdfDeferredWork())
     return false;
 
-  DBG_LOGF(app,
-           "%s: deferred start page=%d budget=%u zoom_index=%d final_pending=%d "
-           "have_final=%d have_interactive=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           page_index, (unsigned)budget_ms, mupdf_state->zoom_index,
-           mupdf_state->final_cache_pending ? 1 : 0,
-           BitmapCacheValid(mupdf_state->current_final_zoom, page_index) ? 1 : 0,
-           BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)
-               ? 1
-               : 0);
-
   if (!BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)) {
-#ifdef DSLIBRIS_DEBUG
-    const u64 t0 = osGetTime();
-#endif
     if (EnsureCurrentMuPdfInteractiveTile(mupdf_state, page_index))
       worked = true;
-    DBG_LOGF(app,
-             "%s: deferred interactive page=%d ms=%llu worked=%d",
-             app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-             page_index, (unsigned long long)(osGetTime() - t0),
-             worked ? 1 : 0);
     if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
       return worked;
   }
@@ -801,47 +733,19 @@ bool Book::PumpDeferredMuPdfWork(u32 budget_ms) {
   if (mupdf_state->final_cache_pending ||
       !BitmapCacheValid(mupdf_state->current_final_zoom, page_index) ||
       mupdf_state->incremental.active) {
-#ifdef DSLIBRIS_DEBUG
-    const u64 t0 = osGetTime();
-    const int pre_strips = mupdf_state->incremental.strips_completed;
-    const int pre_total = mupdf_state->incremental.strips_total;
-#endif
     if (PumpMuPdfIncrementalStrip(mupdf_state, page_index))
       worked = true;
-    DBG_LOGF(app,
-             "%s: deferred strip page=%d strip=%d/%d ms=%llu worked=%d",
-             app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-             page_index, pre_strips, pre_total,
-             (unsigned long long)(osGetTime() - t0), worked ? 1 : 0);
     if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
       return worked;
   }
 
-#ifdef DSLIBRIS_DEBUG
-  const u64 t_next = osGetTime();
-#endif
   if (PrepareAdjacentMuPdfSlot(mupdf_state, page_index, 1))
     worked = true;
-  DBG_LOGF(app, "%s: deferred next page=%d ms=%llu worked=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           page_index,
-           (unsigned long long)(osGetTime() - t_next), worked ? 1 : 0);
   if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
     return worked;
 
-#ifdef DSLIBRIS_DEBUG
-  const u64 t_prev = osGetTime();
-#endif
   if (PrepareAdjacentMuPdfSlot(mupdf_state, page_index, -1))
     worked = true;
-  DBG_LOGF(app, "%s: deferred prev page=%d ms=%llu worked=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           page_index,
-           (unsigned long long)(osGetTime() - t_prev), worked ? 1 : 0);
-  DBG_LOGF(app, "%s: deferred end page=%d total_ms=%llu worked=%d",
-           app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind),
-           page_index, (unsigned long long)(osGetTime() - start_ms),
-           worked ? 1 : 0);
 
   return worked;
 }

@@ -290,6 +290,8 @@ void App::LoadVisibleBrowserCoverCaches() {
 
   const int start = std::max(0, browser_.page_start);
   const int end = std::min(BookCount(), start + APP_BROWSER_BUTTON_COUNT);
+  int loaded = 0;
+  size_t bytes = 0;
   for (int i = start; i < end; i++) {
     Book *book = books[i];
     if (!book || book->coverPixels)
@@ -298,6 +300,9 @@ void App::LoadVisibleBrowserCoverCaches() {
     std::string path = bookdir + "/" + book->GetFileName();
     if (TryLoadCoverCache(book, path)) {
       book->coverTried = true;
+      loaded++;
+      bytes += (size_t)book->coverWidth * (size_t)book->coverHeight *
+               sizeof(u16);
       if (book->format == FORMAT_EPUB) {
         book->metadataIndexTried = true;
         book->metadataIndexed = true;
@@ -549,8 +554,17 @@ bool App::HasQueuedJob(app_job_type_t type, Book *book) const {
 }
 
 void App::PruneBrowserWarmupJobs(Book *selected_book) {
-  browser_job_queue_utils::PruneWarmupJobsForOtherBooks(
+  const size_t removed = browser_job_queue_utils::PruneWarmupJobsForOtherBooks(
       &job_queue, selected_book, APP_JOB_INDEX_METADATA, APP_JOB_EXTRACT_COVER);
+#ifdef DSLIBRIS_DEBUG
+  if (removed > 0) {
+    DBG_LOGF(this, "BROWSER: pruned warmup jobs removed=%u queue=%u selected=%s",
+             (unsigned)removed, (unsigned)job_queue.size(),
+             (selected_book && selected_book->GetFileName())
+                 ? selected_book->GetFileName()
+                 : "(null)");
+  }
+#endif
 }
 
 void App::EnqueueJob(app_job_type_t type, Book *book) {
@@ -567,6 +581,7 @@ void App::EnqueueJob(app_job_type_t type, Book *book) {
 void App::QueueBookWarmup(Book *book) {
   if (!book || book->coverPixels || book->coverTried)
     return;
+  const size_t queue_before = job_queue.size();
 
   const app_flow_utils::BookFileFormat format =
       app_flow_utils::DetectBookFormat(book->GetFileName());
@@ -586,6 +601,15 @@ void App::QueueBookWarmup(Book *book) {
       EnqueueJob(APP_JOB_EXTRACT_COVER, book);
     }
   }
+#ifdef DSLIBRIS_DEBUG
+  if (job_queue.size() != queue_before) {
+    DBG_LOGF(this, "BROWSER: warmup queued added=%u queue=%u book=%s format=%d",
+             (unsigned)(job_queue.size() - queue_before),
+             (unsigned)job_queue.size(),
+             book->GetFileName() ? book->GetFileName() : "(null)",
+             (int)book->format);
+  }
+#endif
 }
 
 void App::QueueTocResolve(Book *book) {

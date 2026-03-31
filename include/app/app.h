@@ -207,7 +207,7 @@ private:
 
   struct StatusState {
     int last_minute;
-    int last_percent_tenths;
+    int last_display_token;
     Book *progress_lock_book;
     int progress_pagecount_lock;
     bool force_redraw;

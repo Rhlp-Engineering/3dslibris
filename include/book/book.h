@@ -245,6 +245,7 @@ public:
                    const std::vector<CbzPageEntry> &entries,
                    bool is_new_3ds);
   void SetFixedLayoutViewportInteraction(bool active);
+  void ResetFixedLayoutViewportForNavigation();
   bool ChangeFixedLayoutZoom(int delta);
   bool MoveFixedLayoutViewportToPreview(int touch_x, int touch_y);
   bool JumpFixedLayoutChapter(int delta);
@@ -253,6 +254,7 @@ public:
   bool PumpDeferredFixedLayoutWork(u32 budget_ms);
   void CancelFixedLayoutDeferredWork();
   void SetCbzViewportInteraction(bool active);
+  void ResetCbzViewport();
   bool ChangeCbzZoom(int delta);
   bool MoveCbzViewportToPreview(int touch_x, int touch_y);
   bool JumpCbzChapter(int delta);
