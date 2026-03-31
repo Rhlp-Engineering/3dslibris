@@ -182,6 +182,8 @@ bool SetBookPage(Book *book, Text *ts, u16 page) {
   if (book->IsFixedLayout())
     book->CancelFixedLayoutDeferredWork();
   book->SetPosition(page);
+  if (book->IsFixedLayout())
+    book->ResetFixedLayoutViewportForNavigation();
   DrawBookPage(book, ts);
   return true;
 }
@@ -461,40 +463,31 @@ void App::HandleEventInBook() {
   u32 held = hidKeysHeld();
 
   if (bookcurrent_ && bookcurrent_->IsFixedLayout()) {
-    const char *doc_label = bookcurrent_->GetFixedLayoutLabel();
     const auto delay_fixed_layout_deferred = [&]() {
       const u32 delay_ms = bookcurrent_->GetFixedLayoutDeferredDelayMs();
       pdf_deferred_ready_at_ms_ = delay_ms ? (osGetTime() + delay_ms) : 0;
-      DBG_LOGF(this, "%s: defer armed ready_in=%u", doc_label,
-               (unsigned)delay_ms);
     };
     if (keys & KEY_A) {
       if (bookcurrent_->ChangeFixedLayoutZoom(1)) {
         DrawBookPage(bookcurrent_, ts);
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event zoom_in", doc_label);
       }
     } else if (keys & KEY_B) {
       if (bookcurrent_->ChangeFixedLayoutZoom(-1)) {
         DrawBookPage(bookcurrent_, ts);
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event zoom_out", doc_label);
       }
     } else if (keys & (key.right | KEY_RIGHT)) {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event page_turn delta=1 page=%u", doc_label,
-                 pagecurrent);
       }
     } else if (keys & (key.left | KEY_LEFT)) {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event page_turn delta=-1 page=%u", doc_label,
-                 pagecurrent);
       }
     } else if (keys & (key.down | KEY_DOWN)) {
       if (!bookcurrent_->GetChapters().empty()) {
@@ -502,13 +495,10 @@ void App::HandleEventInBook() {
           DrawBookPage(bookcurrent_, ts);
           status_dirty = true;
           delay_fixed_layout_deferred();
-          DBG_LOGF(this, "%s: event chapter_next", doc_label);
         }
       } else if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event page_turn delta=1 page=%u", doc_label,
-                 pagecurrent);
       }
     } else if (keys & (key.up | KEY_UP)) {
       if (!bookcurrent_->GetChapters().empty()) {
@@ -516,13 +506,10 @@ void App::HandleEventInBook() {
           DrawBookPage(bookcurrent_, ts);
           status_dirty = true;
           delay_fixed_layout_deferred();
-          DBG_LOGF(this, "%s: event chapter_prev", doc_label);
         }
       } else if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event page_turn delta=-1 page=%u", doc_label,
-                 pagecurrent);
       }
     } else if (keys & KEY_TOUCH) {
       touchPosition mapped = TouchRead();
@@ -535,8 +522,6 @@ void App::HandleEventInBook() {
         DrawBookPage(bookcurrent_, ts);
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event touch_down x=%d y=%d", doc_label,
-                 (int)mapped.px, (int)mapped.py);
       }
     } else if (held & KEY_TOUCH) {
       touchPosition mapped = TouchRead();
@@ -555,8 +540,6 @@ void App::HandleEventInBook() {
           DrawBookPage(bookcurrent_, ts);
           status_dirty = true;
           delay_fixed_layout_deferred();
-          DBG_LOGF(this, "%s: event touch_drag x=%d y=%d", doc_label,
-                   (int)mapped.px, (int)mapped.py);
         }
       }
     } else if (keys & KEY_START) {
@@ -575,7 +558,6 @@ void App::HandleEventInBook() {
         DrawBookPage(bookcurrent_, ts);
         status_dirty = true;
         delay_fixed_layout_deferred();
-        DBG_LOGF(this, "%s: event touch_release", doc_label);
       }
       bookcurrent_->SetFixedLayoutViewportInteraction(false);
       pdf_touch_drag_active_ = false;
@@ -589,12 +571,6 @@ void App::HandleEventInBook() {
                bookcurrent_->HasPendingFixedLayoutDeferredWork() &&
                osGetTime() >= pdf_deferred_ready_at_ms_) {
       const u32 budget_ms = 4;
-      DBG_LOGF(this,
-               "%s: deferred gate open now=%llu ready_at=%llu budget=%u",
-               doc_label,
-               (unsigned long long)osGetTime(),
-               (unsigned long long)pdf_deferred_ready_at_ms_,
-               (unsigned)budget_ms);
       const bool worked = bookcurrent_->PumpDeferredFixedLayoutWork(budget_ms);
       const u32 delay_ms = bookcurrent_->GetFixedLayoutDeferredDelayMs();
       pdf_deferred_ready_at_ms_ = delay_ms ? (osGetTime() + delay_ms) : 0;

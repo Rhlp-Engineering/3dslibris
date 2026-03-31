@@ -1,15 +1,11 @@
 #include "formats/cbz/cbz_worker.h"
 
-#include "app/app.h"
 #include "book/book.h"
 #include "formats/cbz/cbz_archive.h"
 #include "formats/cbz/cbz_decode.h"
-#include "debug_log.h"
 #include "shared/pdf_view_utils.h"
 
 #include <algorithm>
-
-extern App *app;
 
 namespace {
 
@@ -151,7 +147,6 @@ void InitCbzWorker(Book::CbzState *cbz_state) {
     cbz_state->worker = NULL;
     return;
   }
-  DBG_LOG(app, "CBZ[w]: worker thread started on core 1");
 }
 
 void ShutdownCbzWorker(Book::CbzState *cbz_state) {

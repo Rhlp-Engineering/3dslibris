@@ -32,6 +32,7 @@
 #include "menus/chapter_menu.h"
 #include "shared/app_flow_utils.h"
 #include "shared/browser_warmup_utils.h"
+#include "shared/status_layout_utils.h"
 #include "settings/font.h"
 #include "debug_log.h"
 #include "main.h"
@@ -90,6 +91,10 @@ static bool RuntimePathExistsEither(const char *sdmc_path,
                                     const char *romfs_path, bool want_dir) {
   return PathExistsAndType(sdmc_path, want_dir) ||
          PathExistsAndType(romfs_path, want_dir);
+}
+
+static bool UsesFixedLayoutMinimalHud(const Book *book) {
+  return book && (book->IsPdf() || book->IsCbz());
 }
 
 static std::string ResolveDefaultFontDir() {
@@ -234,7 +239,7 @@ App::App() {
   prefs_view_.from_book = false;
   prefs_view_.layout_notice_pending = false;
   status_.last_minute = -1;
-  status_.last_percent_tenths = -1;
+  status_.last_display_token = -1;
   status_.progress_lock_book = NULL;
   status_.progress_pagecount_lock = 0;
   status_.force_redraw = true;
@@ -951,7 +956,9 @@ void App::UpdateStatus() {
   }
 
   if (!status_.force_redraw && minute_of_day == status_.last_minute &&
-      snapshot.percent_tenths == status_.last_percent_tenths) {
+      ((mode_ == AppMode::Book && UsesFixedLayoutMinimalHud(bookcurrent_))
+           ? (bookcurrent_ ? (int)bookcurrent_->GetPosition() : -1)
+           : snapshot.percent_tenths) == status_.last_display_token) {
     return;
   }
 
@@ -969,71 +976,101 @@ void App::UpdateStatus() {
              timeStruct->tm_hour >= 12 ? "PM" : "AM");
   }
 
-  // Draw on top screen (which is 240x400 in buffer)
-  ts->SetScreen(ts->screenleft);
   int style = ts->GetStyle();
-  int savedBottomMargin = ts->margin.bottom;
-  // Status HUD is outside the text area and should ignore page margins.
-  ts->margin.bottom = 0;
   ts->SetStyle(TEXT_STYLE_BROWSER); // smaller, readable font
 
-  u16 fgColor = ts->GetFgColor();
+  if (mode_ == AppMode::Book && UsesFixedLayoutMinimalHud(bookcurrent_)) {
+    const status_layout_utils::FixedLayoutBottomHudLayout hud_layout =
+        status_layout_utils::ComputeFixedLayoutBottomHudLayout(
+            320, ts->GetHeight());
+    const int time_width = ts->GetStringWidth(tmsg, TEXT_STYLE_BROWSER);
+    const int time_x = std::max(0, 240 - hud_layout.right_margin - time_width);
 
-  // Print Clock (Left)
-  int textY = 384;
-  // Clear a taller band than the nominal footer because the browser font
-  // extends several pixels above the baseline and would otherwise leave
-  // minute-change artifacts behind.
-  const int statusTop = std::max(0, textY - ts->GetHeight() - 8);
-  ts->ClearRect(0, (u16)statusTop, 240, 400);
-  ts->SetPen(8, textY);
-  ts->PrintString(tmsg);
-  int clockWidth = ts->GetStringWidth(tmsg, TEXT_STYLE_BROWSER);
+    ts->SetScreen(ts->screenright);
+    ts->ClearRect((u16)std::max(0, time_x - 4), (u16)hud_layout.time_clear_top,
+                  240, (u16)hud_layout.time_clear_bottom);
+    ts->SetPen(time_x, hud_layout.time_y);
+    ts->PrintString(tmsg);
 
-  // Print Percentage / opening state (Right)
-  int pX = 232;
-  if (mode_ == AppMode::Opening) {
-    const char *opening_msg = "opening";
-    int pw = ts->GetStringWidth(opening_msg, TEXT_STYLE_BROWSER);
-    pX = 232 - pw;
-    ts->SetPen(pX, textY);
-    ts->PrintString(opening_msg);
-  } else if (snapshot.has_progress) {
-    char pmsg[32];
-    snprintf(pmsg, sizeof(pmsg), "%.1f%%", snapshot.percent_value);
-    int pw = ts->GetStringWidth(pmsg, TEXT_STYLE_BROWSER);
-    pX = 232 - pw;
-    ts->SetPen(pX, textY);
-    ts->PrintString(pmsg);
+    if (bookcurrent_ && bookcurrent_->GetPageCount() > 0) {
+      char page_msg[32];
+      snprintf(page_msg, sizeof(page_msg), "%d/%d",
+               (int)bookcurrent_->GetPosition() + 1,
+               (int)bookcurrent_->GetPageCount());
+      const int page_width = ts->GetStringWidth(page_msg, TEXT_STYLE_BROWSER);
+      const int page_x =
+          std::max(0, 240 - hud_layout.right_margin - page_width);
+      ts->ClearRect((u16)std::max(0, page_x - 4),
+                    (u16)hud_layout.page_clear_top, 240,
+                    (u16)hud_layout.page_clear_bottom);
+      ts->SetPen(page_x, hud_layout.page_y);
+      ts->PrintString(page_msg);
+    }
+  }
+  else {
+    // Draw on top screen (which is 240x400 in buffer)
+    ts->SetScreen(ts->screenleft);
+    int savedBottomMargin = ts->margin.bottom;
+    // Status HUD is outside the text area and should ignore page margins.
+    ts->margin.bottom = 0;
+    u16 fgColor = ts->GetFgColor();
 
-    // Draw Progress Bar between clock and percentage
-    int barStart = 8 + clockWidth + 12;
-    int barEnd = pX - 12;
-    if (barEnd > barStart + 10) {
-      int barY = textY + 5;
-      int barHeight = 8;
-      // Draw border
-      ts->DrawRect(barStart, barY, barEnd, barY + barHeight, fgColor);
+    const status_layout_utils::BookStatusHudLayout hud_layout =
+        status_layout_utils::ComputeBookStatusHudLayout(400, ts->GetHeight(),
+                                                        savedBottomMargin);
+    // Clear a taller band than the nominal footer because the browser font
+    // extends several pixels above the baseline and would otherwise leave
+    // minute-change artifacts behind.
+    ts->ClearRect(0, (u16)hud_layout.clear_top, 240,
+                  (u16)hud_layout.clear_bottom);
+    const int textY = hud_layout.text_y;
+    ts->SetPen(8, textY);
+    ts->PrintString(tmsg);
+    int clockWidth = ts->GetStringWidth(tmsg, TEXT_STYLE_BROWSER);
 
-      // Draw fill
-      if (snapshot.draw_page_count > 1 && bookcurrent_ &&
-          bookcurrent_->GetPosition() > 0) {
-        int fillW = (int)(((float)(barEnd - barStart - 4) *
-                           bookcurrent_->GetPosition()) /
-                          (snapshot.draw_page_count - 1));
-        if (fillW > 0) {
-          ts->FillRect(barStart + 2, barY + 2, barStart + 2 + fillW,
-                       barY + barHeight - 2, fgColor);
+    int pX = 232;
+    if (mode_ == AppMode::Opening) {
+      const char *opening_msg = "opening";
+      int pw = ts->GetStringWidth(opening_msg, TEXT_STYLE_BROWSER);
+      pX = 232 - pw;
+      ts->SetPen(pX, textY);
+      ts->PrintString(opening_msg);
+    } else if (snapshot.has_progress) {
+      char pmsg[32];
+      snprintf(pmsg, sizeof(pmsg), "%.1f%%", snapshot.percent_value);
+      int pw = ts->GetStringWidth(pmsg, TEXT_STYLE_BROWSER);
+      pX = 232 - pw;
+      ts->SetPen(pX, textY);
+      ts->PrintString(pmsg);
+
+      int barStart = 8 + clockWidth + 12;
+      int barEnd = pX - 12;
+      if (barEnd > barStart + 10) {
+        int barY = hud_layout.progress_bar_y;
+        int barHeight = hud_layout.progress_bar_height;
+        ts->DrawRect(barStart, barY, barEnd, barY + barHeight, fgColor);
+
+        if (snapshot.draw_page_count > 1 && bookcurrent_ &&
+            bookcurrent_->GetPosition() > 0) {
+          int fillW = (int)(((float)(barEnd - barStart - 4) *
+                             bookcurrent_->GetPosition()) /
+                            (snapshot.draw_page_count - 1));
+          if (fillW > 0) {
+            ts->FillRect(barStart + 2, barY + 2, barStart + 2 + fillW,
+                         barY + barHeight - 2, fgColor);
+          }
         }
       }
     }
+    ts->margin.bottom = savedBottomMargin;
   }
-
   ts->SetStyle(style);
-  ts->margin.bottom = savedBottomMargin;
   ts->SetScreen(screen);
   status_.last_minute = minute_of_day;
-  status_.last_percent_tenths = snapshot.percent_tenths;
+  status_.last_display_token =
+      (mode_ == AppMode::Book && UsesFixedLayoutMinimalHud(bookcurrent_))
+          ? (bookcurrent_ ? (int)bookcurrent_->GetPosition() : -1)
+          : snapshot.percent_tenths;
   status_.force_redraw = false;
 }
 

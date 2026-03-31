@@ -27,6 +27,11 @@ void Book::SetFixedLayoutViewportInteraction(bool active) {
     SetCbzViewportInteraction(active);
 }
 
+void Book::ResetFixedLayoutViewportForNavigation() {
+  if (IsCbz())
+    ResetCbzViewport();
+}
+
 bool Book::ChangeFixedLayoutZoom(int delta) {
   if (IsPdf())
     return ChangeMuPdfZoom(delta);

@@ -41,8 +41,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "string.h"
 
 #include "app/app.h"
+#include "debug_log.h"
 #include "main.h"
 #include "shared/framebuffer_blit_utils.h"
+#include "shared/text_buffer_utils.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
 #include "stb_image.h"
@@ -372,6 +374,17 @@ int Text::CacheGlyph(u32 ucs, FT_Face face) {
       delete evicted->second;
       face_cache->cacheMap.erase(evicted);
     }
+#ifdef DSLIBRIS_DEBUG
+    static unsigned int s_glyph_eviction_logs = 0;
+    s_glyph_eviction_logs++;
+    if (app && (s_glyph_eviction_logs <= 8 || (s_glyph_eviction_logs % 64) == 0)) {
+      DBG_LOGF(app,
+               "GLYPH: evict old=%u new=%u cached=%u evictions=%u hits=%d misses=%d",
+               (unsigned)evicted_ucs, (unsigned)ucs,
+               (unsigned)face_cache->cacheMap.size(),
+               s_glyph_eviction_logs, stats_hits, stats_misses);
+    }
+#endif
   }
 
   FT_Load_Char(face, ucs, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL);
@@ -461,9 +474,6 @@ void Text::ClearScreen() {
   const bool is_left_screen = (screen == screenleft);
   const int logicalHeight =
       framebuffer_blit_utils::LogicalTextScreenHeight(is_left_screen);
-  const size_t logicalPixels =
-      framebuffer_blit_utils::LogicalTextScreenPixelCount(display.width,
-                                                          is_left_screen);
   u16 bg_color;
   if (colorMode == 1)
     bg_color = 0x0000;
@@ -475,9 +485,9 @@ void Text::ClearScreen() {
     return;
   }
 
-  for (size_t i = 0; i < logicalPixels; i++) {
-    screen[i] = bg_color;
-  }
+  text_buffer_utils::FillLogicalScreenRows(screen, display.height,
+                                           display.width, logicalHeight,
+                                           bg_color);
 }
 
 void Text::ClearRect(u16 xl, u16 yl, u16 xh, u16 yh) {

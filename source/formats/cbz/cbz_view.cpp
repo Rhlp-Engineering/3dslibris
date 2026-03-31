@@ -1,17 +1,15 @@
 #include "app/app.h"
 #include "book/book.h"
 #include "color_utils.h"
-#include "debug_log.h"
 #include "formats/cbz/cbz_archive.h"
 #include "formats/cbz/cbz_decode.h"
 #include "formats/cbz/cbz_worker.h"
+#include "shared/fixed_layout_viewport_utils.h"
 #include "shared/pdf_view_utils.h"
 #include "ui/text.h"
 
 #include <algorithm>
 #include <cmath>
-
-extern App *app;
 
 namespace {
 
@@ -198,18 +196,12 @@ bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index) {
                                 cbz_state->entries[(size_t)page_index], &bytes,
                                 kCbzMaxEntryBytes)) {
     cbz_state->failed_page = page_index;
-    DBG_LOGF(app, "CBZ: source read failed page=%d path=%s", page_index,
-             cbz_state->entries[(size_t)page_index].normalized_path.c_str());
     return false;
   }
 
   CbzDecodedPage decoded;
   if (!DecodeCbzPageImage(bytes, cbz_state->max_zoom_index, &decoded)) {
     cbz_state->failed_page = page_index;
-    DBG_LOGF(app, "CBZ: source decode failed page=%d bytes=%zu err=%s path=%s",
-             page_index, bytes.size(),
-             GetLastCbzDecodeError(),
-             cbz_state->entries[(size_t)page_index].normalized_path.c_str());
     return false;
   }
 
@@ -244,11 +236,6 @@ bool EnsureCbzPreviewCache(Book::CbzState *cbz_state, int page_index) {
   if (!ScaleCbzBitmap(cbz_state->current_source.bitmap,
                       std::max(1, preview_layout.width),
                       std::max(1, preview_layout.height), true, &scaled)) {
-    DBG_LOGF(app, "CBZ: preview scale failed page=%d src=%dx%d dst=%dx%d",
-             page_index, cbz_state->current_source.bitmap.width,
-             cbz_state->current_source.bitmap.height,
-             std::max(1, preview_layout.width),
-             std::max(1, preview_layout.height));
     return false;
   }
 
@@ -398,7 +385,6 @@ void Book::DrawCurrentCbzView(Text *ts) {
 
   ts->SetScreen(ts->screenleft);
   ts->ClearScreen();
-  const char *top_source = has_interactive ? "interactive" : "preview";
   if (has_interactive) {
     BlitCbzCacheViewport(ts, ts->screenleft, kCbzZoomScreenHeight,
                          kCbzZoomScreenWidth, kCbzZoomScreenHeight,
@@ -410,13 +396,6 @@ void Book::DrawCurrentCbzView(Text *ts) {
                          cbz_state->current_preview, viewport,
                          high_quality_viewport);
   }
-  char top_msg[48];
-  snprintf(top_msg, sizeof(top_msg), "CBZ %u/%u  %.1fx",
-           (unsigned)(page_index + 1), (unsigned)cbz_state->page_count,
-           pdf_view_utils::ZoomForIndex(cbz_state->zoom_index));
-  ts->SetPen(12, 18);
-  ts->PrintString(top_msg);
-
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
   if (GetApp())
@@ -449,14 +428,6 @@ void Book::DrawCurrentCbzView(Text *ts) {
                (u16)(viewport_x + viewport_w),
                (u16)(viewport_y + viewport_h), kCbzAccent);
 
-  DBG_LOGF(GetApp(),
-           "CBZ: draw page=%d source=%s zoom_index=%d final_pending=0 final=0 "
-           "interactive=%d preview=%d inc=0/0 viewport=(%.3f,%.3f %.3fx%.3f)",
-           page_index, top_source, cbz_state->zoom_index,
-           has_interactive ? 1 : 0,
-           CbzPreviewCacheValid(cbz_state->current_preview, page_index) ? 1 : 0,
-           viewport.left, viewport.top, viewport.width, viewport.height);
-
   ts->SetStyle(saved_style);
   ts->SetColorMode(saved_color);
   ts->SetScreen(saved_screen);
@@ -467,6 +438,16 @@ void Book::SetCbzViewportInteraction(bool active) {
   if (!IsCbz() || !cbz_state)
     return;
   cbz_state->viewport_interaction_active = active;
+}
+
+void Book::ResetCbzViewport() {
+  if (!IsCbz() || !cbz_state)
+    return;
+  const fixed_layout_viewport_utils::ViewportCenter center =
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+  cbz_state->viewport_center_x = center.x;
+  cbz_state->viewport_center_y = center.y;
+  cbz_state->viewport_interaction_active = false;
 }
 
 bool Book::ChangeCbzZoom(int delta) {
@@ -485,8 +466,6 @@ bool Book::ChangeCbzZoom(int delta) {
   ResetCbzAdjacentSlot(&cbz_state->prev_slot);
   ResetCbzAdjacentSlot(&cbz_state->next_slot);
   cbz_state->preload_pending = false;
-  DBG_LOGF(app, "CBZ: zoom page=%d zoom_index=%d final_pending=0",
-           position, cbz_state->zoom_index);
   return true;
 }
 
@@ -511,10 +490,6 @@ bool Book::MoveCbzViewportToPreview(int touch_x, int touch_y) {
 
   cbz_state->viewport_center_x = center.x;
   cbz_state->viewport_center_y = center.y;
-  DBG_LOGF(app,
-           "CBZ: viewport_move page=%d touch=(%d,%d) center=(%.3f,%.3f) "
-           "zoom_index=%d final_pending=0",
-           position, touch_x, touch_y, center.x, center.y, cbz_state->zoom_index);
   return true;
 }
 
@@ -579,38 +554,22 @@ bool Book::PumpDeferredCbzWork(u32 budget_ms) {
   bool worked = false;
 
   if (!CbzPreviewCacheValid(cbz_state->current_preview, page_index)) {
-    const u64 t0 = osGetTime();
     const bool preview_worked = EnsureCbzPreviewCache(cbz_state, page_index);
     worked = preview_worked || worked;
-    DBG_LOGF(app, "CBZ: deferred preview page=%d ms=%llu worked=%d",
-             page_index, (unsigned long long)(osGetTime() - t0),
-             preview_worked ? 1 : 0);
     if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
       return worked;
   }
 
   if (!CbzBitmapCacheValid(cbz_state->current_interactive, page_index,
                            cbz_state->zoom_index)) {
-    const u64 t0 = osGetTime();
     if (EnsureCbzInteractiveCache(cbz_state, page_index))
       worked = true;
-    DBG_LOGF(app, "CBZ: deferred interactive page=%d ms=%llu worked=%d",
-             page_index, (unsigned long long)(osGetTime() - t0),
-             worked ? 1 : 0);
     if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
       return worked;
   }
 
-  const u64 t_preload = osGetTime();
   const CbzPreloadPumpResult preload_result =
       PumpCbzPreloadWorker(cbz_state, page_index);
-  if (preload_result != CbzPreloadPumpResult::Idle) {
-    const char *stage =
-        (preload_result == CbzPreloadPumpResult::Submitted) ? "submitted"
-                                                            : "integrated";
-    DBG_LOGF(app, "CBZ: deferred next page=%d ms=%llu stage=%s", page_index,
-             (unsigned long long)(osGetTime() - t_preload), stage);
-  }
   return worked || preload_result == CbzPreloadPumpResult::Integrated;
 }
 
