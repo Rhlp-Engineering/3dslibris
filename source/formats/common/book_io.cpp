@@ -3850,7 +3850,7 @@ static int EstimateWrappedLineCount(Text *ts, const std::string &text,
     u32 cp = 0;
     size_t step = 1;
     if (c >= 0x80)
-      step = (size_t)ts->GetCharCode(text.c_str() + i, &cp);
+      step = (size_t)ts->GetCharCode(text.c_str() + i, text.size() - i, &cp);
     else
       cp = c;
     if (step == 0 || i + step > text.size()) {

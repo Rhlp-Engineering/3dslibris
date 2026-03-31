@@ -81,6 +81,16 @@ void TestLineBreaks() {
   ExpectFalse("no break after nbsp", run[4].allow_break_after);
 }
 
+void TestDecodeWithRemainingLength() {
+  const std::string text = std::string("A") + "\xE2\x82\xAC" + "B";
+  uint32_t cp = 0;
+  ExpectEq("decode with remaining length step",
+           text_unicode_utils::DecodeNextDisplayCodepoint(
+               text.c_str() + 1, text.size() - 1, &cp),
+           (size_t)3);
+  ExpectEq("decode with remaining length codepoint", cp, (uint32_t)0x20AC);
+}
+
 void TestListMarkerNormalization() {
   const std::string pua_bullet = std::string("\xEF\x82\xB7") + " texto";
   ExpectEq("strip pua bullet bytes",
@@ -103,6 +113,7 @@ int main() {
   TestDecodeCp1252Fallback();
   TestGraphemeBoundary();
   TestLineBreaks();
+  TestDecodeWithRemainingLength();
   TestListMarkerNormalization();
   return 0;
 }

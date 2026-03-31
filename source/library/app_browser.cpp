@@ -280,6 +280,32 @@ static bool SaveCoverCache(Book *book, const std::string &book_path) {
   return ok;
 }
 
+} // namespace
+
+void App::LoadVisibleBrowserCoverCaches() {
+  if (BookCount() <= 0)
+    return;
+
+  const int start = std::max(0, browser_.page_start);
+  const int end = std::min(BookCount(), start + APP_BROWSER_BUTTON_COUNT);
+  for (int i = start; i < end; i++) {
+    Book *book = books[i];
+    if (!book || book->coverPixels)
+      continue;
+
+    std::string path = bookdir + "/" + book->GetFileName();
+    if (TryLoadCoverCache(book, path)) {
+      book->coverTried = true;
+      if (book->format == FORMAT_EPUB) {
+        book->metadataIndexTried = true;
+        book->metadataIndexed = true;
+      }
+    }
+  }
+}
+
+namespace {
+
 static bool LooksLikeValidUtf8(const std::string &s) {
   return utf8_utils::IsValidUtf8(s);
 }
@@ -684,6 +710,7 @@ void App::browser_handleevent() {
   auto navigateSelection = [&](BrowserNavMove move) {
     if (BookCount() <= 0)
       return;
+    const int old_page_start = browser_.page_start;
     BrowserNavState state = {GetBookIndex(browser_.selected_book),
                              browser_.page_start};
     state = BrowserNavMoveSelection(state, BookCount(), APP_BROWSER_BUTTON_COUNT,
@@ -692,6 +719,8 @@ void App::browser_handleevent() {
       return;
     browser_.page_start = state.page_start;
     browser_.selected_book = books[state.selected_index];
+    if (browser_.page_start != old_page_start)
+      LoadVisibleBrowserCoverCaches();
     browser_.view_dirty = true;
   };
 
@@ -815,16 +844,6 @@ void App::browser_init(void) {
     // In browser_draw we render fallback title manually for no-cover books.
     buttons[i]->SetLabel1(std::string(""));
 
-    // Fast path: preload thumbnail from on-disk cache (if available).
-    std::string path = bookdir + "/" + books[i]->GetFileName();
-    if (TryLoadCoverCache(books[i], path)) {
-      books[i]->coverTried = true;
-      if (books[i]->format == FORMAT_EPUB) {
-        // With a valid cached cover, skip metadata indexing in browser.
-        books[i]->metadataIndexTried = true;
-        books[i]->metadataIndexed = true;
-      }
-    }
   }
 
   buttonprev.Init(ts);
@@ -840,12 +859,14 @@ void App::browser_init(void) {
         (GetBookIndex(browser_.selected_book) / APP_BROWSER_BUTTON_COUNT) *
         APP_BROWSER_BUTTON_COUNT;
   }
+  LoadVisibleBrowserCoverCaches();
 }
 
 void App::browser_nextpage() {
   if (browser_.page_start + APP_BROWSER_BUTTON_COUNT < BookCount()) {
     browser_.page_start += APP_BROWSER_BUTTON_COUNT;
     browser_.selected_book = books[browser_.page_start];
+    LoadVisibleBrowserCoverCaches();
     browser_.view_dirty = true;
   }
 }
@@ -855,6 +876,7 @@ void App::browser_prevpage() {
     browser_.page_start -= APP_BROWSER_BUTTON_COUNT;
     browser_.selected_book =
         books[browser_.page_start + APP_BROWSER_BUTTON_COUNT - 1];
+    LoadVisibleBrowserCoverCaches();
     browser_.view_dirty = true;
   }
 }

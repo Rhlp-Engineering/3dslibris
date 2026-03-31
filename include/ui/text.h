@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <3ds.h>
 #include <map>
 #include <string>
@@ -122,6 +123,7 @@ public:
     return GetAdvance(ucs, GetFace(astyle));
   };
   u8 GetCharCode(const char *txt, u32 *code);
+  u8 GetCharCode(const char *txt, size_t remaining, u32 *code);
   u8 GetCharCountInsideWidth(const char *txt, u8 style, u8 pixels);
   FT_Face GetFace() { return faces[style]; }
   FT_Face GetFace(u8 astyle) { return faces[astyle]; }

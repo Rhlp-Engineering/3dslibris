@@ -845,7 +845,8 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
           u32 code = (u8)txt[j];
           bytes = 1;
           if (code >> 7)
-            bytes = ts->GetCharCode((char *)&(txt[j]), &code);
+            bytes =
+                ts->GetCharCode((char *)&(txt[j]), (size_t)(txtlen - j), &code);
 
           advance += ts->GetAdvance(code);
           if (advance >

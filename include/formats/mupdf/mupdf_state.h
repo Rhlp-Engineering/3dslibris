@@ -84,6 +84,9 @@ struct Book::MuPdfState {
   u16 page_count;
   float page_width;
   float page_height;
+  std::vector<float> page_width_cache;
+  std::vector<float> page_height_cache;
+  std::vector<u8> page_metrics_valid;
   bool is_new_3ds;
   app_flow_utils::MuPdfDocumentKind document_kind;
   bool keep_preview_cache;
@@ -107,7 +110,8 @@ struct Book::MuPdfState {
 
   MuPdfState()
       : ctx(NULL), doc(NULL), outline(NULL), page_count(0),
-        page_width(612.0f), page_height(792.0f), is_new_3ds(false),
+        page_width(612.0f), page_height(792.0f), page_width_cache(),
+        page_height_cache(), page_metrics_valid(), is_new_3ds(false),
         document_kind(app_flow_utils::MuPdfDocumentKind::Unknown),
         keep_preview_cache(true), keep_tile_cache(false), max_zoom_index(3),
         zoom_index(2), viewport_center_x(0.5f), viewport_center_y(0.5f),
