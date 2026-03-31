@@ -257,6 +257,7 @@ private:
   void browser_init();
   void browser_nextpage();
   void browser_prevpage();
+  void LoadVisibleBrowserCoverCaches();
   bool HasQueuedJob(app_job_type_t type, Book *book) const;
   void EnqueueJob(app_job_type_t type, Book *book);
   void QueueBookWarmup(Book *book);

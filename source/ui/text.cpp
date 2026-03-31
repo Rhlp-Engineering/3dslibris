@@ -543,18 +543,19 @@ u8 Text::GetStringWidth(const char *txt, FT_Face face) {
   if (!txt)
     return 0;
 
+  const size_t len = strlen(txt);
   int width = 0;
-  const char *c = txt;
-  while (*c) {
+  size_t offset = 0;
+  while (offset < len) {
     u32 ucs = 0;
-    u8 bytes = GetCharCode(c, &ucs);
+    u8 bytes = GetCharCode(txt + offset, len - offset, &ucs);
     if (bytes == 0) {
       // Fallback: advance one byte to avoid getting stuck on malformed UTF-8.
-      c++;
+      offset++;
       continue;
     }
     width += GetAdvance(ucs, face);
-    c += bytes;
+    offset += bytes;
   }
 
   if (width < 0)
@@ -601,7 +602,13 @@ u8 Text::GetCharCountInsideWidth(const char *txt, u8 style, u8 pixels) {
 u8 Text::GetCharCode(const char *utf8, u32 *ucs) {
   if (!utf8 || !ucs || !utf8[0])
     return 0;
-  return (u8)text_unicode_utils::DecodeNextDisplayCodepoint(utf8, strlen(utf8),
+  return GetCharCode(utf8, strlen(utf8), ucs);
+}
+
+u8 Text::GetCharCode(const char *utf8, size_t remaining, u32 *ucs) {
+  if (!utf8 || !ucs || !utf8[0] || remaining == 0)
+    return 0;
+  return (u8)text_unicode_utils::DecodeNextDisplayCodepoint(utf8, remaining,
                                                             ucs);
 }
 
@@ -715,16 +722,17 @@ int Text::GetStringAdvance(const char *s) {
   if (!s)
     return 0;
 
+  const size_t len = strlen(s);
   int advance = 0;
-  for (const char *c = s; *c;) {
+  for (size_t offset = 0; offset < len;) {
     u32 ucs = 0;
-    u8 bytes = GetCharCode(c, &ucs);
+    u8 bytes = GetCharCode(s + offset, len - offset, &ucs);
     if (!bytes) {
       bytes = 1;
       ucs = '?';
     }
     advance += GetAdvance(ucs);
-    c += bytes;
+    offset += bytes;
   }
   return advance;
 }
@@ -913,7 +921,7 @@ void Text::PrintString(const char *s, FT_Face face) {
   if (!s)
     return;
   size_t i = 0;
-  size_t len = strlen((char *)s);
+  size_t len = strlen(s);
   while (i < len) {
     const unsigned char b = (unsigned char)s[i];
     if (b == '\n') {
@@ -921,7 +929,7 @@ void Text::PrintString(const char *s, FT_Face face) {
       i++;
     } else {
       u32 c = 0;
-      u8 bytes = GetCharCode(&(s[i]), &c);
+      u8 bytes = GetCharCode(s + i, len - i, &c);
       if (!bytes) {
         bytes = 1;
         c = '?';

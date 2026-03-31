@@ -39,6 +39,9 @@ void Book::InitMuPdfView(u16 page_count, fz_context *ctx, fz_document *doc,
   mupdf_state->doc = doc;
   mupdf_state->outline = outline;
   mupdf_state->page_count = page_count;
+  mupdf_state->page_width_cache.assign(page_count, 0.0f);
+  mupdf_state->page_height_cache.assign(page_count, 0.0f);
+  mupdf_state->page_metrics_valid.assign(page_count, 0);
   mupdf_state->is_new_3ds = is_new_3ds;
   mupdf_state->document_kind = document_kind;
   mupdf_state->keep_preview_cache = policy.keep_preview_cache;

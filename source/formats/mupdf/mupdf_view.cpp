@@ -7,6 +7,40 @@
 #include "ui/text.h"
 #include "debug_log.h"
 
+namespace {
+
+static void EnsureMuPdfPageMetrics(Book::MuPdfState *mupdf_state,
+                                   int page_index) {
+  if (!mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
+    return;
+  if (page_index < 0 || page_index >= (int)mupdf_state->page_count)
+    return;
+
+  if ((size_t)page_index < mupdf_state->page_metrics_valid.size() &&
+      mupdf_state->page_metrics_valid[page_index]) {
+    mupdf_state->page_width = mupdf_state->page_width_cache[page_index];
+    mupdf_state->page_height = mupdf_state->page_height_cache[page_index];
+    return;
+  }
+
+  float page_width = mupdf_state->page_width;
+  float page_height = mupdf_state->page_height;
+  if (!QueryMuPdfPageMetrics(mupdf_state->ctx, mupdf_state->doc, page_index,
+                             &page_width, &page_height)) {
+    return;
+  }
+
+  mupdf_state->page_width = page_width;
+  mupdf_state->page_height = page_height;
+  if ((size_t)page_index < mupdf_state->page_metrics_valid.size()) {
+    mupdf_state->page_width_cache[page_index] = page_width;
+    mupdf_state->page_height_cache[page_index] = page_height;
+    mupdf_state->page_metrics_valid[page_index] = 1;
+  }
+}
+
+} // namespace
+
 MuPdfNavigationBounds GetMuPdfNavigationBounds(float content_left,
                                                float content_top,
                                                float content_width,
@@ -541,13 +575,7 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   if (mupdf_state->current_final_zoom.page != page_index)
     ResetBitmapCache(&mupdf_state->current_final_zoom);
 
-  float page_width = mupdf_state->page_width;
-  float page_height = mupdf_state->page_height;
-  if (QueryMuPdfPageMetrics(mupdf_state->ctx, mupdf_state->doc, page_index,
-                          &page_width, &page_height)) {
-    mupdf_state->page_width = page_width;
-    mupdf_state->page_height = page_height;
-  }
+  EnsureMuPdfPageMetrics(mupdf_state, page_index);
 
   if (!EnsureCurrentMuPdfPreviewCache(mupdf_state, page_index))
     return;

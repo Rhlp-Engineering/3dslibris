@@ -208,7 +208,7 @@ void Page::Draw(Text *ts) {
       }
     } else {
       if (c > 127)
-        i += ts->GetCharCode((char *)&(buf[i]), &c);
+        i += ts->GetCharCode((char *)&(buf[i]), (size_t)(length - i), &c);
       else
         i++;
       next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;
