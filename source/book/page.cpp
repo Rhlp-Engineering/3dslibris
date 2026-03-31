@@ -28,6 +28,7 @@
 #include "book/page.h"
 
 #include "book/book.h"
+#include "shared/page_buffer_utils.h"
 #include <list>
 #include <string.h>
 #include <time.h>
@@ -36,21 +37,54 @@ Page::Page(Book *b) {
   book = b;
   buf = NULL;
   length = 0;
+  capacity = 0;
   start = 0;
+  end = 0;
 }
 
-Page::~Page() {
-  if (buf)
-    delete[] buf;
+Page::~Page() { buf = NULL; }
+
+void Page::SyncBufferAlias() {
+  buf = storage.empty() ? NULL : storage.data();
+  length = (int)storage.size();
+  capacity = (int)storage.capacity();
 }
 
 u8 Page::SetBuffer(u8 *src, u16 len) {
-  if (buf)
-    delete[] buf;
-  buf = new u8[len];
-  memcpy(buf, src, len);
-  length = len;
+  const size_t required_capacity =
+      page_buffer_utils::RequiredPageBufferCapacity((size_t)capacity,
+                                                    (size_t)len);
+  if (required_capacity == 0) {
+    std::vector<u8>().swap(storage);
+    SyncBufferAlias();
+    return 0;
+  }
+
+  if ((size_t)capacity < required_capacity)
+    storage.reserve(required_capacity);
+
+  storage.resize(len);
+  if (len > 0 && src)
+    memcpy(storage.data(), src, len);
+  SyncBufferAlias();
   return 0;
+}
+
+void Page::AdoptBuffer(page_buffer_utils::OwnedPageBuffer *owned) {
+  if (!owned) {
+    SetBuffer(NULL, 0);
+    return;
+  }
+
+  const size_t len = owned->bytes.size();
+  if (len == 0) {
+    SetBuffer(NULL, 0);
+    owned->bytes.clear();
+    return;
+  }
+
+  storage.swap(owned->bytes);
+  SyncBufferAlias();
 }
 
 void Page::Draw(Text *ts) {

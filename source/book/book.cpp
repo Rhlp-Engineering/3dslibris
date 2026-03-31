@@ -18,6 +18,7 @@
 #include "book/heading_layout.h"
 #include "main.h"
 #include "book/page.h"
+#include "shared/page_buffer_utils.h"
 #include "parse.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
@@ -1571,6 +1572,13 @@ Page *Book::AppendPage() {
   Page *page = new Page(this);
   pages.push_back(page);
   return page;
+}
+
+void Book::ReservePageCapacity(size_t incoming_pages) {
+  const size_t required_capacity = page_buffer_utils::RequiredPageVectorCapacity(
+      pages.size(), pages.capacity(), incoming_pages);
+  if (required_capacity > pages.capacity())
+    pages.reserve(required_capacity);
 }
 
 void Book::Close() {

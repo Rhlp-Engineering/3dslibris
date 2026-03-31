@@ -39,6 +39,8 @@
 #include "formats/mobi/mobi.h"
 #include "parse.h"
 #include "shared/app_flow_utils.h"
+#include "shared/browser_job_queue_utils.h"
+#include "shared/browser_warmup_utils.h"
 #include "string_utils.h"
 #include "ui/text.h"
 #include "shared/utf8_utils.h"
@@ -546,6 +548,11 @@ bool App::HasQueuedJob(app_job_type_t type, Book *book) const {
   return false;
 }
 
+void App::PruneBrowserWarmupJobs(Book *selected_book) {
+  browser_job_queue_utils::PruneWarmupJobsForOtherBooks(
+      &job_queue, selected_book, APP_JOB_INDEX_METADATA, APP_JOB_EXTRACT_COVER);
+}
+
 void App::EnqueueJob(app_job_type_t type, Book *book) {
   if (!book)
     return;
@@ -711,6 +718,7 @@ void App::browser_handleevent() {
     if (BookCount() <= 0)
       return;
     const int old_page_start = browser_.page_start;
+    Book *old_selected = browser_.selected_book;
     BrowserNavState state = {GetBookIndex(browser_.selected_book),
                              browser_.page_start};
     state = BrowserNavMoveSelection(state, BookCount(), APP_BROWSER_BUTTON_COUNT,
@@ -721,6 +729,10 @@ void App::browser_handleevent() {
     browser_.selected_book = books[state.selected_index];
     if (browser_.page_start != old_page_start)
       LoadVisibleBrowserCoverCaches();
+    if (browser_.selected_book != old_selected) {
+      PruneBrowserWarmupJobs(browser_.selected_book);
+      browser_.last_interaction_ms = osGetTime();
+    }
     browser_.view_dirty = true;
   };
 
@@ -795,6 +807,8 @@ void App::browser_handleevent() {
                 OpenBook();
               } else {
                 browser_.selected_book = books[book_idx];
+                PruneBrowserWarmupJobs(browser_.selected_book);
+                browser_.last_interaction_ms = osGetTime();
                 browser_.view_dirty = true;
               }
               return true;
@@ -813,6 +827,8 @@ void App::browser_handleevent() {
             OpenBook();
           } else {
             browser_.selected_book = books[i];
+            PruneBrowserWarmupJobs(browser_.selected_book);
+            browser_.last_interaction_ms = osGetTime();
             browser_.view_dirty = true;
           }
           return true;
@@ -859,6 +875,8 @@ void App::browser_init(void) {
         (GetBookIndex(browser_.selected_book) / APP_BROWSER_BUTTON_COUNT) *
         APP_BROWSER_BUTTON_COUNT;
   }
+  PruneBrowserWarmupJobs(browser_.selected_book);
+  browser_.last_interaction_ms = osGetTime();
   LoadVisibleBrowserCoverCaches();
 }
 
@@ -866,6 +884,8 @@ void App::browser_nextpage() {
   if (browser_.page_start + APP_BROWSER_BUTTON_COUNT < BookCount()) {
     browser_.page_start += APP_BROWSER_BUTTON_COUNT;
     browser_.selected_book = books[browser_.page_start];
+    PruneBrowserWarmupJobs(browser_.selected_book);
+    browser_.last_interaction_ms = osGetTime();
     LoadVisibleBrowserCoverCaches();
     browser_.view_dirty = true;
   }
@@ -876,6 +896,8 @@ void App::browser_prevpage() {
     browser_.page_start -= APP_BROWSER_BUTTON_COUNT;
     browser_.selected_book =
         books[browser_.page_start + APP_BROWSER_BUTTON_COUNT - 1];
+    PruneBrowserWarmupJobs(browser_.selected_book);
+    browser_.last_interaction_ms = osGetTime();
     LoadVisibleBrowserCoverCaches();
     browser_.view_dirty = true;
   }
@@ -912,13 +934,15 @@ void App::browser_draw(void) {
   ts->SetColorMode(0); // Normal for browser text
   ts->ClearScreen();
   DrawBottomGradientBackground();
-  if (browser_.selected_book)
+  if (browser_.selected_book &&
+      browser_warmup_utils::IsBrowserWarmupIdle(
+          osGetTime(), browser_.last_interaction_ms,
+          browser_.wait_input_release))
     QueueBookWarmup(browser_.selected_book);
 
   for (int i = browser_.page_start;
        (i < BookCount()) &&
        (i < browser_.page_start + APP_BROWSER_BUTTON_COUNT); i++) {
-    QueueBookWarmup(books[i]);
     buttons[i]->Draw(ts->screenright, books[i] == browser_.selected_book);
 
     int page_idx = i % APP_BROWSER_BUTTON_COUNT;

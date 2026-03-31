@@ -32,19 +32,25 @@ A Book contains a vector of Pages.
 #pragma once
 
 #include <3ds.h>
+#include "shared/page_buffer_utils.h"
 #include "ui/text.h"
+#include <vector>
 
 class Book;
 
 class Page {
 	class Book *book;
+	std::vector<u8> storage;
 	void DrawNumber(Text *ts);
+	void SyncBufferAlias();
 
  public:
 	//! UTF-8 chars, allocated per-page at parse time, to exact length.
 	u8 *buf;
 	//! Length of buf.
 	int length;
+	//! Allocated capacity of buf.
+	int capacity;
 	//! In a book-long char buffer, where would i begin?
 	int start;
 	//! Ditto, for end char. 
@@ -56,6 +62,7 @@ class Page {
 	int  GetLength() { return length; }
 	//! Copy src to buf for len bytes.
 	u8   SetBuffer(u8 *src, u16 len); 
-//	void Draw();
+	void AdoptBuffer(page_buffer_utils::OwnedPageBuffer *owned);
+	//	void Draw();
 	void Draw(Text *ts);
 };

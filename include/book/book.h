@@ -232,6 +232,7 @@ public:
   void SetPosition(int pos);
   void SetTitle(const char *title);
   Page *AppendPage();
+  void ReservePageCapacity(size_t incoming_pages);
   void DrawCurrentView(Text *ts);
   void DrawCurrentMuPdfView(Text *ts);
   void DrawCurrentCbzView(Text *ts);
