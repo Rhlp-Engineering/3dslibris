@@ -195,6 +195,7 @@ private:
     int page_start;
     bool view_dirty;
     bool wait_input_release;
+    u64 last_interaction_ms;
   };
 
   struct PrefsViewState {
@@ -258,6 +259,7 @@ private:
   void browser_nextpage();
   void browser_prevpage();
   void LoadVisibleBrowserCoverCaches();
+  void PruneBrowserWarmupJobs(Book *selected_book);
   bool HasQueuedJob(app_job_type_t type, Book *book) const;
   void EnqueueJob(app_job_type_t type, Book *book);
   void QueueBookWarmup(Book *book);

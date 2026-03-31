@@ -34,6 +34,7 @@
 #include "formats/common/xml_parse_utils.h"
 #include "parse.h"
 #include "shared/app_flow_utils.h"
+#include "shared/rtf_control_word_utils.h"
 #include "shared/text_layout_utils.h"
 #include "string_utils.h"
 #include "minizip/unzip.h"
@@ -46,6 +47,7 @@
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -204,20 +206,19 @@ CollectCachedPages(Book *book) {
   return pages;
 }
 
-static void AppendCachedPages(Book *book,
-                              const std::vector<page_cache_utils::CachedPage>
-                                  &pages) {
+static void AppendCachedPages(
+    Book *book, std::vector<page_cache_utils::CachedPage> *pages) {
   if (!book)
     return;
 
-  for (size_t i = 0; i < pages.size(); i++) {
-    const page_cache_utils::CachedPage &cached_page = pages[i];
+  book->ReservePageCapacity(pages ? pages->size() : 0);
+
+  for (size_t i = 0; pages && i < pages->size(); i++) {
+    page_cache_utils::CachedPage &cached_page = pages->at(i);
     Page *page = book->AppendPage();
-    static u8 dummy = 0;
-    u8 *buffer = cached_page.empty()
-                     ? &dummy
-                     : const_cast<u8 *>(cached_page.data());
-    page->SetBuffer(buffer, (u16)cached_page.size());
+    page_buffer_utils::OwnedPageBuffer owned =
+        page_buffer_utils::AdoptPageBuffer(&cached_page);
+    page->AdoptBuffer(&owned);
   }
 }
 
@@ -298,7 +299,7 @@ static bool TryLoadMobiPageCache(Book *book, const char *book_path,
   ok = page_cache_utils::ReadPages(fp, hdr.page_count, kPageCachePageMaxBytes,
                                    &pages);
   if (ok)
-    AppendCachedPages(book, pages);
+    AppendCachedPages(book, &pages);
 
   if (ok) {
     std::vector<page_cache_utils::CachedChapter> chapters;
@@ -477,7 +478,7 @@ static std::string DecodeLegacySingleByteToUtf8(const std::string &in) {
   return utf8_utils::DecodeCp1252ToUtf8(in);
 }
 
-static std::string NormalizeTextUtf8(const std::string &raw);
+static std::string NormalizeTextUtf8(std::string raw);
 static std::string DecodeUtf16ToUtf8(const std::string &in);
 
 static size_t CountUtf8InvalidLeadBytes(const std::string &bytes) {
@@ -611,15 +612,14 @@ static std::string DecodeMobiBytesToUtf8(const std::string &in, u32 encoding,
   return legacy_candidate;
 }
 
-static std::string NormalizeTextUtf8(const std::string &raw) {
-  std::string s = raw;
-  if (s.size() >= 3 && (unsigned char)s[0] == 0xEF &&
-      (unsigned char)s[1] == 0xBB && (unsigned char)s[2] == 0xBF) {
-    s.erase(0, 3);
+static std::string NormalizeTextUtf8(std::string raw) {
+  if (raw.size() >= 3 && (unsigned char)raw[0] == 0xEF &&
+      (unsigned char)raw[1] == 0xBB && (unsigned char)raw[2] == 0xBF) {
+    raw.erase(0, 3);
   }
-  if (utf8_utils::IsValidUtf8(s))
-    return s;
-  return utf8_utils::DecodeCp1252ToUtf8(s);
+  if (utf8_utils::IsValidUtf8(raw))
+    return raw;
+  return utf8_utils::DecodeCp1252ToUtf8(raw);
 }
 
 static void NormalizeNewlines(std::string *s) {
@@ -1957,7 +1957,8 @@ static std::string DecodeRtfToUtf8(const std::string &rtf) {
       size_t p = i + 1;
       while (p < rtf.size() && isalpha((unsigned char)rtf[p]))
         p++;
-      std::string word = rtf.substr(i + 1, p - (i + 1));
+      const char *word = rtf.data() + i + 1;
+      const size_t word_len = p - (i + 1);
       if (p < rtf.size() &&
           (rtf[p] == '-' || rtf[p] == '+' || isdigit((unsigned char)rtf[p]))) {
         p++;
@@ -1967,27 +1968,9 @@ static std::string DecodeRtfToUtf8(const std::string &rtf) {
       if (p < rtf.size() && rtf[p] == ' ')
         p++;
 
-      if (!skip) {
-        if (word == "par" || word == "line") {
-          out.push_back('\n');
-        } else if (word == "tab") {
-          out.push_back('\t');
-        } else if (word == "emdash") {
-          AppendUtf8Codepoint(&out, 0x2014);
-        } else if (word == "endash") {
-          AppendUtf8Codepoint(&out, 0x2013);
-        } else if (word == "bullet") {
-          AppendUtf8Codepoint(&out, 0x2022);
-        } else if (word == "lquote") {
-          AppendUtf8Codepoint(&out, 0x2018);
-        } else if (word == "rquote") {
-          AppendUtf8Codepoint(&out, 0x2019);
-        } else if (word == "ldblquote") {
-          AppendUtf8Codepoint(&out, 0x201C);
-        } else if (word == "rdblquote") {
-          AppendUtf8Codepoint(&out, 0x201D);
-        }
-      }
+      if (!skip)
+        rtf_control_word_utils::AppendReplacement(word, word_len, &out,
+                                                  &AppendUtf8Codepoint);
       i = p;
       continue;
     }
@@ -2005,7 +1988,7 @@ static u8 ParseTxtFile(Book *book, const char *path) {
   if (raw.empty())
     return BOOK_ERR_CORRUPT;
   NormalizeNewlines(&raw);
-  std::string text = NormalizeTextUtf8(raw);
+  std::string text = NormalizeTextUtf8(std::move(raw));
   return ParsePlainTextBuffer(book, text);
 }
 
@@ -2018,7 +2001,7 @@ static u8 ParseRtfFile(Book *book, const char *path) {
   std::string text = DecodeRtfToUtf8(raw);
   NormalizeNewlines(&text);
   if (!LooksLikeValidUtf8Bytes(text))
-    text = NormalizeTextUtf8(text);
+    text = NormalizeTextUtf8(std::move(text));
   return ParsePlainTextBuffer(book, text);
 }
 

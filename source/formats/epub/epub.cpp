@@ -193,20 +193,19 @@ CollectCachedPages(Book *book) {
   return pages;
 }
 
-static void AppendCachedPages(Book *book,
-                              const std::vector<page_cache_utils::CachedPage>
-                                  &pages) {
+static void AppendCachedPages(
+    Book *book, std::vector<page_cache_utils::CachedPage> *pages) {
   if (!book)
     return;
 
-  for (size_t i = 0; i < pages.size(); i++) {
-    const page_cache_utils::CachedPage &cached_page = pages[i];
+  book->ReservePageCapacity(pages ? pages->size() : 0);
+
+  for (size_t i = 0; pages && i < pages->size(); i++) {
+    page_cache_utils::CachedPage &cached_page = pages->at(i);
     Page *page = book->AppendPage();
-    static u8 dummy = 0;
-    u8 *buffer = cached_page.empty()
-                     ? &dummy
-                     : const_cast<u8 *>(cached_page.data());
-    page->SetBuffer(buffer, (u16)cached_page.size());
+    page_buffer_utils::OwnedPageBuffer owned =
+        page_buffer_utils::AdoptPageBuffer(&cached_page);
+    page->AdoptBuffer(&owned);
   }
 }
 
@@ -285,7 +284,7 @@ static bool TryLoadEpubPageCache(Book *book, const char *book_path,
   ok = page_cache_utils::ReadPages(fp, hdr.page_count, kPageCachePageMaxBytes,
                                    &pages);
   if (ok)
-    AppendCachedPages(book, pages);
+    AppendCachedPages(book, &pages);
 
   if (ok) {
     std::vector<page_cache_utils::CachedChapter> chapters;

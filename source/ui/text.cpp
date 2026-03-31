@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 #include "app/app.h"
 #include "main.h"
+#include "shared/framebuffer_blit_utils.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
 #include "stb_image.h"
@@ -361,9 +362,17 @@ int Text::CacheGlyph(u32 ucs, FT_Face face) {
 
   //! Does not check if this is a duplicate entry;
   //! The caller should have checked first.
-
-  if (textCache[face]->cacheMap.size() == CACHESIZE)
-    return -1;
+  Cache *face_cache = textCache[face];
+  uint32_t evicted_ucs = 0;
+  if (face_cache->lru.Insert(ucs, &evicted_ucs)) {
+    std::map<u32, FT_GlyphSlot>::iterator evicted =
+        face_cache->cacheMap.find(evicted_ucs);
+    if (evicted != face_cache->cacheMap.end()) {
+      delete[] evicted->second->bitmap.buffer;
+      delete evicted->second;
+      face_cache->cacheMap.erase(evicted);
+    }
+  }
 
   FT_Load_Char(face, ucs, FT_LOAD_RENDER | FT_LOAD_TARGET_NORMAL);
   FT_GlyphSlot src = face->glyph;
@@ -377,7 +386,7 @@ int Text::CacheGlyph(u32 ucs, FT_Face face) {
   dst->bitmap_top = src->bitmap_top;
   dst->bitmap_left = src->bitmap_left;
   dst->advance = src->advance;
-  textCache[face]->cacheMap.insert(std::make_pair(ucs, dst));
+  face_cache->cacheMap.insert(std::make_pair(ucs, dst));
   return ucs;
 }
 
@@ -405,11 +414,12 @@ FT_GlyphSlot Text::GetGlyph(u32 ucs, int flags, FT_Face face) {
   if (ftc)
     halt("error: GetGlyph() called with ftc enabled");
 
-  std::map<u16, FT_GlyphSlot>::iterator iter =
-      textCache[face]->cacheMap.find(ucs);
-  if (iter != textCache[face]->cacheMap.end()) {
+  Cache *face_cache = textCache[face];
+  std::map<u32, FT_GlyphSlot>::iterator iter = face_cache->cacheMap.find(ucs);
+  if (iter != face_cache->cacheMap.end()) {
     stats_hits++;
     hit = true;
+    face_cache->lru.Touch(ucs);
     return iter->second;
   }
 
@@ -418,9 +428,8 @@ FT_GlyphSlot Text::GetGlyph(u32 ucs, int flags, FT_Face face) {
   stats_misses++;
   int i = CacheGlyph(ucs, face);
   if (i >= 0)
-    return textCache[face]->cacheMap[ucs];
+    return face_cache->cacheMap[ucs];
 
-  // Cache is full, look up directly.
   FT_Load_Char(face, ucs, flags);
   return face->glyph;
 }
@@ -436,21 +445,25 @@ void Text::ClearCache() {
 void Text::ClearCache(u8 style) { ClearCache(GetFace(style)); }
 
 void Text::ClearCache(FT_Face face) {
-  for (std::map<u16, FT_GlyphSlot>::iterator iter =
+  for (std::map<u32, FT_GlyphSlot>::iterator iter =
            textCache[face]->cacheMap.begin();
        iter != textCache[face]->cacheMap.end(); iter++) {
     delete[] iter->second->bitmap.buffer;
     delete iter->second;
   }
   textCache[face]->cacheMap.clear();
+  textCache[face]->lru.Clear();
   advanceCache.erase(face);
 }
 
 void Text::ClearScreen() {
   MarkCurrentScreenDirty();
-  // Buffer is PAGE_HEIGHT * PAGE_HEIGHT entries
-  const int bufsize = PAGE_HEIGHT * PAGE_HEIGHT;
-  const int logicalHeight = (screen == screenleft) ? 400 : 320;
+  const bool is_left_screen = (screen == screenleft);
+  const int logicalHeight =
+      framebuffer_blit_utils::LogicalTextScreenHeight(is_left_screen);
+  const size_t logicalPixels =
+      framebuffer_blit_utils::LogicalTextScreenPixelCount(display.width,
+                                                          is_left_screen);
   u16 bg_color;
   if (colorMode == 1)
     bg_color = 0x0000;
@@ -462,7 +475,7 @@ void Text::ClearScreen() {
     return;
   }
 
-  for (int i = 0; i < bufsize; i++) {
+  for (size_t i = 0; i < logicalPixels; i++) {
     screen[i] = bg_color;
   }
 }
@@ -1185,10 +1198,12 @@ bool Text::BlitToFramebuffer() {
   // So when anything is dirty, refresh both software pages into current
   // backbuffers before swapping.
   u8 *fbBottom = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &fbW, &fbH);
-  blitPage(fbBottom, screenright, 320);
+  blitPage(fbBottom, screenright,
+           framebuffer_blit_utils::LogicalTextScreenHeight(false));
 
   u8 *fbTop = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbW, &fbH);
-  blitPage(fbTop, screenleft, 400);
+  blitPage(fbTop, screenleft,
+           framebuffer_blit_utils::LogicalTextScreenHeight(true));
 
   screenright_dirty = false;
   screenleft_dirty = false;

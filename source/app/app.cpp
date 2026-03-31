@@ -31,6 +31,7 @@
 #include "ui/button.h"
 #include "menus/chapter_menu.h"
 #include "shared/app_flow_utils.h"
+#include "shared/browser_warmup_utils.h"
 #include "settings/font.h"
 #include "debug_log.h"
 #include "main.h"
@@ -225,6 +226,7 @@ App::App() {
   browser_.page_start = 0;
   browser_.view_dirty = false;
   browser_.wait_input_release = false;
+  browser_.last_interaction_ms = 0;
 
   prefs = new Prefs(this);
   prefs_view_.selected_index = -1;
@@ -562,8 +564,16 @@ int App::Run(void) {
     hidScanInput();
     // Keep reading mode responsive: avoid running heavy background jobs while
     // the user is paging through a book.
-    if (mode_ != AppMode::Book && mode_ != AppMode::Opening)
-      ProcessJobs(3); // Cooperative budget per frame (ms).
+    if (mode_ != AppMode::Book && mode_ != AppMode::Opening) {
+      bool allow_jobs = true;
+      if (mode_ == AppMode::Browser) {
+        allow_jobs = browser_warmup_utils::IsBrowserWarmupIdle(
+            osGetTime(), browser_.last_interaction_ms,
+            browser_.wait_input_release);
+      }
+      if (allow_jobs)
+        ProcessJobs(3); // Cooperative budget per frame (ms).
+    }
 
     switch (mode_) {
     case AppMode::Book:
@@ -810,6 +820,7 @@ void App::ShowLibraryView() {
   mode_ = AppMode::Browser;
   ts->SetScreen(ts->screenright);
   browser_.wait_input_release = true;
+  browser_.last_interaction_ms = osGetTime();
   browser_.view_dirty = true;
   prefs_view_.layout_notice_pending = false;
 }

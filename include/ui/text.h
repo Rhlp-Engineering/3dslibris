@@ -19,6 +19,7 @@
 #include <string>
 #include <unordered_map>
 
+#include "shared/glyph_cache_lru.h"
 #include "ft2build.h"
 #include FT_FREETYPE_H
 #include FT_CACHE_H
@@ -72,11 +73,10 @@ class Cache {
 public:
   //! Associates each glyph cache index (value)
   //! with its Unicode code point (key).
-  std::map<u16, FT_GlyphSlot> cacheMap;
-  //! ??
-  u16 cachenext;
+  std::map<u32, FT_GlyphSlot> cacheMap;
+  glyph_cache_lru::GlyphCacheLru lru;
 
-  Cache() { cachenext = 0; }
+  Cache() : lru(CACHESIZE) {}
 };
 
 //! Typesetter singleton that provides all text rendering services.
