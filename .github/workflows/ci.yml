@@ -73,3 +73,47 @@ jobs:
             3dslibris.smdh
             3dslibris.elf
             3dslibris-debug.3dsx
+
+  build-cia:
+    runs-on: ubuntu-latest
+    env:
+      DEVKITPRO: /opt/devkitpro
+      DEVKITARM: /opt/devkitpro/devkitARM
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build CIA toolchain image
+        run: |
+          set -euo pipefail
+          docker build -f docker/Dockerfile.cia -t 3dslibris-build .
+
+      - name: Build CIA
+        run: |
+          set -euo pipefail
+          uid="$(id -u)"
+          gid="$(id -g)"
+          docker run --rm \
+            --user "${uid}:${gid}" \
+            -v "$PWD:/project" -w /project \
+            -e DEVKITPRO="$DEVKITPRO" \
+            -e DEVKITARM="$DEVKITARM" \
+            3dslibris-build \
+            sh -lc 'make clean && make -j2 && make debug-3dsx && make cia'
+
+      - name: Verify CIA outputs
+        run: |
+          set -euo pipefail
+          test -f 3dslibris.cia
+          test -f 3dslibris.3dsx
+          test -f 3dslibris-debug.3dsx
+          test -f dist/romfs/3ds/3dslibris/font/LiberationSerif-Regular.ttf
+          test -f dist/romfs/3ds/3dslibris/resources/splash.jpg
+
+      - name: Upload CIA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3dslibris-cia-build
+          path: |
+            3dslibris.cia
+            3dslibris.3dsx
+            3dslibris-debug.3dsx
