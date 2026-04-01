@@ -1,6 +1,6 @@
 # Architecture
 
-High-level architecture of 3dslibris as of v2.0.0. This document describes the current structure, module responsibilities, and known design trade-offs.
+High-level architecture of 3dslibris as of v2.0.3. This document describes the current structure, module responsibilities, and known design trade-offs.
 
 ## Module map
 
@@ -29,15 +29,20 @@ source/
 │   └── reflow_cache_save_utils.h
 ├── formats/                    # Format-specific parsers
 │   ├── common/                 # Shared format utilities
-│   │   ├── book_io.cpp         # TXT/RTF/ODT/MOBI dispatch + MOBI cache
+│   │   ├── book_io.cpp         # MOBI dispatch + ODT parsing (TXT/RTF extracted)
 │   │   ├── buffered_status_log.cpp
 │   │   ├── epub_image_utils.cpp
 │   │   ├── file_read_utils.cpp
 │   │   ├── page_cache_utils.cpp
+│   │   ├── text_helpers.cpp    # Text normalization (UTF repair, RTF decode, etc.)
 │   │   ├── xml_parse_utils.cpp
 │   │   ├── pdf_view_utils.cpp  # Shared MuPDF viewport/navigation
 │   │   ├── fixed_layout_viewport_utils.h
 │   │   └── rtf_control_word_utils.h
+│   ├── txt/                    # Plain text loader
+│   │   └── txt_loader.cpp     # ReadAndNormalize() with CP1252 repair
+│   ├── rtf/                    # Rich Text Format loader
+│   │   └── rtf_loader.cpp     # ReadAndDecode() with RTF→UTF-8
 │   ├── epub/                   # EPUB2/EPUB3 parser
 │   │   └── epub.cpp            # Full EPUB parsing + page cache
 │   ├── fb2/                    # FictionBook 2 parser
@@ -46,6 +51,7 @@ source/
 │   │   ├── mobi.cpp            # Cover extraction
 │   │   ├── mobi_cover_meta_cache.cpp
 │   │   ├── mobi_heading_markers.cpp
+│   │   ├── mobi_page_cache.cpp  # Persistent page cache serialization
 │   │   ├── mobi_markup_tag.cpp
 │   │   ├── mobi_position_map.cpp
 │   │   ├── mobi_record_decode.cpp
@@ -95,6 +101,7 @@ source/
     └── parse.cpp               # Parser dispatch entry point
 
 include/                        # Public headers (mirrors source/ structure)
+└── string_utils.h             # Inline string utilities (StartsWithNoCase, etc.)
 
 third_party/                    # External dependencies
 ├── expat/                      # XML parser (moved from source/expat)
@@ -136,8 +143,8 @@ Book::Open()
        ├─ EPUB  → epub.cpp (minizip + expat XML → pages)
        ├─ FB2   → fb2.cpp (expat XML → pages)
        ├─ MOBI  → book_io.cpp + mobi/*.cpp (PDB records → pages)
-       ├─ TXT   → book_io.cpp (raw text → pages)
-       ├─ RTF   → book_io.cpp (RTF control words → pages)
+       ├─ TXT   → txt_loader.cpp (raw text → pages)
+       ├─ RTF   → rtf_loader.cpp (RTF control words → pages)
        ├─ ODT   → book_io.cpp (minizip + expat → pages)
        ├─ PDF   → mupdf/*.cpp (MuPDF → display lists → bitmaps)
        ├─ CBZ   → cbz/*.cpp + mupdf/*.cpp (zip → images → bitmaps)
@@ -162,19 +169,25 @@ Reflowable formats (EPUB, FB2, MOBI, TXT, RTF, ODT) produce `Page` objects with 
 
 **Future direction:** Separate Book (pure model) from BookParser (format-specific) and BookRenderer (format-specific).
 
-### 3. book_io.cpp is a monolith (5369 lines)
-Handles TXT, RTF, ODT, and MOBI parsing dispatch plus MOBI page cache serialization.
+### 3. book_io.cpp reduced (4844 lines, down from 5369)
+TXT and RTF loaders, text normalization helpers, and MOBI page cache were extracted to separate modules. Remaining content: MOBI parsing dispatch and ODT parsing.
 
-**Impact:** Any change to any of these formats requires navigating a massive file. High risk of accidental breakage.
+**Impact:** TXT and RTF changes no longer touch book_io.cpp. MOBI and ODT still require navigating a large file.
 
-**Future direction:** Split into per-format loaders and a separate cache module.
+**Future direction:** Extract ODT to its own module (requires decoupling from `FinalizePlainPage`). MOBI parsing (~3000 lines) is the next extraction target.
 
-### 4. shared/ was a catch-all (now cleaned up)
-Previously contained 19 headers of unrelated utilities. Now reduced to 4 genuinely cross-cutting modules:
-- `app_flow_utils` — format detection, path conversion
-- `text_layout_utils` — text layout helpers
-- `text_unicode_utils` — Unicode utilities
-- `utf8_utils` — UTF-8 encoding/decoding
+### 4. Formats extracted from book_io.cpp
+The following modules were extracted to improve testability and reduce monolith size:
+
+| Module | From | Public API |
+|--------|------|------------|
+| `txt_loader` | book_io.cpp | `ReadAndNormalize()` — reads TXT, repairs CP1252 mojibake, normalizes newlines |
+| `rtf_loader` | book_io.cpp | `ReadAndDecode()` — reads RTF, decodes to UTF-8 via `text_helpers` |
+| `text_helpers` | book_io.cpp | `NormalizeNewlines`, `NormalizeTextUtf8`, `DecodeRtfToUtf8`, `LooksLikeValidUtf8Bytes` |
+| `mobi_page_cache` | book_io.cpp | `TryLoad()`, `Save()` — persistent page cache for MOBI |
+| `StartsWithNoCase` | epub_image_utils.cpp | Generic string utility → `string_utils.h` |
+
+All extracted modules have corresponding test suites using the project's `test_build.sh` helper.
 
 ## Build system
 
