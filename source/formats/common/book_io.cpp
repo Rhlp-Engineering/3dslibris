@@ -56,7 +56,7 @@
 
 namespace {
 
-std::string DecodeUtf16ToUtf8(const std::string &in);
+static std::string DecodeUtf16ToUtf8(const std::string &in);
 
 static const size_t kPlainTextMaxBytes = 12 * 1024 * 1024;
 static const size_t kOdtContentMaxBytes = 24 * 1024 * 1024;
