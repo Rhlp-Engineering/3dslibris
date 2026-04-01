@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 #include <algorithm>
 #include <math.h>
+#include <new>
 #include <stdio.h>
 #include <sys/param.h>
 #include <vector>
@@ -44,6 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "debug_log.h"
 #include "main.h"
 #include "ui/framebuffer_blit_utils.h"
+#include "ui/text_cache_utils.h"
 #include "ui/text_buffer_utils.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
@@ -123,6 +125,44 @@ static inline u16 SepiaGradientPixel(int x, int y, int w, int h) {
 
 static const u16 kSepiaTextColor = RGB565FromU8(70.0f, 52.0f, 32.0f);
 static const u16 kSepiaBgMidColor = RGB565FromU8(241.0f, 223.0f, 190.0f);
+
+static bool FileReadable(const char *path) {
+  if (!path || !*path)
+    return false;
+  FILE *fp = fopen(path, "rb");
+  if (!fp)
+    return false;
+  fclose(fp);
+  return true;
+}
+
+static bool IsArchiveAbsolutePath(const std::string &path) {
+  return path.find(":/") != std::string::npos ||
+         (!path.empty() && path[0] == '/');
+}
+
+static std::string ResolveFontPath(const App *app, const std::string &filename) {
+  if (filename.empty())
+    return filename;
+  if (IsArchiveAbsolutePath(filename))
+    return filename;
+
+  const std::string configured_dir =
+      (app && !app->fontdir.empty()) ? app->fontdir : std::string(paths::kFontDir);
+  const std::string configured = configured_dir + "/" + filename;
+  if (FileReadable(configured.c_str()))
+    return configured;
+
+  const std::string sdmc = std::string(paths::kFontDir) + "/" + filename;
+  if (FileReadable(sdmc.c_str()))
+    return sdmc;
+
+  const std::string romfs = std::string("romfs:/3ds/3dslibris/font/") + filename;
+  if (FileReadable(romfs.c_str()))
+    return romfs;
+
+  return configured;
+}
 
 static void FillSepiaGradient(u16 *dst, int stride, int w, int logical_h) {
   if (!dst || stride <= 0 || w <= 0 || logical_h <= 0)
@@ -299,16 +339,18 @@ FT_Error Text::InitFreeTypeCache(void) {
 }
 
 FT_Error Text::CreateFace(int style) {
-  std::string path = app->fontdir + "/" + filenames[style];
-  error = FT_New_Face(library, path.c_str(), 0, &faces[style]);
+  const std::string path = ResolveFontPath(app, filenames[style]);
+  FT_Face loaded_face = nullptr;
+  error = FT_New_Face(library, path.c_str(), 0, &loaded_face);
   if (error) {
-    printf("[FAIL] Font: %s\n", path.c_str());
+    printf("[FAIL] Font(%d): %s\n", error, path.c_str());
     return error;
   }
 
-  error = FT_Select_Charmap(faces[style], FT_ENCODING_UNICODE);
+  error = FT_Select_Charmap(loaded_face, FT_ENCODING_UNICODE);
   if (error) {
-    printf("[FAIL] Charmap: %s\n", path.c_str());
+    printf("[FAIL] Charmap(%d): %s\n", error, path.c_str());
+    FT_Done_Face(loaded_face);
     return error;
   }
 
@@ -316,14 +358,40 @@ FT_Error Text::CreateFace(int style) {
   if (style == TEXT_STYLE_BROWSER)
     size = 12;
 
-  error = FT_Set_Pixel_Sizes(faces[style], 0, size);
+  error = FT_Set_Pixel_Sizes(loaded_face, 0, size);
   if (error) {
-    printf("[FAIL] Pixel size\n");
+    printf("[FAIL] Pixel size(%d): %s\n", error, path.c_str());
+    FT_Done_Face(loaded_face);
     return error;
   }
 
-  textCache.insert(std::make_pair(faces[style], new Cache()));
-  printf("[OK] Font: %s\n", filenames[style].c_str());
+  Cache *new_cache = new (std::nothrow) Cache();
+  if (!new_cache) {
+    printf("[FAIL] Glyph cache alloc: %s\n", path.c_str());
+    FT_Done_Face(loaded_face);
+    return FT_Err_Out_Of_Memory;
+  }
+
+  FT_Face old_face = nullptr;
+  std::map<u8, FT_Face>::iterator old_face_it = faces.find((u8)style);
+  if (old_face_it != faces.end())
+    old_face = old_face_it->second;
+
+  faces[(u8)style] = loaded_face;
+  textCache[loaded_face] = new_cache;
+  advanceCache.erase(loaded_face);
+
+  if (old_face && old_face != loaded_face) {
+    ClearCache(old_face);
+    std::map<FT_Face, Cache *>::iterator old_cache_it = textCache.find(old_face);
+    if (old_cache_it != textCache.end()) {
+      delete old_cache_it->second;
+      textCache.erase(old_cache_it);
+    }
+    FT_Done_Face(old_face);
+  }
+
+  printf("[OK] Font: %s\n", path.c_str());
 
   return error;
 }
@@ -331,7 +399,11 @@ FT_Error Text::CreateFace(int style) {
 int Text::InitCache(void) {
   //! Use our own cheesey glyph cache.
 
-  FT_Init_FreeType(&library);
+  error = FT_Init_FreeType(&library);
+  if (error) {
+    printf("[FAIL] FreeType init(%d)\n", error);
+    return error;
+  }
 
   // Load each typeface; keep the first non-zero error code (if any) so callers
   // can report which face failed, rather than a meaningless bitwise-OR.
@@ -371,7 +443,9 @@ int Text::CacheGlyph(u32 ucs, FT_Face face) {
 
   //! Does not check if this is a duplicate entry;
   //! The caller should have checked first.
-  Cache *face_cache = textCache[face];
+  Cache *face_cache = text_cache_utils::FindFaceCache(textCache, face);
+  if (!face || !face_cache)
+    return -1;
   uint32_t evicted_ucs = 0;
   if (face_cache->lru.Insert(ucs, &evicted_ucs)) {
     std::map<u32, FT_GlyphSlot>::iterator evicted =
@@ -434,7 +508,15 @@ FT_GlyphSlot Text::GetGlyph(u32 ucs, int flags, FT_Face face) {
   if (ftc)
     halt("error: GetGlyph() called with ftc enabled");
 
-  Cache *face_cache = textCache[face];
+  Cache *face_cache = text_cache_utils::FindFaceCache(textCache, face);
+  if (!face || !face_cache) {
+    hit = false;
+    stats_misses++;
+    if (!face)
+      return nullptr;
+    FT_Load_Char(face, ucs, flags);
+    return face->glyph;
+  }
   std::map<u32, FT_GlyphSlot>::iterator iter = face_cache->cacheMap.find(ucs);
   if (iter != face_cache->cacheMap.end()) {
     stats_hits++;
@@ -465,14 +547,20 @@ void Text::ClearCache() {
 void Text::ClearCache(u8 style) { ClearCache(GetFace(style)); }
 
 void Text::ClearCache(FT_Face face) {
+  Cache *face_cache = text_cache_utils::FindFaceCache(textCache, face);
+  if (!face_cache) {
+    advanceCache.erase(face);
+    return;
+  }
+
   for (std::map<u32, FT_GlyphSlot>::iterator iter =
-           textCache[face]->cacheMap.begin();
-       iter != textCache[face]->cacheMap.end(); iter++) {
+           face_cache->cacheMap.begin();
+       iter != face_cache->cacheMap.end(); iter++) {
     delete[] iter->second->bitmap.buffer;
     delete iter->second;
   }
-  textCache[face]->cacheMap.clear();
-  textCache[face]->lru.Clear();
+  face_cache->cacheMap.clear();
+  face_cache->lru.Clear();
   advanceCache.erase(face);
 }
 
@@ -1188,10 +1276,8 @@ void Text::MarkScreenDirtyRect(u16 *target, int x0, int y0, int x1, int y1) {
  * should be called), false if nothing changed.
  */
 bool Text::BlitToFramebuffer() {
-  if (!screenleft_dirty && !screenright_dirty)
-    return false;
-
   u16 fbW = 0, fbH = 0;
+  bool wrote_anything = false;
 
   auto blitPage = [&](u8 *fb, std::vector<u8> &cache, u16 *src,
                       u16 logicalHeight, bool dirty,
@@ -1234,6 +1320,7 @@ bool Text::BlitToFramebuffer() {
       memcpy(fb, cache.data(), geometry.byte_size);
       framebuffer_blit_utils::MarkPhysicalFramebufferCopied(
           &sync, slot, fb, cache_generation);
+      wrote_anything = true;
     }
   };
 
@@ -1258,5 +1345,5 @@ bool Text::BlitToFramebuffer() {
   screenleft_dirty = false;
   screenright_dirty_rect.valid = false;
   screenleft_dirty_rect.valid = false;
-  return true;
+  return wrote_anything;
 }

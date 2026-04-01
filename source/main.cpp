@@ -31,13 +31,24 @@
 
 App *app;
 
+static void PresentCurrentFrameToBothBuffers() {
+  // Re-blit before each swap so both physical backbuffers receive the same
+  // software-rendered frame. Swapping twice without re-blitting would simply
+  // alternate between a fresh fatal screen and a stale previous frame.
+  for (int i = 0; i < 2; i++) {
+    if (app && app->ts)
+      app->ts->BlitToFramebuffer();
+    gfxFlushBuffers();
+    gfxSwapBuffers();
+    gspWaitForVBlank();
+  }
+}
+
 //! \param vblanks blanking intervals to wait, -1 for forever, default = -1
 int halt(int vblanks) {
-  // Flush once immediately so any preceding printf/console
-  // output is visible on the very first frame.
-  gfxFlushBuffers();
-  gfxSwapBuffers();
-  gspWaitForVBlank();
+  // Present the current frame to both buffers so we don't alternate between a
+  // stale previous frame and the latest fatal/console screen.
+  PresentCurrentFrameToBothBuffers();
 
   int timer = vblanks;
   while (aptMainLoop()) {
@@ -88,6 +99,8 @@ int main(int argc, char **argv) {
   gspWaitForVBlank();
 
   bool romfs_ready = (romfsInit() == 0);
+  if (!romfs_ready)
+    printf("[WARN] romfsInit failed; built-in CIA assets are unavailable.\n");
 
   // Create book directory if it doesn't exist
   mkdir("sdmc:/3ds", 0777);
@@ -109,14 +122,7 @@ int main(int argc, char **argv) {
   // If Run() returned early (error), wait for user
   if (result != 0) {
     printf("\nPress START to exit.\n");
-    // With double buffering, the console text lives in only one back buffer.
-    // Flush+swap twice so both buffers contain the console output,
-    // preventing garbled/flickering display.
-    for (int i = 0; i < 2; i++) {
-      gfxFlushBuffers();
-      gfxSwapBuffers();
-      gspWaitForVBlank();
-    }
+    PresentCurrentFrameToBothBuffers();
     while (aptMainLoop()) {
       hidScanInput();
       if (hidKeysDown() & KEY_START)

@@ -9,6 +9,9 @@ TitleInfo:
   Category                : Application
   UniqueId                : 0x3D51B
 
+RomFs:
+  RootPath                : $(APP_ROMFS)
+
 Option:
   UseOnSD                 : true
   FreeProductCode         : true

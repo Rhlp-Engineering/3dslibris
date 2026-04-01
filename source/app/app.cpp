@@ -87,10 +87,29 @@ static bool PathExistsAndType(const char *path, bool want_dir) {
   return S_ISREG(st.st_mode);
 }
 
+static bool FileReadable(const char *path) {
+  if (!path || !*path)
+    return false;
+  FILE *fp = fopen(path, "rb");
+  if (!fp)
+    return false;
+  fclose(fp);
+  return true;
+}
+
 static bool RuntimePathExistsEither(const char *sdmc_path,
                                     const char *romfs_path, bool want_dir) {
-  return PathExistsAndType(sdmc_path, want_dir) ||
-         PathExistsAndType(romfs_path, want_dir);
+  if (want_dir)
+    return PathExistsAndType(sdmc_path, true) || PathExistsAndType(romfs_path, true);
+  return FileReadable(sdmc_path) || FileReadable(romfs_path);
+}
+
+static bool FontDirLooksUsable(const std::string &dir) {
+  if (dir.empty())
+    return false;
+  static const char *kProbeFont = "LiberationSerif-Regular.ttf";
+  std::string probe = dir + "/" + kProbeFont;
+  return FileReadable(probe.c_str());
 }
 
 static bool UsesFixedLayoutMinimalHud(const Book *book) {
@@ -100,14 +119,9 @@ static bool UsesFixedLayoutMinimalHud(const Book *book) {
 static std::string ResolveDefaultFontDir() {
   static const char *kSdmcFontDir = paths::kFontDir;
   static const char *kRomfsFontDir = "romfs:/3ds/3dslibris/font";
-  static const char *kProbeFont = "LiberationSerif-Regular.ttf";
-
-  std::string sdmc_probe = std::string(kSdmcFontDir) + "/" + kProbeFont;
-  if (PathExistsAndType(sdmc_probe.c_str(), false))
+  if (FontDirLooksUsable(kSdmcFontDir))
     return std::string(kSdmcFontDir);
-
-  std::string romfs_probe = std::string(kRomfsFontDir) + "/" + kProbeFont;
-  if (PathExistsAndType(romfs_probe.c_str(), false))
+  if (FontDirLooksUsable(kRomfsFontDir))
     return std::string(kRomfsFontDir);
 
   return std::string(kSdmcFontDir);
@@ -116,7 +130,7 @@ static std::string ResolveDefaultFontDir() {
 static void NormalizeRuntimeAssetPaths(App *app) {
   if (!app)
     return;
-  if (!PathExistsAndType(app->fontdir.c_str(), true))
+  if (!FontDirLooksUsable(app->fontdir))
     app->fontdir = ResolveDefaultFontDir();
 }
 
@@ -439,7 +453,7 @@ int App::Run(void) {
       ts->DrawRect(14, 138, 226, 152, 0xBDF7);
     else {
       ts->SetPen(14, 216);
-      ts->PrintString("Pulsa START para salir");
+      ts->PrintString("Press START to exit");
     }
 
     ts->SetStyle(savedStyle);
@@ -509,8 +523,8 @@ int App::Run(void) {
   if (BookCount() == 0) {
     PrintStatus("error: no epub files found");
     drawBootStatus("No books found",
-                   {"Put your EPUB/FB2/TXT/RTF/ODT files",
-                    "in sdmc:/3ds/3dslibris/book"},
+                   {"Copy your EPUB/FB2/TXT/RTF/ODT files",
+                    "to sdmc:/3ds/3dslibris/book"},
                    true);
     return haltOnFatalBootStatus();
   }
