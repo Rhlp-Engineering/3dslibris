@@ -17,6 +17,7 @@
 #include "book/book_xml.h"
 #include "book/heading_layout.h"
 #include "formats/epub/epub.h"
+#include "formats/epub/epub_page_cache.h"
 #include "main.h"
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
@@ -1591,7 +1592,7 @@ void Book::Close() {
           (unsigned int)GetPageCount());
   CancelAsyncReflowOpen();
   if (flush_pending_epub_cache)
-    SavePendingEpubPageCache(this);
+    epub_page_cache::SavePending(this);
   epub_page_cache_save_pending = false;
   CancelDeferredMobiParse();
   std::vector<Page *>::iterator it = pages.begin();

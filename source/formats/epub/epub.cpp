@@ -36,13 +36,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
 #include "formats/common/xml_parse_utils.h"
+#include "formats/epub/epub_page_cache.h"
 #include "main.h"
 #include "path_utils.h"
 #include "book/page.h"
 #include "shared/text_layout_utils.h"
-#include "formats/common/page_cache_utils.h"
 #include "parse.h"
-#include "path_utils.h"
 #include "book/reflow_cache_save_utils.h"
 #include "stb_image.h"
 #include "string_utils.h"
@@ -60,25 +59,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <sys/stat.h>
 #include <unordered_map>
 #include <vector>
-
-static const char *kEpubCacheBaseDir = paths::kCacheBaseDir;
-static const char *kEpubCacheDir = paths::kEpubCacheDir;
-static const u32 kEpubPageCacheMagic = 0x45504347U; // "EPCG"
-static const u16 kEpubPageCacheVersion = 2;
-static const u16 kPageCacheTitleMaxBytes = 1000;
-static const u16 kPageCachePageMaxBytes = 4096;
-static const u16 kPageCacheChapterTitleMaxBytes = 2048;
-static const u16 kPageCachePathMaxBytes = 2048;
-
-struct EpubPageCacheHeader {
-  u32 magic;
-  u16 version;
-  u16 title_len;
-  u32 page_count;
-  u32 chapter_count;
-  u32 doc_start_count; // chapter_doc_start_pages entries
-  u32 image_count;     // inline_images entries
-};
 
 struct EpubDeps {
   App *app;
@@ -135,309 +115,6 @@ static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
   parsedata->app = deps.app;
   parsedata->ts = deps.ts;
   parsedata->prefs = deps.prefs;
-}
-
-static void EnsureEpubCacheDirs() {
-  static bool initialized = false;
-  if (initialized)
-    return;
-  mkdir(kEpubCacheBaseDir, 0777);
-  mkdir(kEpubCacheDir, 0777);
-  initialized = true;
-}
-
-static page_cache_utils::PageCacheLayoutParams
-BuildEpubPageCacheLayoutParams(const char *book_path, const EpubDeps &deps) {
-  page_cache_utils::PageCacheLayoutParams params;
-  if (!book_path || !deps.ts)
-    return params;
-
-  struct stat st;
-  if (stat(book_path, &st) == 0) {
-    params.file_size = (long long)st.st_size;
-    params.file_mtime = (long long)st.st_mtime;
-  }
-
-  Text *ts = deps.ts;
-  params.pixel_size = (int)ts->GetPixelSize();
-  params.line_spacing = (int)ts->linespacing;
-  params.paragraph_spacing = deps.paragraph_spacing;
-  params.paragraph_indent = deps.paragraph_indent;
-  params.orientation = deps.orientation;
-  params.margin_left = (int)ts->margin.left;
-  params.margin_right = (int)ts->margin.right;
-  params.margin_top = (int)ts->margin.top;
-  params.margin_bottom = (int)ts->margin.bottom;
-  params.regular_font = ts->GetFontFile(TEXT_STYLE_REGULAR);
-  return params;
-}
-
-static std::vector<page_cache_utils::CachedPage>
-CollectCachedPages(Book *book) {
-  std::vector<page_cache_utils::CachedPage> pages;
-  if (!book)
-    return pages;
-
-  const u16 page_count = book->GetPageCount();
-  pages.reserve(page_count);
-  for (u16 i = 0; i < page_count; i++) {
-    Page *page = book->GetPage((int)i);
-    const int length = page ? page->GetLength() : 0;
-    page_cache_utils::CachedPage cached_page;
-    if (page && length > 0) {
-      const u8 *buffer = page->GetBuffer();
-      if (!buffer)
-        return std::vector<page_cache_utils::CachedPage>();
-      cached_page.assign(buffer, buffer + length);
-    }
-    pages.push_back(cached_page);
-  }
-  return pages;
-}
-
-static void AppendCachedPages(
-    Book *book, std::vector<page_cache_utils::CachedPage> *pages) {
-  if (!book)
-    return;
-
-  book->ReservePageCapacity(pages ? pages->size() : 0);
-
-  for (size_t i = 0; pages && i < pages->size(); i++) {
-    page_cache_utils::CachedPage &cached_page = pages->at(i);
-    Page *page = book->AppendPage();
-    page_buffer_utils::OwnedPageBuffer owned =
-        page_buffer_utils::AdoptPageBuffer(&cached_page);
-    page->AdoptBuffer(&owned);
-  }
-}
-
-static std::vector<page_cache_utils::CachedChapter>
-CollectCachedChapters(const std::vector<ChapterEntry> &chapters) {
-  std::vector<page_cache_utils::CachedChapter> cached;
-  cached.reserve(chapters.size());
-  for (size_t i = 0; i < chapters.size(); i++) {
-    const ChapterEntry &chapter = chapters[i];
-    cached.push_back(page_cache_utils::CachedChapter(chapter.page, chapter.level,
-                                                     chapter.title));
-  }
-  return cached;
-}
-
-static void AppendCachedChapters(
-    Book *book,
-    const std::vector<page_cache_utils::CachedChapter> &chapters) {
-  if (!book)
-    return;
-
-  for (size_t i = 0; i < chapters.size(); i++) {
-    const page_cache_utils::CachedChapter &chapter = chapters[i];
-    if (chapter.page < book->GetPageCount())
-      book->AddChapter(chapter.page, chapter.title, chapter.level);
-  }
-}
-
-static std::string BuildEpubPageCachePath(const char *book_path,
-                                          const EpubDeps &deps) {
-  if (!book_path || !deps.ts)
-    return std::string();
-  return page_cache_utils::BuildPageCachePath(
-      kEpubCacheDir, ".epc", book_path,
-      BuildEpubPageCacheLayoutParams(book_path, deps));
-}
-
-static bool TryLoadEpubPageCache(Book *book, const char *book_path,
-                                 const EpubDeps &deps) {
-  if (!book || !book_path || !deps.app)
-    return false;
-  EnsureEpubCacheDirs();
-  std::string cache_path = BuildEpubPageCachePath(book_path, deps);
-  if (cache_path.empty())
-    return false;
-
-  FILE *fp = fopen(cache_path.c_str(), "rb");
-  if (!fp)
-    return false;
-
-  EpubPageCacheHeader hdr;
-  if (fread(&hdr, 1, sizeof(hdr), fp) != sizeof(hdr)) {
-    fclose(fp);
-    remove(cache_path.c_str());
-    return false;
-  }
-  if (hdr.magic != kEpubPageCacheMagic ||
-      hdr.version != kEpubPageCacheVersion || hdr.page_count == 0 ||
-      hdr.page_count > 20000 || hdr.chapter_count > 4000 ||
-      hdr.title_len > 1000 || hdr.doc_start_count > 4000 ||
-      hdr.image_count > 65535) {
-    fclose(fp);
-    remove(cache_path.c_str());
-    return false;
-  }
-
-  std::string title;
-  if (!page_cache_utils::ReadRawString(fp, hdr.title_len, &title)) {
-    fclose(fp);
-    remove(cache_path.c_str());
-    return false;
-  }
-
-  bool ok = true;
-  std::vector<page_cache_utils::CachedPage> pages;
-  ok = page_cache_utils::ReadPages(fp, hdr.page_count, kPageCachePageMaxBytes,
-                                   &pages);
-  if (ok)
-    AppendCachedPages(book, &pages);
-
-  if (ok) {
-    std::vector<page_cache_utils::CachedChapter> chapters;
-    ok = page_cache_utils::ReadChapters(fp, hdr.chapter_count,
-                                        kPageCacheChapterTitleMaxBytes,
-                                        &chapters);
-    if (ok)
-      AppendCachedChapters(book, chapters);
-  }
-
-  if (ok) {
-    for (u32 i = 0; i < hdr.doc_start_count; i++) {
-      u16 doc_page = 0;
-      if (fread(&doc_page, 1, sizeof(doc_page), fp) != sizeof(doc_page)) {
-        ok = false;
-        break;
-      }
-      std::string docpath;
-      if (!page_cache_utils::ReadLengthPrefixedString16(
-              fp, kPageCachePathMaxBytes, true, &docpath)) {
-        ok = false;
-        break;
-      }
-      book->SetChapterDocStartPage(docpath, doc_page);
-    }
-  }
-
-  if (ok) {
-    for (u32 i = 0; i < hdr.image_count; i++) {
-      std::string imgpath;
-      if (!page_cache_utils::ReadLengthPrefixedString16(
-              fp, kPageCachePathMaxBytes, false, &imgpath)) {
-        ok = false;
-        break;
-      }
-      book->RegisterInlineImage(imgpath);
-    }
-  }
-
-  fclose(fp);
-  if (!ok) {
-    book->Close();
-    remove(cache_path.c_str());
-    return false;
-  }
-
-  if (!title.empty())
-    book->SetTitle(title.c_str());
-
-  return true;
-}
-
-static void SaveEpubPageCache(Book *book, const char *book_path,
-                              const EpubDeps &deps) {
-  if (!book || !book_path || !deps.app || book->GetPageCount() == 0)
-    return;
-  EnsureEpubCacheDirs();
-  std::string cache_path = BuildEpubPageCachePath(book_path, deps);
-  if (cache_path.empty())
-    return;
-
-  const char *title_c = book->GetTitle();
-  std::string title = title_c ? title_c : "";
-  title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
-  const std::vector<ChapterEntry> &chapters = book->GetChapters();
-  const std::unordered_map<std::string, u16> &doc_starts =
-      book->GetChapterDocStartPages();
-  const std::vector<page_cache_utils::CachedPage> pages =
-      CollectCachedPages(book);
-  if (pages.size() != book->GetPageCount())
-    return;
-  const std::vector<page_cache_utils::CachedChapter> cached_chapters =
-      CollectCachedChapters(chapters);
-
-  EpubPageCacheHeader hdr;
-  memset(&hdr, 0, sizeof(hdr));
-  hdr.magic = kEpubPageCacheMagic;
-  hdr.version = kEpubPageCacheVersion;
-  hdr.title_len = (u16)title.size();
-  hdr.page_count = (u32)pages.size();
-  hdr.chapter_count = (u32)cached_chapters.size();
-  hdr.doc_start_count = (u32)doc_starts.size();
-  hdr.image_count = book->GetInlineImageCount();
-
-  FILE *fp = fopen(cache_path.c_str(), "wb");
-  if (!fp)
-    return;
-
-  bool ok = fwrite(&hdr, 1, sizeof(hdr), fp) == sizeof(hdr);
-  if (ok)
-    ok = page_cache_utils::WriteRawString(fp, title);
-
-  if (ok)
-    ok = page_cache_utils::WritePages(fp, pages, kPageCachePageMaxBytes);
-
-  if (ok)
-    ok = page_cache_utils::WriteChapters(fp, cached_chapters,
-                                         kPageCacheChapterTitleMaxBytes);
-
-  if (ok) {
-    for (auto &kv : doc_starts) {
-      u16 doc_page = kv.second;
-      if (fwrite(&doc_page, 1, sizeof(doc_page), fp) != sizeof(doc_page)) {
-        ok = false;
-        break;
-      }
-      if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp, kv.first, kPageCachePathMaxBytes, true)) {
-        ok = false;
-        break;
-      }
-    }
-  }
-
-  if (ok) {
-    u32 img_count = book->GetInlineImageCount();
-    for (u32 i = 0; i < img_count; i++) {
-      const std::string *imgpath = book->GetInlineImagePath((u16)i);
-      if (!imgpath || imgpath->empty()) {
-        ok = false;
-        break;
-      }
-      if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp, *imgpath, kPageCachePathMaxBytes, false)) {
-        ok = false;
-        break;
-      }
-    }
-  }
-
-  fclose(fp);
-  if (!ok)
-    remove(cache_path.c_str());
-}
-
-void SavePendingEpubPageCache(Book *book) {
-  if (!book || !book->HasPendingEpubPageCacheSave())
-    return;
-
-  const char *folder = book->GetFolderName();
-  const char *file = book->GetFileName();
-  if (!folder || !*folder || !file || !*file) {
-    book->SetPendingEpubPageCacheSave(false);
-    return;
-  }
-
-  std::string path(folder);
-  path.push_back('/');
-  path += file;
-  SaveEpubPageCache(book, path.c_str(), BuildEpubDeps(book));
-  book->SetPendingEpubPageCacheSave(false);
 }
 
 static std::string BuildChapterLabel(const std::string &path, int chapter_num) {
@@ -3160,7 +2837,16 @@ static int FinalizeEpubParse(unzFile uf, epub_data_t *parsedata, Book *book,
             true, book && book->IsAsyncReflowOpenPending())) {
       book->SetPendingEpubPageCacheSave(true);
     } else {
-      SaveEpubPageCache(book, name.c_str(), deps);
+      epub_page_cache::Save(book, name.c_str(),
+                            deps.ts ? (int)deps.ts->GetPixelSize() : 0,
+                            deps.ts ? (int)deps.ts->linespacing : 0,
+                            deps.paragraph_spacing, deps.paragraph_indent,
+                            deps.orientation,
+                            deps.ts ? (int)deps.ts->margin.left : 0,
+                            deps.ts ? (int)deps.ts->margin.right : 0,
+                            deps.ts ? (int)deps.ts->margin.top : 0,
+                            deps.ts ? (int)deps.ts->margin.bottom : 0,
+                            deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL);
       if (book)
         book->SetPendingEpubPageCacheSave(false);
     }
@@ -3221,7 +2907,16 @@ int epub(Book *book, std::string name, bool metadataonly) {
     return rc;
   }
 
-  if (TryLoadEpubPageCache(book, name.c_str(), deps)) {
+  if (epub_page_cache::TryLoad(book, name.c_str(),
+                                deps.ts ? (int)deps.ts->GetPixelSize() : 0,
+                                deps.ts ? (int)deps.ts->linespacing : 0,
+                                deps.paragraph_spacing, deps.paragraph_indent,
+                                deps.orientation,
+                                deps.ts ? (int)deps.ts->margin.left : 0,
+                                deps.ts ? (int)deps.ts->margin.right : 0,
+                                deps.ts ? (int)deps.ts->margin.top : 0,
+                                deps.ts ? (int)deps.ts->margin.bottom : 0,
+                                deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL)) {
     if (app) {
       DBG_LOGF(app, "EPUB: page cache hit pages=%u chapters=%u",
                (unsigned)book->GetPageCount(),

@@ -200,3 +200,89 @@ All extracted modules have corresponding test suites using the project's `test_b
 ## Path constants
 
 All SD card paths are centralized in `include/path_utils.h` under the `paths::` namespace. If the directory layout changes, update constants there only.
+
+## Architectural review (v2.0.3)
+
+Critical design issues identified during architectural audit, ordered by severity.
+
+### Critical: App ↔ Book circular dependency
+
+`Book` holds an `App*` pointer and includes `app/app.h`. `App` holds `std::vector<Book*>` and includes `book/book.h`. A global `App *app` variable in `main.cpp` is accessed directly from 23+ files.
+
+**Impact:** Book cannot be tested or reused outside this project. Any refactor of one requires modifying the other. Format parsers reach into App state through Book.
+
+**Evidence:** `include/book/book.h:122` (`App *app`), `source/main.cpp:32` (`App *app` global), 23 files include `app/app.h`, 21 files include `book/book.h`.
+
+**Future direction:** Remove `App*` from Book. Pass required state (`Text*`, `Prefs*`, margins, orientation) as explicit parameters via a `RenderParams` or `BookContext` struct. Eliminate the global `app` variable.
+
+### Critical: Format layer coupled to App/UI
+
+Format parsers (`book_io.cpp`, `epub.cpp`, `mobi.cpp`) include `app/app.h` and call `app->PrintStatus()`, `app->ts`, `app->prefs` directly.
+
+**Impact:** Parsers depend on the UI layer. Changing UI can break parsing. Cannot test parsers without App stubs.
+
+**Evidence:** `source/formats/common/book_io.cpp:13`, `source/formats/mobi/mobi.cpp:12`, `source/formats/epub/epub.cpp:33` all include `app/app.h`.
+
+**Future direction:** Define pure interfaces (`IStatusLogger`, `ParseContext`) that parsers receive instead of `App*`. App implements these interfaces.
+
+### Critical: book_io.cpp remains a monolith (4844 lines)
+
+Despite recent extractions (txt_loader, rtf_loader, text_helpers, mobi_page_cache), the file still contains MOBI parsing (~3000 lines), ODT parsing, plain text streaming, and TOC heuristics across 90+ functions.
+
+**Impact:** High risk of accidental breakage. Difficult to navigate. Every format change touches the same massive file.
+
+**Future direction:** Extract `mobi_parser.cpp`, `mobi_toc_resolver.cpp`, `plain_text_stream.cpp`, `odt_parser.cpp`. Leave book_io.cpp as a thin dispatcher (~200 lines).
+
+### Critical: epub.cpp is a second monolith (3921 lines)
+
+Second-largest file in the project. Contains EPUB parsing, page cache management, inline image handling, TOC extraction, and fallback logic across 97+ static functions.
+
+**Impact:** Almost as large as book_io.cpp was before extractions. No tests. Any change risks the most-used format.
+
+**Future direction:** Extract `epub_cache.cpp`, `epub_toc.cpp`, `epub_manifest.cpp`.
+
+### High: Zero tests on critical components
+
+App (1164 lines), Book (1640 lines), app_book.cpp (874 lines), epub.cpp (3921 lines), book_io.cpp (4844 lines) have no test coverage. Existing tests only cover pure utilities.
+
+**Impact:** Every refactor is a leap of faith. No safety net for the most complex code.
+
+**Future direction:** Adopt a header-only test framework (Catch2/doctest). Add integration tests that load minimal books. Centralize test macros.
+
+### High: UI and business logic mixed across layers
+
+`Text` (1349 lines) mixes FreeType rendering, gradient generation, font path resolution, and UI label rendering. `App` (1164 lines) mixes state machine, job queue, cover warmup, screen drawing, and menu management.
+
+**Impact:** Changing the renderer requires recompiling App. Changing UI requires understanding business logic.
+
+**Future direction:** Separate `TextRenderer` (FreeType pure) from `FontManager` (config, paths, metrics). Extract `UIManager` from App.
+
+### Medium: Inconsistent third-party dependency management
+
+Some deps are vendored as source (expat, utf8proc, libunibreak), some as precompiled binaries (libbz2.a, libexpat.a in lib/), MuPDF has a custom build script. No unified version tracking.
+
+**Future direction:** Unify strategy — all as source compiled by Makefile, or all as git submodules. Document versions in `DEPENDENCIES.md`.
+
+### Medium: Global `App *app` variable
+
+`source/main.cpp:32` exposes `App *app` globally. Any file including `main.h` can access full application state.
+
+**Impact:** Implicit dependencies the compiler cannot verify. Impossible to reason about data flow. Blocks parallel testing.
+
+**Future direction:** Eliminate global. Pass App as explicit parameter. Use context structs for frequently-needed data.
+
+### Medium: No clear extension points for new formats
+
+Adding a format requires modifying `parse.cpp`, `book_io.cpp`, `app_flow_utils.cpp`, `format_t` enum in `book.h`, and `Makefile`. No `FormatParser` interface.
+
+**Future direction:** Define abstract `FormatParser` interface. Register parsers by extension in a map. `parse.cpp` becomes a generic dispatcher.
+
+### Fragile zones
+
+| Zone | Why fragile |
+|------|-------------|
+| `book_io.cpp:1028-1434` | PlainTextStreamState — complex streaming logic coupled to parsedata_t, BookIoDeps, Book internals |
+| `book.h:237-291` | Public API mixes metadata, rendering, parsing, fixed-layout, async reflow, MOBI deferred |
+| `app.h:120-150` | Public fields (ts, prefs, buttons, books) allow any file to mutate App state directly |
+| `epub.cpp` | 3921 lines, zero tests, most-used format |
+| `main.cpp` global `app` | Undefined behavior if accessed before init or after destruction |
