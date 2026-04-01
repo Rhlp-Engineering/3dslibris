@@ -20,12 +20,12 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `2.0.2`
-- Focus: stable daily reading on 3DS hardware and Citra/Azahar
+- Current app version: `2.0.3`
+- Focus: stable daily reading on 3DS hardware and Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
-- Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` plus `3dslibris-sdmc.zip`.
+- Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` with books stored on SD.
 
 ## Install
 
@@ -36,23 +36,24 @@ Recommended install:
 4. Launch `sdmc:/3ds/3dslibris/3dslibris.3dsx` from Homebrew Launcher.
 
 Alternative install:
-1. Download `3dslibris-sdmc.zip` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
-2. Install `3dslibris.cia`.
+1. Install `3dslibris.cia`.
+2. Launch the installed title once so it creates `sdmc:/3ds/3dslibris/` if needed.
 3. Put your books in `sdmc:/3ds/3dslibris/book/`.
 4. Launch the installed title.
 
 Important:
-- The `.cia` now bundles the default `font/` and `resources/` runtime assets inside the application, so a plain CIA install can boot without manually extracting `3dslibris-sdmc.zip`. Anyway it's recommended to install it.
+- The `.cia` bundles the default `font/` and `resources/` runtime assets inside `RomFS`, so it can boot without manually extracting `3dslibris-sdmc.zip`.
+- Books are still read from `sdmc:/3ds/3dslibris/book/`.
 - `3dslibris-sdmc.zip` is still the recommended install for `.3dsx`, and it remains useful if you want the same runtime files laid out explicitly on SD.
 - `3dslibris-debug.3dsx` uses the same SD layout and writes verbose diagnostics to `sdmc:/3ds/3dslibris/3dslibris.log`.
-- The `.cia` build uses the Universal-Updater-style packaging flow and now also bundles the default runtime assets through `romfs`.
+- The `.cia` build uses the Universal-Updater-style packaging flow and now also validates the bundled `RomFS` path in GitHub Actions.
 
 Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
 - `make source-release` creates `dist/3dslibris-source.tar.gz`
-- GitHub Releases: pushing a tag like `v2.0.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
+- GitHub Releases: pushing a tag like `v2.0.3` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Supported formats
 
@@ -136,7 +137,7 @@ Bundled runtime files:
 Notes:
 - Homebrew Launcher path: keep the app at `sdmc:/3ds/3dslibris/3dslibris.3dsx`
 - Debug build path: keep `3dslibris-debug.3dsx` in the same `sdmc:/3ds/3dslibris/` folder if you want verbose logs
-- Default Liberation fonts are bundled in `sdmc:/3ds/3dslibris/font/`
+- Default Liberation fonts are bundled in the SD package for `.3dsx`, and inside `RomFS` for `.cia`
 - You can replace them with other `.ttf`, `.otf`, or `.ttc` fonts if you want to customize the reading/UI typefaces
 - Runtime files such as `3dslibris.xml`, `3dslibris.log`, and `cache/*` are created by the app on first run
 
