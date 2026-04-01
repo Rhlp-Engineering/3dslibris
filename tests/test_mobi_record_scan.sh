@@ -1,6 +1,5 @@
-#!/bin/sh
 set -eu
-cd "$(dirname "$0")/.."
-clang++ -std=c++17 -Iinclude tests/test_mobi_record_scan.cpp \
-  source/formats/mobi/mobi_record_scan.cpp -o /tmp/test_mobi_record_scan
-/tmp/test_mobi_record_scan
+source "$(dirname "$0")/test_build.sh"
+build_test test_mobi_record_scan \
+  "$TEST_ROOT/tests/test_mobi_record_scan.cpp" \
+  "$TEST_ROOT/source/formats/mobi/mobi_record_scan.cpp"

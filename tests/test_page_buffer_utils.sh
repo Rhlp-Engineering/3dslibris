@@ -1,12 +1,4 @@
 set -eu
-
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
-mkdir -p "$OUTDIR"
-
-c++ -std=c++11 \
-  "$ROOT/tests/test_page_buffer_utils.cpp" \
-  -I"$ROOT/include" \
-  -o "$OUTDIR/test_page_buffer_utils"
-
-"$OUTDIR/test_page_buffer_utils"
+source "$(dirname "$0")/test_build.sh"
+build_test test_page_buffer_utils \
+  "$TEST_ROOT/tests/test_page_buffer_utils.cpp"

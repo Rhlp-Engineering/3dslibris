@@ -40,6 +40,7 @@ SOURCES		:=	source source/core source/app source/shared source/ui source/menus \
 			source/library source/reader source/settings source/book \
 			source/formats/common source/formats/epub source/formats/fb2 \
 			source/formats/mobi source/formats/pdf source/formats/cbz \
+			source/formats/txt source/formats/rtf \
 			source/formats/mupdf third_party/expat third_party/utf8proc \
 			third_party/libunibreak/src
 DATA		:=	data

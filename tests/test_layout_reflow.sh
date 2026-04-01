@@ -1,15 +1,6 @@
-#!/bin/sh
 set -eu
-
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
-mkdir -p "$OUTDIR"
-
-c++ -std=c++11 \
-  "$ROOT/tests/test_layout_reflow.cpp" \
-  "$ROOT/source/book/layout_reflow.cpp" \
-  -I"$ROOT/include" \
-  -I"$ROOT/source/book" \
-  -o "$OUTDIR/test_layout_reflow"
-
-"$OUTDIR/test_layout_reflow"
+source "$(dirname "$0")/test_build.sh"
+build_test test_layout_reflow \
+  "$TEST_ROOT/tests/test_layout_reflow.cpp" \
+  "$TEST_ROOT/source/book/layout_reflow.cpp" \
+  -I"$TEST_ROOT/source/book"

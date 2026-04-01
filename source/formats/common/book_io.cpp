@@ -39,6 +39,8 @@
 #include "formats/mobi/mobi_deferred_finalize_utils.h"
 #include "formats/common/rtf_control_word_utils.h"
 #include "formats/common/text_helpers.h"
+#include "formats/rtf/rtf_loader.h"
+#include "formats/txt/txt_loader.h"
 #include "shared/text_layout_utils.h"
 #include "string_utils.h"
 #include "minizip/unzip.h"
@@ -1476,26 +1478,16 @@ static void BuildFb2FallbackChapters(Book *book) {
 }
 
 static u8 ParseTxtFile(Book *book, const char *path) {
-  std::string raw;
-  if (!file_read_utils::ReadPathToStringLimited(path, &raw, kPlainTextMaxBytes))
-    return 252;
-  if (raw.empty())
+  std::string text;
+  if (!txt_loader::ReadAndNormalize(path, &text))
     return BOOK_ERR_CORRUPT;
-  NormalizeNewlines(&raw);
-  std::string text = NormalizeTextUtf8(std::move(raw));
   return ParsePlainTextBuffer(book, text);
 }
 
 static u8 ParseRtfFile(Book *book, const char *path) {
-  std::string raw;
-  if (!file_read_utils::ReadPathToStringLimited(path, &raw, kPlainTextMaxBytes))
-    return 252;
-  if (raw.empty())
+  std::string text;
+  if (!rtf_loader::ReadAndDecode(path, &text))
     return BOOK_ERR_CORRUPT;
-  std::string text = DecodeRtfToUtf8(raw);
-  NormalizeNewlines(&text);
-  if (!LooksLikeValidUtf8Bytes(text))
-    text = NormalizeTextUtf8(std::move(text));
   return ParsePlainTextBuffer(book, text);
 }
 

@@ -1,7 +1,4 @@
-#!/bin/sh
 set -eu
-
-cd "$(dirname "$0")/.."
-
-g++ -std=c++17 -Iinclude tests/test_status_layout_utils.cpp -o /tmp/test_status_layout_utils
-/tmp/test_status_layout_utils
+source "$(dirname "$0")/test_build.sh"
+build_test test_status_layout_utils \
+  "$TEST_ROOT/tests/test_status_layout_utils.cpp"

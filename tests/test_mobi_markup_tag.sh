@@ -1,6 +1,5 @@
-#!/bin/sh
 set -eu
-cd "$(dirname "$0")/.."
-clang++ -std=c++11 -Iinclude tests/test_mobi_markup_tag.cpp \
-  source/formats/mobi/mobi_markup_tag.cpp -o /tmp/test_mobi_markup_tag
-/tmp/test_mobi_markup_tag
+source "$(dirname "$0")/test_build.sh"
+build_test test_mobi_markup_tag \
+  "$TEST_ROOT/tests/test_mobi_markup_tag.cpp" \
+  "$TEST_ROOT/source/formats/mobi/mobi_markup_tag.cpp"

@@ -1,6 +1,5 @@
-#!/bin/sh
 set -eu
-cd "$(dirname "$0")/.."
-clang++ -std=c++17 -Iinclude tests/test_heading_layout.cpp \
-  source/book/heading_layout.cpp -o /tmp/test_heading_layout
-/tmp/test_heading_layout
+source "$(dirname "$0")/test_build.sh"
+build_test test_heading_layout \
+  "$TEST_ROOT/tests/test_heading_layout.cpp" \
+  "$TEST_ROOT/source/book/heading_layout.cpp"

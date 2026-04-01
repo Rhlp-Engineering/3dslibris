@@ -1,14 +1,5 @@
-#!/bin/sh
 set -eu
-
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
-mkdir -p "$OUTDIR"
-
-c++ -std=c++11 \
-  "$ROOT/tests/test_browser_nav.cpp" \
-  "$ROOT/source/ui/browser_nav.cpp" \
-  -I"$ROOT/include" \
-  -o "$OUTDIR/test_browser_nav"
-
-"$OUTDIR/test_browser_nav"
+source "$(dirname "$0")/test_build.sh"
+build_test test_browser_nav \
+  "$TEST_ROOT/tests/test_browser_nav.cpp" \
+  "$TEST_ROOT/source/ui/browser_nav.cpp"

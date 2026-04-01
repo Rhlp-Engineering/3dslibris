@@ -1,13 +1,5 @@
-#!/bin/sh
 set -eu
-
-cd "$(dirname "$0")/.."
-
-mkdir -p build/tests
-
-c++ -std=c++17 -Wall -Wextra -Iinclude \
-  source/book/inline_image_layout.cpp \
-  tests/test_inline_image_layout.cpp \
-  -o build/tests/test_inline_image_layout
-
-build/tests/test_inline_image_layout
+source "$(dirname "$0")/test_build.sh"
+build_test test_inline_image_layout \
+  "$TEST_ROOT/tests/test_inline_image_layout.cpp" \
+  "$TEST_ROOT/source/book/inline_image_layout.cpp"

@@ -1,15 +1,6 @@
-#!/bin/sh
 set -eu
-
-ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
-OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
-mkdir -p "$OUTDIR"
-
-c++ -std=c++11 \
-  "$ROOT/tests/test_mobi_text_cleanup.cpp" \
-  "$ROOT/source/formats/mobi/mobi_text_cleanup.cpp" \
-  -I"$ROOT/include" \
-  -I"$ROOT/source/formats/mobi" \
-  -o "$OUTDIR/test_mobi_text_cleanup"
-
-"$OUTDIR/test_mobi_text_cleanup"
+source "$(dirname "$0")/test_build.sh"
+build_test test_mobi_text_cleanup \
+  "$TEST_ROOT/tests/test_mobi_text_cleanup.cpp" \
+  "$TEST_ROOT/source/formats/mobi/mobi_text_cleanup.cpp" \
+  "-I$TEST_ROOT/source/formats/mobi"
