@@ -20,50 +20,39 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `2.0.1`
+- Current app version: `2.0.2`
 - Focus: stable daily reading on 3DS hardware and Citra/Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
-- Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia`
+- Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` plus `3dslibris-sdmc.zip`.
 
-## v2.0.1 release notes
-- Publishes the full post-`v2.0.0` branch state as the actual public release, so the GitHub tag now matches the code that was already finished locally.
-- Keeps the complete fixed-layout and reflow stack from `v2.0.0`, including MuPDF-backed `PDF` / `CBZ` / `XPS`, deferred MOBI open, library cover generation, and the CIA runtime bundle.
-- Reorganizes shared code and path handling so SD/cache/runtime paths live in a central place and common utilities are easier to maintain.
-- Moves bundled `expat` sources under `third_party/` and documents the current 3DS/NDS hardware and architecture references in the repo.
-- Extracts MOBI page-cache serialization into its own module and adds a shared native test-build helper for the text-layout/unit scripts.
-- Full release notes: [.github/release-notes/v2.0.1.md](.github/release-notes/v2.0.1.md)
+## Install
 
-Commits already included in the `v2.0.1` line:
-- `3fde057` `build: serialize MuPDF minimal generation`
-- `322dc39` `docs: simplify release notes highlights for end users`
-- `c4ab9fe` `docs: add NDS and 3DS hardware reference from GBATek`
-- `89e27b6` `refactor: reorganize shared/ utilities and move expat to third_party/`
-- `0e4f1a1` `refactor: centralize SD paths and add architecture documentation`
-- `db6e400` `refactor: remove original files after reorganization`
-- `4cb884b` `refactor: extract mobi page cache helpers`
+Recommended install:
+1. Download `3dslibris-sdmc.zip` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
+2. Extract that zip into the root of your SD card, so it expands into `sdmc:/`.
+3. Put your books in `sdmc:/3ds/3dslibris/book/`.
+4. Launch `sdmc:/3ds/3dslibris/3dslibris.3dsx` from Homebrew Launcher.
 
-## v2.0.0 release notes
-- Adds MuPDF-backed fixed-layout reading for `PDF`, `CBZ`, and `XPS`.
-- Ships a progressive fixed-layout pipeline with preview-first rendering, strip refinement, worker-thread acceleration on New 3DS, and stronger cache reuse.
-- Expands the reflow stack with asynchronous MOBI open/reflow on New 3DS, better persistent caches, and a much faster deferred TOC path for large books.
-- Improves the real-hardware open path by deferring expensive cache writes out of the critical path, buffering debug logging, and keeping deferred MOBI pagination responsive while you start reading.
-- Adds a more aggressive library-cover pipeline with visible-page cache reuse, selected-book warmup, and generated thumbs for `EPUB`, `FB2`, `MOBI`, `PDF`, and `CBZ` on actual 3DS hardware.
-- Tightens fixed-layout and browser rendering by tracking dirty rectangles precisely, reusing physical framebuffer caches, and avoiding redraw stalls that previously hid freshly generated cover thumbs.
-- Improves EPUB and FB2 layout instrumentation and shared text-layout performance while keeping existing reader behavior stable.
-- Keeps the CIA packaging flow self-contained by bundling default runtime assets through `romfs`.
-- Full release notes: [.github/release-notes/v2.0.0.md](.github/release-notes/v2.0.0.md)
+Alternative install:
+1. Download `3dslibris-sdmc.zip` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
+2. Install `3dslibris.cia`.
+3. Put your books in `sdmc:/3ds/3dslibris/book/`.
+4. Launch the installed title.
 
-Commits already included in the `v2.0.0` line:
-- `2e9b5d6` `fix: bundle CIA runtime assets via romfs`
-- `983be1f` `feat: integrate MuPDF-backed PDF reader`
-- `7b1e91f` `feat: finalize v1.2.0 PDF progressive rendering`
-- `3ad063d` `feat: add native cbz reader`
-- `b3d2f2c` `feat: add xps support via mupdf`
-- `8be3c1f` `Optimize async MOBI parsing and deferred reflow`
-- `cc5ffb6` `Optimize shared EPUB/FB2 layout instrumentation`
-- `5dab1de` `feat: optimize deferred rendering and library covers`
+Important:
+- The `.cia` now bundles the default `font/` and `resources/` runtime assets inside the application, so a plain CIA install can boot without manually extracting `3dslibris-sdmc.zip`. Anyway it's recommended to install it.
+- `3dslibris-sdmc.zip` is still the recommended install for `.3dsx`, and it remains useful if you want the same runtime files laid out explicitly on SD.
+- `3dslibris-debug.3dsx` uses the same SD layout and writes verbose diagnostics to `sdmc:/3ds/3dslibris/3dslibris.log`.
+- The `.cia` build uses the Universal-Updater-style packaging flow and now also bundles the default runtime assets through `romfs`.
+
+Generated install package targets:
+- `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
+- `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
+- `make cia` creates `3dslibris.cia`
+- `make source-release` creates `dist/3dslibris-source.tar.gz`
+- GitHub Releases: pushing a tag like `v2.0.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Supported formats
 
@@ -128,32 +117,6 @@ Expected outputs:
 - `3dslibris.smdh`
 - `3dslibris.elf`
 - `dist/3dslibris-source.tar.gz`
-
-## Install
-
-Recommended install:
-1. Download `3dslibris-sdmc.zip` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
-2. Extract that zip into the root of your SD card, so it expands into `sdmc:/`.
-3. Put your books in `sdmc:/3ds/3dslibris/book/`.
-4. Launch `sdmc:/3ds/3dslibris/3dslibris.3dsx` from Homebrew Launcher.
-
-Alternative install:
-1. Install `3dslibris.cia`.
-2. Put your books in `sdmc:/3ds/3dslibris/book/`.
-3. Launch the installed title.
-
-Important:
-- The `.cia` now bundles the default `font/` and `resources/` runtime assets inside the application, so a plain CIA install can boot without manually extracting `3dslibris-sdmc.zip`.
-- `3dslibris-sdmc.zip` is still the recommended install for `.3dsx`, and it remains useful if you want the same runtime files laid out explicitly on SD.
-- `3dslibris-debug.3dsx` uses the same SD layout and writes verbose diagnostics to `sdmc:/3ds/3dslibris/3dslibris.log`.
-- The `.cia` build uses the Universal-Updater-style packaging flow and now also bundles the default runtime assets through `romfs`.
-
-Generated install package targets:
-- `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
-- `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
-- `make cia` creates `3dslibris.cia`
-- `make source-release` creates `dist/3dslibris-source.tar.gz`
-- GitHub Releases: pushing a tag like `v2.0.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Library controls
 - `D-Pad`: move the current selection around the library grid
