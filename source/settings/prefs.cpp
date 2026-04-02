@@ -34,7 +34,9 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
   // Central XML dispatcher for preference tags.
   // Each branch maps one persisted element into runtime App/Text state.
   parsedata_t *p = (parsedata_t *)data;
-  App *app = p->app;
+  App *app = p->reporter ? static_cast<App *>(p->reporter) : NULL;
+  if (!app || !p->prefs || !p->ts)
+    return;
   int position = 0; //! Page position in book.
   char filename[MAXPATHLEN];
   bool current = false;
@@ -198,7 +200,7 @@ int Prefs::Read() {
   parsedata_t pdata;
   parse_init(&pdata);
   pdata.prefs = this;
-  pdata.app = app;
+  pdata.reporter = app;
   pdata.ts = app->ts;
 
   xml_parse_utils::XmlParserOptions options;

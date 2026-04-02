@@ -51,7 +51,6 @@ typedef bool (*parse_page_flush_fn)(parsedata_t *data, void *ctx);
 struct parsedata_t {
 	context_t stack[32];
 	u8 stacksize;
-	class App *app;
 	class IStatusReporter *reporter;
 	class Text *ts;  //! Text renderer.
 	class Book *book;
