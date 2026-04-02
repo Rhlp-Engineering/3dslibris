@@ -128,6 +128,9 @@ bool parse_page_buffer_overflowed(const parsedata_t *data) {
 void parse_init(parsedata_t *data) {
   data->stacksize = 0;
   data->pos = 0;
+  data->app = NULL;
+  data->reporter = NULL;
+  data->ts = NULL;
   data->book = NULL;
   data->prefs = NULL;
   data->screen = 0;

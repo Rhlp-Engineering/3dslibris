@@ -6,11 +6,11 @@
  * When disabled, DBG_LOG calls compile to nothing with zero runtime cost.
  *
  * Usage:
- *   DBG_LOG(app, "EPUB: parse begin");
- *   DBG_LOGF(app, "TIMING: scan=%llums count=%u", ms, n);
+ *   DBG_LOG(reporter, "EPUB: parse begin");
+ *   DBG_LOGF(reporter, "TIMING: scan=%llums count=%u", ms, n);
  *
- * The `app` argument must be a pointer (or reference) to App that has
- * a PrintStatus(const char*) method.
+ * The first argument must be a pointer to any object that has
+ * a PrintStatus(const char*) method (e.g. IStatusReporter*, App*).
  */
 
 #pragma once

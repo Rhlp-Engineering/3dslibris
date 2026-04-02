@@ -33,8 +33,10 @@ typedef enum {
 } format_t;
 
 class App;
+class IStatusReporter;
 class Page;
 class Text;
+class Prefs;
 struct CbzPageEntry;
 struct fz_context;
 struct fz_document;
@@ -150,7 +152,13 @@ public:
   Book(App *app);
   ~Book();
   format_t format;
-  inline App *GetApp() { return app; }
+  App *GetApp() { return app; }
+  IStatusReporter *GetStatusReporter();
+  Text *GetText();
+  Prefs *GetPrefs();
+  int GetParagraphSpacing();
+  int GetParagraphIndent();
+  int GetOrientation();
   inline std::string GetAuthor() { return author; }
   inline bool HasBrowserDisplayNameCache() const {
     return browser_display_name_cached;

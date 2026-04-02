@@ -15,6 +15,7 @@
 #include <expat.h>
 #include <3ds.h>
 #include <string>
+#include "shared/status_reporter.h"
 
 #define PAGEBUFSIZE 4096
 
@@ -51,6 +52,7 @@ struct parsedata_t {
 	context_t stack[32];
 	u8 stacksize;
 	class App *app;
+	class IStatusReporter *reporter;
 	class Text *ts;  //! Text renderer.
 	class Book *book;
 	class Prefs *prefs;

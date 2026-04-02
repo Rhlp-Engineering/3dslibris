@@ -62,6 +62,7 @@ https://github.com/rhaleblian/dslibris
 #include "main.h"
 #include "parse.h"
 #include "ui/text.h"
+#include "shared/status_reporter.h"
 
 class Book;
 class Prefs;
@@ -112,7 +113,7 @@ struct app_job_t {
 //! initialization,
 //! interaction loop, drawing everything but text, and logging.
 
-class App {
+class App : public IStatusReporter {
 public:
   App();
   ~App();
@@ -149,8 +150,8 @@ public:
   class ChapterMenu *chaptermenu;
 
   // app.cpp
-  void PrintStatus(const char *msg);
-  void PrintStatus(std::string msg);
+  void PrintStatus(const char *msg) override;
+  void PrintStatus(std::string msg) override;
   int Run(void);
   touchPosition TouchRead();
   void UpdateStatus();

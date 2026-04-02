@@ -437,7 +437,7 @@ static std::string NormalizeFb2ChapterTitle(const std::string &in) {
 void linefeed(parsedata_t *p) {
   AppendParsedByte(p, '\n');
   p->pen.x = MARGINLEFT;
-  p->pen.y += p->app->ts->GetHeight() + p->app->ts->linespacing;
+  p->pen.y += p->ts->GetHeight() + p->ts->linespacing;
   p->linebegan = false;
 }
 
@@ -449,10 +449,10 @@ bool blankline(parsedata_t *p) {
 }
 
 static void AdvanceParsedScreen(parsedata_t *p) {
-  if (!p || !p->app || !p->app->ts || !p->book)
+  if (!p || !p->ts || !p->book)
     return;
 
-  Text *ts = p->app->ts;
+  Text *ts = p->ts;
   if (p->screen == 1) {
     Page *page = p->book->AppendPage();
     page->SetBuffer(p->buf, p->buflen);
@@ -474,7 +474,7 @@ void start(void *data, const char *el, const char **attr) {
   //! Expat callback, when starting an element.
 
   parsedata_t *p = (parsedata_t *)data;
-  auto app = p->app;
+  Text *ts = p->ts;
 
   if (p->fb2_mode && parse_in(p, TAG_BODY)) {
     if (XmlNameEquals(el, "section")) {
@@ -518,9 +518,9 @@ void start(void *data, const char *el, const char **attr) {
     req.pen_y = p->pen.y;
     req.screen_height = (p->screen == 1) ? 320 : 400;
     req.bottom_margin =
-        (p->screen == 1) ? MIN(app->ts->margin.bottom, 16) : app->ts->margin.bottom;
-    req.line_height = app->ts->GetHeight();
-    req.linespacing = app->ts->linespacing;
+        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    req.line_height = ts->GetHeight();
+    req.linespacing = ts->linespacing;
     req.heading_level = 1;
     if (heading_layout::ShouldAdvanceHeadingForKeepWithNext(req))
       AdvanceParsedScreen(p);
@@ -536,9 +536,9 @@ void start(void *data, const char *el, const char **attr) {
     req.pen_y = p->pen.y;
     req.screen_height = (p->screen == 1) ? 320 : 400;
     req.bottom_margin =
-        (p->screen == 1) ? MIN(app->ts->margin.bottom, 16) : app->ts->margin.bottom;
-    req.line_height = app->ts->GetHeight();
-    req.linespacing = app->ts->linespacing;
+        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    req.line_height = ts->GetHeight();
+    req.linespacing = ts->linespacing;
     req.heading_level = 2;
     if (heading_layout::ShouldAdvanceHeadingForKeepWithNext(req))
       AdvanceParsedScreen(p);
@@ -554,9 +554,9 @@ void start(void *data, const char *el, const char **attr) {
     req.pen_y = p->pen.y;
     req.screen_height = (p->screen == 1) ? 320 : 400;
     req.bottom_margin =
-        (p->screen == 1) ? MIN(app->ts->margin.bottom, 16) : app->ts->margin.bottom;
-    req.line_height = app->ts->GetHeight();
-    req.linespacing = app->ts->linespacing;
+        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    req.line_height = ts->GetHeight();
+    req.linespacing = ts->linespacing;
     req.heading_level = 3;
     if (heading_layout::ShouldAdvanceHeadingForKeepWithNext(req))
       AdvanceParsedScreen(p);
@@ -583,12 +583,12 @@ void start(void *data, const char *el, const char **attr) {
     p->in_paragraph = true;
     p->paragraph_has_content = false;
     if (!blankline(p)) {
-      for (int i = 0; i < p->app->paraspacing; i++) {
+      for (int i = 0; i < p->book->GetParagraphSpacing(); i++) {
         linefeed(p);
       }
-      for (int i = 0; i < p->app->paraindent; i++) {
+      for (int i = 0; i < p->book->GetParagraphIndent(); i++) {
         AppendParsedByte(p, ' ');
-        p->pen.x += p->app->ts->GetAdvance(' ');
+        p->pen.x += ts->GetAdvance(' ');
       }
     }
   } else if (!strcmp(el, "pre")) {
@@ -602,7 +602,7 @@ void start(void *data, const char *el, const char **attr) {
         linefeed(p);
       static const char kBulletUtf8[] = "\xE2\x80\xA2 ";
       AppendParsedBytes(p, kBulletUtf8, sizeof(kBulletUtf8) - 1);
-      p->pen.x += app->ts->GetAdvance(0x2022) + app->ts->GetAdvance(' ');
+      p->pen.x += ts->GetAdvance(0x2022) + ts->GetAdvance(' ');
       p->linebegan = true;
       p->strip_leading_list_marker = true;
     }
@@ -623,18 +623,18 @@ void start(void *data, const char *el, const char **attr) {
     p->pos++;
     p->bold = true;
     if (p->italic) {
-      app->ts->SetStyle(TEXT_STYLE_BOLDITALIC);
+      ts->SetStyle(TEXT_STYLE_BOLDITALIC);
     } else {
-      app->ts->SetStyle(TEXT_STYLE_BOLD);
+      ts->SetStyle(TEXT_STYLE_BOLD);
     }
   } else if (!strcmp(el, "em") || !strcmp(el, "i")) {
     parse_push(p, TAG_EM);
     AppendParsedByte(p, TEXT_ITALIC_ON);
     p->italic = true;
     if (p->bold) {
-      app->ts->SetStyle(TEXT_STYLE_BOLDITALIC);
+      ts->SetStyle(TEXT_STYLE_BOLDITALIC);
     } else {
-      app->ts->SetStyle(TEXT_STYLE_ITALIC);
+      ts->SetStyle(TEXT_STYLE_ITALIC);
     }
   } else if (XmlNameEquals(el, "img") || XmlNameEquals(el, "image")) {
     parse_push(p, TAG_UNKNOWN);
@@ -665,7 +665,7 @@ void start(void *data, const char *el, const char **attr) {
       const InlineImageContext image_context =
           leading_paragraph_image ? INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH
                                   : INLINE_IMAGE_CONTEXT_DEFAULT;
-      p->book->PlanInlineImageLayout(app->ts, image_id, p->screen, p->pen.x,
+      p->book->PlanInlineImageLayout(ts, image_id, p->screen, p->pen.x,
                                      p->pen.y, p->linebegan,
                                      image_context, &image_plan);
 
@@ -688,7 +688,7 @@ void start(void *data, const char *el, const char **attr) {
       case INLINE_IMAGE_LAYOUT_INLINE:
         if (p->in_paragraph)
           p->paragraph_has_content = true;
-        p->pen.x += image_plan.draw_width + app->ts->GetAdvance(' ');
+        p->pen.x += image_plan.draw_width + ts->GetAdvance(' ');
         p->linebegan = true;
         break;
 
@@ -697,7 +697,7 @@ void start(void *data, const char *el, const char **attr) {
           p->paragraph_has_content = true;
         // Band images are block-level: following text resumes below, while
         // consecutive images may stack only if there is no text between them.
-        p->pen.x = app->ts->margin.left;
+        p->pen.x = ts->margin.left;
         p->pen.y += image_plan.vertical_space_after_draw;
         p->linebegan = false;
         break;
@@ -710,8 +710,8 @@ void start(void *data, const char *el, const char **attr) {
           AdvanceParsedScreen(p);
         } else {
           p->screen = 1;
-          p->pen.x = app->ts->margin.left;
-          p->pen.y = app->ts->margin.top + app->ts->GetHeight();
+          p->pen.x = ts->margin.left;
+          p->pen.y = ts->margin.top + ts->GetHeight();
           p->linebegan = false;
         }
         break;
@@ -1140,7 +1140,7 @@ void end(void *data, const char *el) {
   int maxHeight = (p->screen == 1) ? 320 : 400;
   int bottomMargin =
       (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
-  int lineheight = p->app->ts->GetHeight();
+  int lineheight = ts->GetHeight();
   if ((p->pen.y + lineheight) > (maxHeight - bottomMargin)) {
     if (p->screen == 1) {
       // End of right screen; end of page.
@@ -1168,7 +1168,7 @@ void fallback(void *data, const XML_Char *s, int len) {
   // Handles HTML entities in body text.
 
   parsedata_t *p = (parsedata_t *)data;
-  int advancespace = p->app->ts->GetAdvance(' ');
+  int advancespace = p->ts->GetAdvance(' ');
   if (s[0] == '&') {
     /** if it's decimal, convert the UTF-16 to UTF-8. */
     int code = 0;
@@ -1184,7 +1184,7 @@ void fallback(void *data, const XML_Char *s, int len) {
       }
       // TODO - support 4-byte codes
 
-      p->pen.x += p->app->ts->GetAdvance(code);
+      p->pen.x += p->ts->GetAdvance(code);
       return;
     }
 
@@ -1262,6 +1262,18 @@ Book::~Book() {
     coverPixels = nullptr;
   }
 }
+
+IStatusReporter *Book::GetStatusReporter() { return app; }
+
+Text *Book::GetText() { return app ? app->ts : NULL; }
+
+Prefs *Book::GetPrefs() { return app ? app->prefs : NULL; }
+
+int Book::GetParagraphSpacing() { return app ? app->paraspacing : 0; }
+
+int Book::GetParagraphIndent() { return app ? app->paraindent : 0; }
+
+int Book::GetOrientation() { return app ? app->orientation : 0; }
 
 void Book::SetFolderName(const char *name) {
   foldername.clear();
