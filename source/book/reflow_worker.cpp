@@ -67,22 +67,23 @@ void ReflowWorkerThreadFunc(void *arg) {
       continue;
 
     w->started_at_ms = osGetTime();
-    if (book->GetApp()) {
+    if (book->GetStatusReporter()) {
       const u64 queue_ms = (w->submitted_at_ms && w->started_at_ms >= w->submitted_at_ms)
                                ? (w->started_at_ms - w->submitted_at_ms)
                                : 0;
-      DBG_LOGF(book->GetApp(), "REFLOW[w]: open begin queue_ms=%llu book=%s",
+      DBG_LOGF(book->GetStatusReporter(),
+               "REFLOW[w]: open begin queue_ms=%llu book=%s",
                (unsigned long long)queue_ms,
                book->GetFileName() ? book->GetFileName() : "");
     }
     w->job_result = book->OpenPrepared();
     w->finished_at_ms = osGetTime();
-    if (book->GetApp()) {
+    if (book->GetStatusReporter()) {
       const u64 worker_ms =
           (w->finished_at_ms >= w->started_at_ms)
               ? (w->finished_at_ms - w->started_at_ms)
               : 0;
-      DBG_LOGF(book->GetApp(),
+      DBG_LOGF(book->GetStatusReporter(),
                "REFLOW[w]: open finish rc=%u worker_ms=%llu book=%s",
                (unsigned)w->job_result, (unsigned long long)worker_ms,
                book->GetFileName() ? book->GetFileName() : "");
@@ -157,8 +158,8 @@ bool Book::StartAsyncReflowOpen() {
       reflow_worker_state->worker = NULL;
       return false;
     }
-    if (GetApp())
-      DBG_LOG(GetApp(), "REFLOW[w]: worker thread started on core 1");
+    if (GetStatusReporter())
+      DBG_LOG(GetStatusReporter(), "REFLOW[w]: worker thread started on core 1");
   }
   if (!reflow_worker_state->worker)
     return false;

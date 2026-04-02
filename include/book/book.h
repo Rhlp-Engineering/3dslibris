@@ -152,7 +152,6 @@ public:
   Book(App *app);
   ~Book();
   format_t format;
-  App *GetApp() { return app; }
   IStatusReporter *GetStatusReporter();
   Text *GetText();
   Prefs *GetPrefs();

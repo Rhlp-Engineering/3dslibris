@@ -214,8 +214,8 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
   FILE *fp = fopen(cache_path.c_str(), "rb");
   if (!fp) {
 #ifdef DSLIBRIS_DEBUG
-    if (book->GetApp()) {
-      DBG_LOGF(book->GetApp(), "COVER: cache miss book=%s path=%s",
+    if (book->GetStatusReporter()) {
+      DBG_LOGF(book->GetStatusReporter(), "COVER: cache miss book=%s path=%s",
                book->GetFileName() ? book->GetFileName() : "(null)",
                cache_path.c_str());
     }
@@ -258,8 +258,9 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
   book->coverWidth = w;
   book->coverHeight = h;
 #ifdef DSLIBRIS_DEBUG
-  if (book->GetApp()) {
-    DBG_LOGF(book->GetApp(), "COVER: cache hit book=%s path=%s size=%ux%u",
+  if (book->GetStatusReporter()) {
+    DBG_LOGF(book->GetStatusReporter(),
+             "COVER: cache hit book=%s path=%s size=%ux%u",
              book->GetFileName() ? book->GetFileName() : "(null)",
              cache_path.c_str(), (unsigned)w, (unsigned)h);
   }
@@ -298,8 +299,9 @@ static bool SaveCoverCache(Book *book, const std::string &book_path) {
   if (ok)
     PruneCoverCache(false);
 #ifdef DSLIBRIS_DEBUG
-  if (book->GetApp()) {
-    DBG_LOGF(book->GetApp(), "COVER: cache save %s book=%s path=%s size=%dx%d",
+  if (book->GetStatusReporter()) {
+    DBG_LOGF(book->GetStatusReporter(),
+             "COVER: cache save %s book=%s path=%s size=%dx%d",
              ok ? "ok" : "fail",
              book->GetFileName() ? book->GetFileName() : "(null)",
              cache_path.c_str(), book->coverWidth, book->coverHeight);
@@ -413,7 +415,7 @@ static void LogUtf8StageOnce(Book *book, const char *stage,
   (void)value;
   return;
 #else
-  if (!book || !book->GetApp() || !stage)
+  if (!book || !book->GetStatusReporter() || !stage)
     return;
 
   static std::set<std::string> logged;
@@ -429,7 +431,7 @@ static void LogUtf8StageOnce(Book *book, const char *stage,
            "UTF8 flow %-18s len=%u valid=%d bytes=[%s] text=\"%s\"", stage,
            (unsigned)value.size(), LooksLikeValidUtf8(value) ? 1 : 0,
            bytes.c_str(), clipped.c_str());
-  DBG_LOG(book->GetApp(), msg);
+  DBG_LOG(book->GetStatusReporter(), msg);
 #endif
 }
 

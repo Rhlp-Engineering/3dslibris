@@ -10,8 +10,6 @@
 
 #include "book/book.h"
 
-#include "app/app.h"
-
 #include "base64_utils.h"
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
@@ -19,6 +17,7 @@
 #include "formats/mobi/mobi.h"
 #include "formats/mobi/mobi_record_scan.h"
 #include "path_utils.h"
+#include "shared/status_reporter.h"
 #include "stb_image.h"
 #include "string_utils.h"
 #include "ui/text.h"
@@ -141,19 +140,20 @@ static bool LooksLikeSvgWrapper(const std::string &path_hint,
 static bool
 ResolveSvgWrapperImage(unzFile uf, const std::string &svg_path,
                        const std::vector<u8> &svg_buf, std::vector<u8> *out,
-                       std::string *resolved_path = NULL, App *app = NULL) {
+                       std::string *resolved_path = NULL,
+                       IStatusReporter *reporter = NULL) {
   if (!out || !uf || svg_buf.empty() || svg_buf.size() > kSvgWrapperMaxBytes) {
-    if (app)
-      DBG_LOG(app, "EPUB: inline SVG wrapper skip (size/empty)");
+    if (reporter)
+      DBG_LOG(reporter, "EPUB: inline SVG wrapper skip (size/empty)");
     return false;
   }
   bool ok = epub_image_utils::ResolveSvgWrapperImage(
       uf, svg_path, svg_buf, out, kEpubInlineImageMaxBytes, resolved_path);
-  if (!ok && app) {
+  if (!ok && reporter) {
     char msg[192];
     snprintf(msg, sizeof(msg), "EPUB: inline SVG wrapper unresolved path=%s",
              svg_path.c_str());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
   return ok;
 }
@@ -283,7 +283,7 @@ bool Book::LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
   if (image_id >= inline_images.size())
     return false;
 
-  App *app = GetApp();
+  IStatusReporter *reporter = GetStatusReporter();
   const std::string &image_path = inline_images[image_id].path;
   if (image_path.empty())
     return false;
@@ -464,19 +464,19 @@ bool Book::LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
   bool is_svg_wrapper = LooksLikeSvgWrapper(image_path, *out);
   std::vector<u8> resolved_svg_image;
   std::string resolved_svg_path;
-  if (is_svg_wrapper && app) {
+  if (is_svg_wrapper && reporter) {
     char msg[192];
     snprintf(msg, sizeof(msg), "EPUB: inline SVG wrapper detected id=%u %s",
              (unsigned)image_id, image_path.c_str());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
   if (is_svg_wrapper &&
       ResolveSvgWrapperImage(uf, image_path, *out, &resolved_svg_image,
-                             &resolved_svg_path, app)) {
+                             &resolved_svg_path, reporter)) {
     out->swap(resolved_svg_image);
     if (resolved_path && !resolved_svg_path.empty())
       *resolved_path = resolved_svg_path;
-    if (app) {
+    if (reporter) {
       char msg[192];
       snprintf(msg, sizeof(msg),
                "EPUB: inline SVG wrapper resolved id=%u src=%s bytes=%u",
@@ -484,7 +484,7 @@ bool Book::LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
                resolved_svg_path.empty() ? "(unknown)"
                                          : resolved_svg_path.c_str(),
                (unsigned)out->size());
-      DBG_LOG(app, msg);
+      DBG_LOG(reporter, msg);
     }
     if (close_uf)
       unzClose(uf);
@@ -493,11 +493,11 @@ bool Book::LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
   if (close_uf)
     unzClose(uf);
   if (is_svg_wrapper) {
-    if (app) {
+    if (reporter) {
       char msg[192];
       snprintf(msg, sizeof(msg), "EPUB: inline SVG wrapper unresolved id=%u %s",
                (unsigned)image_id, image_path.c_str());
-      DBG_LOG(app, msg);
+      DBG_LOG(reporter, msg);
     }
     out->clear();
     return false;
