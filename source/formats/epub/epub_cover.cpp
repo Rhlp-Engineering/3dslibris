@@ -6,7 +6,6 @@
 
 #include "formats/epub/epub_cover.h"
 
-#include "app/app.h"
 #include "book/book.h"
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
@@ -88,7 +87,6 @@ static bool ResolveSvgCoverPayload(unzFile uf, const std::string &svg_path,
 namespace epub_cover {
 
 int Extract(Book *book, const std::string &epubpath) {
-  App *app = book ? book->GetApp() : NULL;
   if (!book || book->coverImagePath.empty())
     return 1;
 

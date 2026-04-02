@@ -3,11 +3,11 @@
 #include "formats/mupdf/mupdf_document.h"
 
 #include "book/book.h"
-#include "app/app.h"
 #include "formats/common/book_error.h"
 #include "formats/mupdf/mupdf_render.h"
 #include "formats/mupdf/mupdf_worker.h"
 #include "formats/common/pdf_view_utils.h"
+#include "shared/status_reporter.h"
 
 #include "debug_log.h"
 
@@ -95,8 +95,9 @@ uint8_t ParseMuPdfFile(Book *book, const char *path) {
     }
   }
   fz_catch(ctx) {
-    if (book->GetApp())
-      book->GetApp()->PrintStatus(fz_caught_message(ctx));
+    IStatusReporter *reporter = book->GetStatusReporter();
+    if (reporter)
+      reporter->PrintStatus(fz_caught_message(ctx));
     if (rc == 0)
       rc = BOOK_ERR_CORRUPT;
   }
