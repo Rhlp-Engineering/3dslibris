@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/common/epub_image_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_page_cache.h"
+#include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_ncx_parser.h"
 #include "main.h"
 #include "path_utils.h"
@@ -73,19 +74,6 @@ struct EpubDeps {
       : app(NULL), ts(NULL), prefs(NULL), paragraph_spacing(0),
         paragraph_indent(0), orientation(0) {}
 };
-
-static const size_t EPUB_TOC_MAX_BYTES = 192 * 1024;
-static const size_t EPUB_TOC_MAX_ENTRIES = 2048;
-static const size_t EPUB_COVER_MAX_ENTRY_BYTES = 8 * 1024 * 1024;
-static const size_t EPUB_COVER_MAX_NONJPEG_BYTES = 2 * 1024 * 1024;
-static const size_t EPUB_COVER_MAX_DECODED_RGB_BYTES = 16 * 1024 * 1024;
-static const size_t EPUB_SVG_WRAPPER_MAX_BYTES = 512 * 1024;
-static const int EPUB_COVER_MAX_DIMENSION = 4096;
-// Safety switch for 3DS stability: TOC/NAV title resolution can be re-enabled
-// once NCX/NAV parsing is fully hardened on real hardware/emulators.
-static const bool kEpubEnableRealTocResolve = false;
-static std::string NormalizeAsciiSearchText(const std::string &raw,
-                                            size_t max_out);
 
 struct ZipEntryIndex {
   bool built = false;
@@ -227,22 +215,6 @@ typedef struct {
 } nav_parse_data_t;
 
 typedef struct {
-  int depth;
-  std::string src;
-  std::string title;
-  int level;
-  bool in_text;
-  int text_depth;
-} ncx_navpoint_state_t;
-
-typedef struct {
-  std::vector<toc_entry_t> *entries;
-  std::string base_path;
-  int depth;
-  std::vector<ncx_navpoint_state_t> stack;
-} ncx_parse_data_t;
-
-typedef struct {
   std::map<std::string, std::string> *fragment_to_href;
   std::string base_path;
   std::vector<std::string> id_stack;
@@ -252,6 +224,8 @@ typedef struct {
 
 static void EpubDiag(App *app, const char *fmt, const char *arg = NULL);
 static std::string NormalizeTocTitle(const std::string &raw);
+static std::string NormalizeAsciiSearchText(const std::string &raw,
+                                            size_t max_out = 0);
 static std::string ClipForDiag(const std::string &s, size_t max_bytes = 120);
 static void LogTocEntrySamples(App *app, const char *stage,
                                const std::vector<toc_entry_t> &entries,
@@ -496,7 +470,7 @@ static void nav_end(void *userdata, const char *el) {
   if (d->anchor_depth == d->depth && !strcmp(lname, "a")) {
     std::string title = Trim(d->current_title);
     if (!d->current_href.empty() && !title.empty()) {
-      if (d->entries->size() < EPUB_TOC_MAX_ENTRIES) {
+      if (d->entries->size() < epub_limits::kTocMaxEntries) {
         toc_entry_t entry;
         entry.href = d->current_href;
         entry.title = title;
@@ -519,208 +493,6 @@ static void nav_end(void *userdata, const char *el) {
   }
 
   d->depth--;
-}
-
-static void ncx_start(void *userdata, const char *el, const char **attr) {
-  ncx_parse_data_t *d = (ncx_parse_data_t *)userdata;
-  d->depth++;
-  const char *lname = LocalName(el);
-
-  if (!strcmp(lname, "navPoint")) {
-    ncx_navpoint_state_t node;
-    node.depth = d->depth;
-    node.src.clear();
-    node.title.clear();
-    node.level = (int)d->stack.size();
-    node.in_text = false;
-    node.text_depth = 0;
-    d->stack.push_back(node);
-    return;
-  }
-
-  if (d->stack.empty())
-    return;
-
-  ncx_navpoint_state_t &node = d->stack.back();
-  if (!strcmp(lname, "content")) {
-    const char *src = AttrValue(attr, "src");
-    if (src && *src && node.src.empty())
-      node.src = src;
-  } else if (!strcmp(lname, "text")) {
-    node.in_text = true;
-    node.text_depth = d->depth;
-  }
-}
-
-static void ncx_char(void *userdata, const XML_Char *txt, int len) {
-  ncx_parse_data_t *d = (ncx_parse_data_t *)userdata;
-  if (d->stack.empty())
-    return;
-  ncx_navpoint_state_t &node = d->stack.back();
-  if (node.in_text)
-    node.title.append((const char *)txt, len);
-}
-
-static void ncx_end(void *userdata, const char *el) {
-  ncx_parse_data_t *d = (ncx_parse_data_t *)userdata;
-  const char *lname = LocalName(el);
-
-  if (!d->stack.empty()) {
-    ncx_navpoint_state_t &node = d->stack.back();
-    if (!strcmp(lname, "text") && node.in_text && node.text_depth == d->depth) {
-      node.in_text = false;
-      node.text_depth = 0;
-    }
-  }
-
-  if (!d->stack.empty() && !strcmp(lname, "navPoint") &&
-      d->stack.back().depth == d->depth) {
-    ncx_navpoint_state_t node = d->stack.back();
-    d->stack.pop_back();
-
-    std::string title = Trim(node.title);
-    if (!node.src.empty() && !title.empty() &&
-        d->entries->size() < EPUB_TOC_MAX_ENTRIES) {
-      toc_entry_t entry;
-      entry.href = ResolveRelativePath(d->base_path, node.src);
-      entry.title = title;
-      entry.level = (u8)std::min(15, std::max(0, node.level));
-      if (!entry.href.empty() && !entry.title.empty())
-        d->entries->push_back(entry);
-    }
-  }
-
-  d->depth--;
-}
-
-static bool ParseNcxWithExpat(const std::string &xml,
-                              const std::string &base_path,
-                              std::vector<toc_entry_t> *entries, App *app) {
-  if (xml.empty() || !entries)
-    return false;
-  if (xml.size() > EPUB_TOC_MAX_BYTES)
-    return false;
-
-  if (app)
-    DBG_LOG(app, "EPUB: NCX expat parse begin");
-
-  ncx_parse_data_t d;
-  d.entries = entries;
-  d.base_path = base_path;
-  d.depth = 0;
-  d.stack.clear();
-  xml_parse_utils::XmlParserOptions options;
-  options.start_element = ncx_start;
-  options.end_element = ncx_end;
-  options.character_data = ncx_char;
-  options.user_data = &d;
-  bool ok = xml_parse_utils::ParseXmlString(xml, options).ok;
-
-  if (app) {
-    char msg[96];
-    snprintf(msg, sizeof(msg), "EPUB: NCX expat parse end ok=%u entries=%u",
-             ok ? 1u : 0u, (unsigned)entries->size());
-    DBG_LOG(app, msg);
-  }
-
-  return ok && !entries->empty();
-}
-
-static bool ParseNcxLightweight(const std::string &xml,
-                                const std::string &base_path,
-                                std::vector<toc_entry_t> *entries,
-                                App *app = NULL) {
-  EpubDiag(app, "EPUB: NCX parse begin");
-  if (xml.empty() || !entries)
-    return false;
-  if (xml.size() > EPUB_TOC_MAX_BYTES)
-    return false;
-
-  std::string lower = xml;
-  for (size_t i = 0; i < lower.size(); i++) {
-    lower[i] = (char)tolower((unsigned char)lower[i]);
-  }
-
-  std::string pending_src;
-  std::string pending_title;
-  bool any = false;
-  size_t pos = 0;
-
-  auto try_flush = [&]() {
-    if (pending_src.empty() || pending_title.empty())
-      return;
-    if (entries->size() >= EPUB_TOC_MAX_ENTRIES)
-      return;
-    toc_entry_t entry;
-    entry.href = ResolveRelativePath(base_path, pending_src);
-    entry.title = Trim(pending_title);
-    entry.level = 0;
-    if (!entry.href.empty() && !entry.title.empty()) {
-      entries->push_back(entry);
-      any = true;
-    }
-    pending_src.clear();
-    pending_title.clear();
-  };
-
-  while (pos < lower.size() && entries->size() < EPUB_TOC_MAX_ENTRIES) {
-    size_t content_pos = lower.find("<content", pos);
-    size_t text_pos = lower.find("<text", pos);
-    if (content_pos == std::string::npos && text_pos == std::string::npos)
-      break;
-
-    if (content_pos != std::string::npos &&
-        (text_pos == std::string::npos || content_pos < text_pos)) {
-      size_t tag_end = lower.find('>', content_pos);
-      if (tag_end == std::string::npos)
-        break;
-      size_t src_pos = lower.find("src", content_pos);
-      if (src_pos != std::string::npos && src_pos < tag_end) {
-        size_t eq = lower.find('=', src_pos);
-        if (eq != std::string::npos && eq < tag_end) {
-          size_t v = eq + 1;
-          while (v < tag_end && isspace((unsigned char)lower[v]))
-            v++;
-          if (v < tag_end) {
-            char quote = xml[v];
-            if (quote == '"' || quote == '\'') {
-              size_t v_end = xml.find(quote, v + 1);
-              if (v_end != std::string::npos && v_end < tag_end) {
-                pending_src = xml.substr(v + 1, v_end - (v + 1));
-              }
-            } else {
-              size_t v_end = v;
-              while (v_end < tag_end && !isspace((unsigned char)lower[v_end]) &&
-                     lower[v_end] != '>')
-                v_end++;
-              pending_src = xml.substr(v, v_end - v);
-            }
-          }
-        }
-      }
-      pos = tag_end + 1;
-      try_flush();
-      continue;
-    }
-
-    size_t tag_end = lower.find('>', text_pos);
-    if (tag_end == std::string::npos)
-      break;
-    size_t close_pos = lower.find("</text>", tag_end + 1);
-    if (close_pos == std::string::npos)
-      break;
-    pending_title = xml.substr(tag_end + 1, close_pos - (tag_end + 1));
-    pos = close_pos + 7;
-    try_flush();
-  }
-
-  {
-    char msg[128];
-    snprintf(msg, sizeof(msg), "EPUB: NCX parse end entries=%u any=%u",
-             (unsigned)entries->size(), any ? 1u : 0u);
-    EpubDiag(app, msg);
-  }
-  return any;
 }
 
 static void EpubDiag(App *app, const char *fmt, const char *arg) {
@@ -853,7 +625,7 @@ static bool ReadZipEntryText(unzFile uf, const std::string &path,
   EpubDiag(app, "EPUB: %s locate ok", t);
   unz_file_info fi;
   if (unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0) == UNZ_OK) {
-    if (fi.uncompressed_size > EPUB_TOC_MAX_BYTES) {
+    if (fi.uncompressed_size > epub_limits::kTocMaxBytes) {
       EpubDiag(app, "EPUB: %s too big", t);
       return false;
     }
@@ -870,7 +642,7 @@ static bool ReadZipEntryText(unzFile uf, const std::string &path,
   int n = 0;
   EpubDiag(app, "EPUB: %s read loop", t);
   while ((n = unzReadCurrentFile(uf, buf, sizeof(buf))) > 0) {
-    if (out.size() + (size_t)n > EPUB_TOC_MAX_BYTES) {
+    if (out.size() + (size_t)n > epub_limits::kTocMaxBytes) {
       unzCloseCurrentFile(uf);
       out.clear();
       EpubDiag(app, "EPUB: %s read overflow", t);
@@ -898,13 +670,13 @@ static bool LooksLikeSvgWrapper(const std::string &path_hint,
 static bool ResolveSvgImageWrapperPayload(
     unzFile uf, const std::string &svg_path, const std::vector<u8> &svg_buf,
     std::vector<u8> *out, std::string *resolved_path, App *app = NULL) {
-  if (!out || svg_buf.empty() || svg_buf.size() > EPUB_SVG_WRAPPER_MAX_BYTES) {
+  if (!out || svg_buf.empty() || svg_buf.size() > epub_limits::kSvgWrapperMaxBytes) {
     if (app)
       DBG_LOG(app, "EPUB: SVG wrapper skip (size/empty)");
     return false;
   }
   bool ok = epub_image_utils::ResolveSvgWrapperImage(
-      uf, svg_path, svg_buf, out, EPUB_COVER_MAX_ENTRY_BYTES, resolved_path);
+      uf, svg_path, svg_buf, out, epub_limits::kCoverMaxEntryBytes, resolved_path);
   if (!ok && app) {
     char msg[192];
     snprintf(msg, sizeof(msg), "EPUB: SVG wrapper unresolved path=%s",
@@ -1835,7 +1607,7 @@ static void LogTocResolveDecision(App *app, size_t index, const toc_entry_t &src
 }
 
 static std::string NormalizeAsciiSearchText(const std::string &raw,
-                                            size_t max_out = 0) {
+                                            size_t max_out) {
   if (raw.empty())
     return "";
   std::string out;
@@ -2710,7 +2482,7 @@ static int ParseEpubSpineDocuments(
 static void ResolveEpubTocFromPackageData(
     unzFile uf, Book *book, epub_data_t &parsedata, const std::string &folder,
     const std::map<std::string, u16> &page_start_by_href, App *app) {
-  if (!kEpubEnableRealTocResolve) {
+  if (!epub_limits::kEnableRealTocResolve) {
     if (app)
       DBG_LOG(app, "EPUB: TOC resolve skipped (safe mode)");
     return;
@@ -2920,7 +2692,7 @@ int epub_extract_cover(Book *book, const std::string &epubpath) {
   unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0);
 
   if (fi.uncompressed_size == 0 ||
-      fi.uncompressed_size > EPUB_COVER_MAX_ENTRY_BYTES ||
+      fi.uncompressed_size > epub_limits::kCoverMaxEntryBytes ||
       fi.uncompressed_size > (uLong)INT_MAX) {
     unzClose(uf);
     return 8;
@@ -2995,21 +2767,21 @@ int epub_extract_cover(Book *book, const std::string &epubpath) {
            decodebuf[1] == 0xD8 && decodebuf[2] == 0xFF;
   };
 
-  if (decodebuf.size() > EPUB_COVER_MAX_NONJPEG_BYTES && !IsJpegCover())
+  if (decodebuf.size() > epub_limits::kCoverMaxNonJpegBytes && !IsJpegCover())
     return 8;
 
   int infoW = 0, infoH = 0, infoChannels = 0;
   bool hasInfo = stbi_info_from_memory(decodebuf.data(), (int)decodebuf.size(),
                                        &infoW, &infoH, &infoChannels) != 0;
-  if (!hasInfo && decodebuf.size() > EPUB_COVER_MAX_NONJPEG_BYTES)
+  if (!hasInfo && decodebuf.size() > epub_limits::kCoverMaxNonJpegBytes)
     return 9;
 
   if (hasInfo) {
-    if (infoW <= 0 || infoH <= 0 || infoW > EPUB_COVER_MAX_DIMENSION ||
-        infoH > EPUB_COVER_MAX_DIMENSION)
+    if (infoW <= 0 || infoH <= 0 || infoW > epub_limits::kCoverMaxDimension ||
+        infoH > epub_limits::kCoverMaxDimension)
       return 7;
     size_t decoded_bytes = (size_t)infoW * (size_t)infoH * 3;
-    if (decoded_bytes > EPUB_COVER_MAX_DECODED_RGB_BYTES)
+    if (decoded_bytes > epub_limits::kCoverMaxDecodedRgbBytes)
       return 9;
   }
 
@@ -3023,8 +2795,8 @@ int epub_extract_cover(Book *book, const std::string &epubpath) {
     return 4; // Failed to decode image
 
   // Safety: skip images that are too large for 3DS RAM
-  if (imgW <= 0 || imgH <= 0 || imgW > EPUB_COVER_MAX_DIMENSION ||
-      imgH > EPUB_COVER_MAX_DIMENSION) {
+  if (imgW <= 0 || imgH <= 0 || imgW > epub_limits::kCoverMaxDimension ||
+      imgH > epub_limits::kCoverMaxDimension) {
     stbi_image_free(pixels);
     return 7;
   }
