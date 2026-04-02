@@ -30,7 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub.h"
 
 #include "base64_utils.h"
-#include "app/app.h"
 #include "book/book.h"
 #include "book/book_xml.h"
 #include "debug_log.h"
@@ -44,6 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "main.h"
 #include "path_utils.h"
 #include "book/page.h"
+#include "shared/status_reporter.h"
 #include "shared/text_layout_utils.h"
 #include "parse.h"
 #include "book/reflow_cache_save_utils.h"
@@ -65,7 +65,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <vector>
 
 struct EpubDeps {
-  App *app;
+  IStatusReporter *reporter;
   Text *ts;
   Prefs *prefs;
   int paragraph_spacing;
@@ -73,23 +73,19 @@ struct EpubDeps {
   int orientation;
 
   EpubDeps()
-      : app(NULL), ts(NULL), prefs(NULL), paragraph_spacing(0),
+      : reporter(NULL), ts(NULL), prefs(NULL), paragraph_spacing(0),
         paragraph_indent(0), orientation(0) {}
 };
 
-static EpubDeps BuildEpubDeps(App *app) {
-  EpubDeps deps;
-  deps.app = app;
-  deps.ts = app ? app->ts : NULL;
-  deps.prefs = app ? app->prefs : NULL;
-  deps.paragraph_spacing = app ? (int)app->paraspacing : 0;
-  deps.paragraph_indent = app ? (int)app->paraindent : 0;
-  deps.orientation = app ? (int)app->orientation : 0;
-  return deps;
-}
-
 static EpubDeps BuildEpubDeps(Book *book) {
-  return BuildEpubDeps(book ? book->GetApp() : NULL);
+  EpubDeps deps;
+  deps.reporter = book ? book->GetStatusReporter() : NULL;
+  deps.ts = book ? book->GetText() : NULL;
+  deps.prefs = book ? book->GetPrefs() : NULL;
+  deps.paragraph_spacing = book ? book->GetParagraphSpacing() : 0;
+  deps.paragraph_indent = book ? book->GetParagraphIndent() : 0;
+  deps.orientation = book ? book->GetOrientation() : 0;
+  return deps;
 }
 
 static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
@@ -98,7 +94,7 @@ static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
     return;
   parse_init(parsedata);
   parsedata->book = book;
-  parsedata->app = deps.app;
+  parsedata->reporter = deps.reporter;
   parsedata->ts = deps.ts;
   parsedata->prefs = deps.prefs;
 }
@@ -202,18 +198,20 @@ typedef struct {
   std::vector<std::string> pending_ids;
 } toc_proxy_parse_data_t;
 
-static void EpubDiag(App *app, const char *fmt, const char *arg = NULL);
+static void EpubDiag(IStatusReporter *reporter, const char *fmt,
+                     const char *arg = NULL);
 static std::string NormalizeTocTitle(const std::string &raw);
 static std::string NormalizeAsciiSearchText(const std::string &raw,
                                             size_t max_out = 0);
 static std::string ClipForDiag(const std::string &s, size_t max_bytes = 120);
-static void LogTocEntrySamples(App *app, const char *stage,
+static void LogTocEntrySamples(IStatusReporter *reporter, const char *stage,
                                const std::vector<toc_entry_t> &entries,
                                size_t max_entries = 5);
-static void LogResolvedChapterSamples(App *app, const char *stage,
+static void LogResolvedChapterSamples(IStatusReporter *reporter,
+                                      const char *stage,
                                       const std::vector<ChapterEntry> &entries,
                                       size_t max_entries = 5);
-static void LogTocResolveDecision(App *app, size_t index,
+static void LogTocResolveDecision(IStatusReporter *reporter, size_t index,
                                   const toc_entry_t &src,
                                   const std::string &normalized_title,
                                   const char *method, bool have_page, u16 page,
@@ -410,35 +408,36 @@ BuildTocProxyMapFromHtmlScan(const std::string &xml,
   }
 }
 
-static void EpubDiag(App *app, const char *fmt, const char *arg) {
-  if (!app || !fmt)
+static void EpubDiag(IStatusReporter *reporter, const char *fmt,
+                     const char *arg) {
+  if (!reporter || !fmt)
     return;
   char msg[192];
   if (arg)
     snprintf(msg, sizeof(msg), fmt, arg);
   else
     snprintf(msg, sizeof(msg), "%s", fmt);
-  DBG_LOG(app, msg);
+  DBG_LOG(reporter, msg);
 }
 
 static bool LocateZipEntrySafe(unzFile uf, const std::string &entry_path,
-                               App *app, const char *tag,
-epub_zip_utils::ZipEntryIndex *index = NULL) {
+                               IStatusReporter *reporter, const char *tag,
+                               epub_zip_utils::ZipEntryIndex *index = NULL) {
   if (!uf || entry_path.empty())
     return false;
   const char *t = (tag && *tag) ? tag : "ZIP";
   bool ok = epub_zip_utils::LocateSafe(uf, entry_path, index);
-  if (!ok && app) {
+  if (!ok && reporter) {
     char msg[128];
     snprintf(msg, sizeof(msg), "EPUB: %s locate miss path=%s", t,
              entry_path.c_str());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
   return ok;
 }
 
 static bool ReadZipEntryText(unzFile uf, const std::string &path,
-                             std::string &out, App *app = NULL,
+                             std::string &out, IStatusReporter *reporter = NULL,
                              const char *tag = NULL,
                              epub_zip_utils::ZipEntryIndex *index = NULL) {
   out.clear();
@@ -446,27 +445,27 @@ static bool ReadZipEntryText(unzFile uf, const std::string &path,
   {
     char msg[192];
     snprintf(msg, sizeof(msg), "EPUB: %s read begin %s", t, path.c_str());
-    EpubDiag(app, msg);
+    EpubDiag(reporter, msg);
   }
   if (path.empty())
     return false;
-  EpubDiag(app, "EPUB: %s locate begin", t);
+  EpubDiag(reporter, "EPUB: %s locate begin", t);
   if (!epub_zip_utils::LocateSafe(uf, path, index)) {
-    EpubDiag(app, "EPUB: %s locate fail", t);
+    EpubDiag(reporter, "EPUB: %s locate fail", t);
     return false;
   }
-  EpubDiag(app, "EPUB: %s locate ok", t);
+  EpubDiag(reporter, "EPUB: %s locate ok", t);
   bool ok = epub_zip_utils::ReadText(uf, path, out, epub_limits::kTocMaxBytes,
                                      index);
   if (!ok) {
-    EpubDiag(app, "EPUB: %s read fail", t);
+    EpubDiag(reporter, "EPUB: %s read fail", t);
     return false;
   }
   {
     char msg[128];
     snprintf(msg, sizeof(msg), "EPUB: %s read ok bytes=%u", t,
              (unsigned)out.size());
-    EpubDiag(app, msg);
+    EpubDiag(reporter, msg);
   }
   return true;
 }
@@ -474,13 +473,13 @@ static bool ReadZipEntryText(unzFile uf, const std::string &path,
 static bool
 BuildTocFragmentProxyMap(unzFile uf, const std::string &doc_path,
                          std::map<std::string, std::string> *proxy_map,
-                         App *app) {
+                         IStatusReporter *reporter) {
   if (!proxy_map || doc_path.empty())
     return false;
   proxy_map->clear();
 
   std::string xml;
-  if (!ReadZipEntryText(uf, doc_path, xml, app, "TOC-PROXY"))
+  if (!ReadZipEntryText(uf, doc_path, xml, reporter, "TOC-PROXY"))
     return false;
 
   toc_proxy_parse_data_t data;
@@ -502,11 +501,11 @@ BuildTocFragmentProxyMap(unzFile uf, const std::string &doc_path,
     BuildTocProxyMapFromHtmlScan(xml, doc_path, proxy_map);
   }
 
-  if (app) {
+  if (reporter) {
     char msg[128];
     snprintf(msg, sizeof(msg), "EPUB: TOC-PROXY map size=%u",
              (unsigned)proxy_map->size());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
 
   return !proxy_map->empty();
@@ -515,7 +514,8 @@ BuildTocFragmentProxyMap(unzFile uf, const std::string &doc_path,
 static bool LookupTocProxyHref(
     unzFile uf, const std::string &doc_path, const std::string &fragment_raw,
     std::map<std::string, std::map<std::string, std::string>> *cache,
-    std::set<std::string> *attempted, std::string *href_out, App *app) {
+    std::set<std::string> *attempted, std::string *href_out,
+    IStatusReporter *reporter) {
   if (!cache || !attempted || !href_out || doc_path.empty())
     return false;
   href_out->clear();
@@ -526,7 +526,7 @@ static bool LookupTocProxyHref(
 
   if (attempted->find(doc_path) == attempted->end()) {
     std::map<std::string, std::string> local_map;
-    BuildTocFragmentProxyMap(uf, doc_path, &local_map, app);
+    BuildTocFragmentProxyMap(uf, doc_path, &local_map, reporter);
     (*cache)[doc_path] = local_map;
     attempted->insert(doc_path);
   }
@@ -749,7 +749,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     epd->parsed_doc_title.clear();
     InitParsedataWithEpubDeps(&pd, epd->book, deps);
     pd.docpath = epd->docpath;
-    log_content_layout = deps.app && epd->book;
+    log_content_layout = deps.reporter && epd->book;
     if (log_content_layout) {
       t_content_begin = osGetTime();
       pages_before = epd->book->GetPageCount();
@@ -773,7 +773,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
   if (log_content_layout) {
     const text_layout_utils::PerfStats layout_after =
         text_layout_utils::GetPerfStats();
-    DBG_LOGF(deps.app,
+    DBG_LOGF(deps.reporter,
              "EPUB layout: stream=%llums chardata=%llums/%u "
              "shape=%llums/%u break=%llums/%u pre=%llums/%u "
              "measure=%llums/%u glyphs=%u pages=%u overflow_pages=%u path=%s",
@@ -951,9 +951,10 @@ static void BuildPageStartMapFromPackage(const epub_data_t &parsedata,
 static bool LoadTocEntriesFromPackage(unzFile uf, epub_data_t &parsedata,
                                       const std::string &opf_folder,
                                       std::vector<toc_entry_t> *toc_entries,
-                                      App *app) {
+                                      IStatusReporter *reporter) {
   if (!uf || !toc_entries)
     return false;
+  IStatusReporter *app = reporter;
 
   toc_entries->clear();
   std::string toc_xml;
@@ -1255,17 +1256,17 @@ static std::string ClipForDiag(const std::string &s, size_t max_bytes) {
   return s.substr(0, max_bytes) + "...";
 }
 
-static void LogTocEntrySamples(App *app, const char *stage,
+static void LogTocEntrySamples(IStatusReporter *reporter, const char *stage,
                                const std::vector<toc_entry_t> &entries,
                                size_t max_entries) {
-  if (!app || !stage)
+  if (!reporter || !stage)
     return;
 
   char summary[128];
   snprintf(summary, sizeof(summary), "EPUB: %s samples=%u/%u", stage,
            (unsigned)std::min(entries.size(), max_entries),
            (unsigned)entries.size());
-  DBG_LOG(app, summary);
+  DBG_LOG(reporter, summary);
 
   const size_t sample_count = std::min(entries.size(), max_entries);
   for (size_t i = 0; i < sample_count; i++) {
@@ -1280,21 +1281,22 @@ static void LogTocEntrySamples(App *app, const char *stage,
              (unsigned)i, entries[i].level, href_clip.c_str(), raw_clip.c_str(),
              norm_clip.c_str(), raw.empty() ? " raw-empty" : "",
              normalized.empty() ? " norm-empty" : "");
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
 }
 
-static void LogResolvedChapterSamples(App *app, const char *stage,
+static void LogResolvedChapterSamples(IStatusReporter *reporter,
+                                      const char *stage,
                                       const std::vector<ChapterEntry> &entries,
                                       size_t max_entries) {
-  if (!app || !stage)
+  if (!reporter || !stage)
     return;
 
   char summary[128];
   snprintf(summary, sizeof(summary), "EPUB: %s samples=%u/%u", stage,
            (unsigned)std::min(entries.size(), max_entries),
            (unsigned)entries.size());
-  DBG_LOG(app, summary);
+  DBG_LOG(reporter, summary);
 
   const size_t sample_count = std::min(entries.size(), max_entries);
   for (size_t i = 0; i < sample_count; i++) {
@@ -1303,15 +1305,16 @@ static void LogResolvedChapterSamples(App *app, const char *stage,
     snprintf(msg, sizeof(msg), "EPUB: %s[%u] page=%u lvl=%d title=%s", stage,
              (unsigned)i, (unsigned)entries[i].page, entries[i].level,
              title_clip.c_str());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
 }
 
-static void LogTocResolveDecision(App *app, size_t index, const toc_entry_t &src,
+static void LogTocResolveDecision(IStatusReporter *reporter, size_t index,
+                                  const toc_entry_t &src,
                                   const std::string &normalized_title,
                                   const char *method, bool have_page, u16 page,
                                   const char *note) {
-  if (!app || !method)
+  if (!reporter || !method)
     return;
 
   std::string href_clip = ClipForDiag(src.href, 56);
@@ -1323,7 +1326,7 @@ static void LogTocResolveDecision(App *app, size_t index, const toc_entry_t &src
            (unsigned)index, src.level, method, have_page ? (unsigned)page : 0u,
            href_clip.c_str(), raw_clip.c_str(), norm_clip.c_str(),
            note ? note : "");
-  DBG_LOG(app, msg);
+  DBG_LOG(reporter, msg);
 }
 
 static std::string NormalizeAsciiSearchText(const std::string &raw,
@@ -2119,7 +2122,7 @@ static int ParseEpubSpineDocuments(
   if (!uf || !book || !parsedata || !page_start_by_href)
     return 1;
 
-  App *app = deps.app;
+  IStatusReporter *app = deps.reporter;
   epub_zip_utils::ZipEntryIndex zip_index;
   int rc = 0;
   parsedata->ctx.clear();
@@ -2201,20 +2204,21 @@ static int ParseEpubSpineDocuments(
 
 static void ResolveEpubTocFromPackageData(
     unzFile uf, Book *book, epub_data_t &parsedata, const std::string &folder,
-    const std::map<std::string, u16> &page_start_by_href, App *app) {
+    const std::map<std::string, u16> &page_start_by_href,
+    IStatusReporter *reporter) {
   if (!epub_limits::kEnableRealTocResolve) {
-    if (app)
-      DBG_LOG(app, "EPUB: TOC resolve skipped (safe mode)");
+    if (reporter)
+      DBG_LOG(reporter, "EPUB: TOC resolve skipped (safe mode)");
     return;
   }
 
   std::vector<toc_entry_t> toc_entries;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC resolve begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC resolve begin");
 
-  LoadTocEntriesFromPackage(uf, parsedata, folder, &toc_entries, app);
-  if (app && !toc_entries.empty())
-    LogTocEntrySamples(app, "TOC package load", toc_entries, 5);
+  LoadTocEntriesFromPackage(uf, parsedata, folder, &toc_entries, reporter);
+  if (reporter && !toc_entries.empty())
+    LogTocEntrySamples(reporter, "TOC package load", toc_entries, 5);
   if (!toc_entries.empty()) {
     std::vector<ChapterEntry> resolved;
     std::map<u16, bool> used_pages;
@@ -2236,8 +2240,9 @@ static void ResolveEpubTocFromPackageData(
       entry.level = toc_entries[i].level;
       if (entry.title.empty()) {
         empty_title_count++;
-        if (app && empty_title_count <= 3) {
-          LogTocResolveDecision(app, i, toc_entries[i], "", "skip-empty-title",
+        if (reporter && empty_title_count <= 3) {
+          LogTocResolveDecision(reporter, i, toc_entries[i], "",
+                                "skip-empty-title",
                                 true, entry.page, " raw-empty");
         }
         continue;
@@ -2249,18 +2254,19 @@ static void ResolveEpubTocFromPackageData(
       book->ClearChapters();
       for (size_t i = 0; i < resolved.size(); i++)
         book->AddChapter(resolved[i].page, resolved[i].title, resolved[i].level);
-      if (app)
-        LogResolvedChapterSamples(app, "TOC package chapters", resolved, 5);
+      if (reporter)
+        LogResolvedChapterSamples(reporter, "TOC package chapters", resolved,
+                                  5);
     }
   }
 
-  if (app) {
+  if (reporter) {
     char msg[96];
     snprintf(msg, sizeof(msg), "EPUB: toc entries=%u chapters=%u",
              (unsigned)toc_entries.size(),
              (unsigned)book->GetChapters().size());
-    DBG_LOG(app, msg);
-    DBG_LOG(app, "EPUB: TOC resolve end");
+    DBG_LOG(reporter, msg);
+    DBG_LOG(reporter, "EPUB: TOC resolve end");
   }
 }
 
@@ -2290,14 +2296,14 @@ static int FinalizeEpubParse(unzFile uf, epub_data_t *parsedata, Book *book,
     unzClose(uf);
   if (parsedata)
     epub_data_delete(parsedata);
-  if (deps.app)
-    DBG_LOG(deps.app, "EPUB: parse end");
+  if (deps.reporter)
+    DBG_LOG(deps.reporter, "EPUB: parse end");
   return rc;
 }
 
 int epub(Book *book, std::string name, bool metadataonly) {
   const EpubDeps deps = BuildEpubDeps(book);
-  App *app = deps.app;
+  IStatusReporter *reporter = deps.reporter;
   int rc = 0;
   static epub_data_t parsedata;
 #ifdef DSLIBRIS_DEBUG
@@ -2306,8 +2312,8 @@ int epub(Book *book, std::string name, bool metadataonly) {
   u64 t_after_rootfile = t_parse_begin;
   u64 t_after_content = t_parse_begin;
 #endif
-  if (app)
-    DBG_LOG(app, "EPUB: parse begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: parse begin");
 
   unzFile uf = NULL;
   rc = OpenEpubArchive(name, &uf);
@@ -2331,13 +2337,13 @@ int epub(Book *book, std::string name, bool metadataonly) {
     ApplyEpubMetadataOnlyResult(book, parsedata, folder);
     unzClose(uf);
     epub_data_delete(&parsedata);
-    if (app) {
-      DBG_LOGF(app,
+    if (reporter) {
+      DBG_LOGF(reporter,
                "EPUB: metadata timing container=%llums opf=%llums total=%llums",
                (unsigned long long)(t_after_container - t_parse_begin),
                (unsigned long long)(t_after_rootfile - t_after_container),
                (unsigned long long)(osGetTime() - t_parse_begin));
-      DBG_LOG(app, "EPUB: metadata done");
+      DBG_LOG(reporter, "EPUB: metadata done");
     }
     return rc;
   }
@@ -2352,12 +2358,12 @@ int epub(Book *book, std::string name, bool metadataonly) {
                                 deps.ts ? (int)deps.ts->margin.top : 0,
                                 deps.ts ? (int)deps.ts->margin.bottom : 0,
                                 deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL)) {
-    if (app) {
-      DBG_LOGF(app, "EPUB: page cache hit pages=%u chapters=%u",
+    if (reporter) {
+      DBG_LOGF(reporter, "EPUB: page cache hit pages=%u chapters=%u",
                (unsigned)book->GetPageCount(),
                (unsigned)book->GetChapters().size());
 #ifdef DSLIBRIS_DEBUG
-      DBG_LOGF(app, "EPUB: timing cache_total=%llums",
+      DBG_LOGF(reporter, "EPUB: timing cache_total=%llums",
                (unsigned long long)(osGetTime() - t_parse_begin));
 #endif
     }
@@ -2373,12 +2379,12 @@ int epub(Book *book, std::string name, bool metadataonly) {
       &t_after_content
 #endif
   );
-  if (app) {
+  if (reporter) {
     char msg[96];
     snprintf(msg, sizeof(msg), "EPUB: content done pages=%u",
              (unsigned)book->GetPageCount());
-    DBG_LOG(app, msg);
-    DBG_LOGF(app,
+    DBG_LOG(reporter, msg);
+    DBG_LOGF(reporter,
              "EPUB: timing container=%llums opf=%llums spine=%llums total=%llums docs=%u pages=%u",
              (unsigned long long)(t_after_container - t_parse_begin),
              (unsigned long long)(t_after_rootfile - t_after_container),
@@ -2389,7 +2395,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
   }
 
   ResolveEpubTocFromPackageData(uf, book, parsedata, folder, page_start_by_href,
-                                app);
+                                reporter);
   return FinalizeEpubParse(uf, &parsedata, book, name, deps, rc, true);
 }
 
@@ -2406,64 +2412,66 @@ int epub_resolve_toc(Book *book, std::string filepath) {
     return 3;
 
   const EpubDeps deps = BuildEpubDeps(book);
-  App *app = deps.app;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC resolve begin");
-  if (app)
-    DBG_LOG(app, "EPUB: TOC open zip begin");
+  IStatusReporter *reporter = deps.reporter;
+  IStatusReporter *app = reporter;
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC resolve begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC open zip begin");
 
   unzFile uf = unzOpen(filepath.c_str());
   if (!uf)
     return 4;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC open zip ok");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC open zip ok");
 
   epub_data_t parsedata;
   std::string opf_folder;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC package load begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC package load begin");
   int rc = LoadEpubPackageData(uf, book, &parsedata, &opf_folder, deps);
   if (rc != 0) {
-    if (app) {
+    if (reporter) {
       char msg[96];
       snprintf(msg, sizeof(msg), "EPUB: TOC package load fail rc=%d", rc);
-      DBG_LOG(app, msg);
+      DBG_LOG(reporter, msg);
     }
     epub_data_delete(&parsedata);
     unzClose(uf);
     return rc;
   }
-  if (app)
-    DBG_LOG(app, "EPUB: TOC package load ok");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC package load ok");
 
   std::map<std::string, u16> page_start_by_href;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC map build begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC map build begin");
   BuildPageStartMapFromPackage(parsedata, opf_folder, book,
                                &page_start_by_href);
-  if (app) {
+  if (reporter) {
     char msg[96];
     snprintf(msg, sizeof(msg), "EPUB: TOC map build ok size=%u",
              (unsigned)page_start_by_href.size());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
 
   std::vector<toc_entry_t> toc_entries;
-  if (app)
-    DBG_LOG(app, "EPUB: TOC entries load begin");
+  if (reporter)
+    DBG_LOG(reporter, "EPUB: TOC entries load begin");
   bool loaded =
-      LoadTocEntriesFromPackage(uf, parsedata, opf_folder, &toc_entries, app);
-  if (app) {
+      LoadTocEntriesFromPackage(uf, parsedata, opf_folder, &toc_entries,
+                                reporter);
+  if (reporter) {
     char msg[96];
     snprintf(msg, sizeof(msg), "EPUB: TOC entries load end loaded=%u count=%u",
              loaded ? 1u : 0u, (unsigned)toc_entries.size());
-    DBG_LOG(app, msg);
+    DBG_LOG(reporter, msg);
   }
-  if (app && loaded && !toc_entries.empty())
-    LogTocEntrySamples(app, "TOC deferred load", toc_entries, 5);
+  if (reporter && loaded && !toc_entries.empty())
+    LogTocEntrySamples(reporter, "TOC deferred load", toc_entries, 5);
   if (!loaded) {
-    if (app)
-      DBG_LOG(app, "EPUB: TOC resolve end (no entries)");
+    if (reporter)
+      DBG_LOG(reporter, "EPUB: TOC resolve end (no entries)");
     epub_data_delete(&parsedata);
     unzClose(uf);
     return 5;
