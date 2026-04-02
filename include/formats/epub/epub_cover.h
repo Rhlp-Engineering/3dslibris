@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "formats/epub/epub.h"
 #include <string>
 
 class Book;
@@ -13,5 +14,8 @@ class Book;
 namespace epub_cover {
 
 int Extract(Book *book, const std::string &epubpath);
+
+bool FindLikelyImagePath(epub_data_t &data, const std::string &opf_folder,
+                         std::string &path_out);
 
 } // namespace epub_cover

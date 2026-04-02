@@ -667,45 +667,6 @@ static bool FindManifestItemPath(epub_data_t &data, const std::string &id,
   return false;
 }
 
-static bool FindLikelyCoverImagePath(epub_data_t &data,
-                                     const std::string &opf_folder,
-                                     std::string &path_out) {
-  // 1) Standard explicit cover-id.
-  if (!data.coverid.empty() &&
-      FindManifestItemPath(data, data.coverid, opf_folder, path_out)) {
-    for (auto item : data.manifest) {
-      if (item && item->id == data.coverid &&
-          item->media_type.find("image/") == 0) {
-        return true;
-      }
-    }
-  }
-
-  // 2) Heuristic: image item whose id/href/properties looks like "cover".
-  for (auto item : data.manifest) {
-    if (!item || item->media_type.find("image/") != 0)
-      continue;
-    if (ContainsNoCase(item->id, "cover") ||
-        ContainsNoCase(item->href, "cover") ||
-        ContainsNoCase(item->href, "portada") ||
-        ContainsNoCase(item->properties, "cover")) {
-      path_out = BuildDocPath(opf_folder, item->href);
-      return true;
-    }
-  }
-
-  // 3) Fallback: first image in manifest.
-  for (auto item : data.manifest) {
-    if (!item || item->media_type.find("image/") != 0)
-      continue;
-    path_out = BuildDocPath(opf_folder, item->href);
-    return true;
-  }
-
-  path_out.clear();
-  return false;
-}
-
 void epub_data_delete(epub_data_t *d);
 
 void epub_data_init(epub_data_t *d) {
@@ -2225,7 +2186,7 @@ static void ApplyEpubMetadataOnlyResult(Book *book, epub_data_t &parsedata,
       book->SetAuthor(parsedata.creator);
   }
   std::string coverpath;
-  if (FindLikelyCoverImagePath(parsedata, folder, coverpath)) {
+  if (epub_cover::FindLikelyImagePath(parsedata, folder, coverpath)) {
     book->coverImagePath = coverpath;
   } else {
     book->coverImagePath.clear();

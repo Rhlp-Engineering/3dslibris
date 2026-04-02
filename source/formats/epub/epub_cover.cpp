@@ -10,9 +10,11 @@
 #include "book/book.h"
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
+#include "formats/epub/epub.h"
 #include "formats/epub/epub_limits.h"
 #include "main.h"
 #include "minizip/unzip.h"
+#include "path_utils.h"
 #include "stb_image.h"
 #include "string_utils.h"
 #include <3ds.h>
@@ -21,6 +23,25 @@
 #include <vector>
 
 namespace {
+
+static std::string BuildDocPath(const std::string &opf_folder,
+                                const std::string &href) {
+  if (opf_folder.empty())
+    return NormalizePath(UrlDecode(href));
+  return NormalizePath(opf_folder + "/" + UrlDecode(href));
+}
+
+static bool FindManifestItemPath(epub_data_t &data, const std::string &id,
+                                 const std::string &opf_folder,
+                                 std::string &path_out) {
+  for (auto item : data.manifest) {
+    if (item->id == id) {
+      path_out = BuildDocPath(opf_folder, item->href);
+      return true;
+    }
+  }
+  return false;
+}
 
 static bool LocateZipEntrySafe(unzFile uf, const std::string &entry_path) {
   if (!uf || entry_path.empty())
@@ -214,6 +235,43 @@ int Extract(Book *book, const std::string &epubpath) {
 
   stbi_image_free(pixels);
   return 0;
+}
+
+bool FindLikelyImagePath(epub_data_t &data, const std::string &opf_folder,
+                         std::string &path_out) {
+  if (!data.coverid.empty()) {
+    for (auto item : data.manifest) {
+      if (item && item->id == data.coverid) {
+        if (item->media_type.find("image/") == 0) {
+          path_out = NormalizePath(opf_folder + "/" + UrlDecode(item->href));
+          return true;
+        }
+        break;
+      }
+    }
+  }
+
+  for (auto item : data.manifest) {
+    if (!item || item->media_type.find("image/") != 0)
+      continue;
+    if (ContainsNoCase(item->id, "cover") ||
+        ContainsNoCase(item->href, "cover") ||
+        ContainsNoCase(item->href, "portada") ||
+        ContainsNoCase(item->properties, "cover")) {
+      path_out = NormalizePath(opf_folder + "/" + UrlDecode(item->href));
+      return true;
+    }
+  }
+
+  for (auto item : data.manifest) {
+    if (!item || item->media_type.find("image/") != 0)
+      continue;
+    path_out = NormalizePath(opf_folder + "/" + UrlDecode(item->href));
+    return true;
+  }
+
+  path_out.clear();
+  return false;
 }
 
 } // namespace epub_cover
