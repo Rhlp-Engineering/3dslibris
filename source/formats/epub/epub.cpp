@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/common/epub_image_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_page_cache.h"
+#include "formats/epub/epub_cover.h"
 #include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_ncx_parser.h"
 #include "main.h"
@@ -660,30 +661,6 @@ static bool ReadZipEntryText(unzFile uf, const std::string &path,
     EpubDiag(app, msg);
   }
   return n >= 0;
-}
-
-static bool LooksLikeSvgWrapper(const std::string &path_hint,
-                                const std::vector<u8> &buf) {
-  return epub_image_utils::LooksLikeSvgWrapper(path_hint, buf);
-}
-
-static bool ResolveSvgImageWrapperPayload(
-    unzFile uf, const std::string &svg_path, const std::vector<u8> &svg_buf,
-    std::vector<u8> *out, std::string *resolved_path, App *app = NULL) {
-  if (!out || svg_buf.empty() || svg_buf.size() > epub_limits::kSvgWrapperMaxBytes) {
-    if (app)
-      DBG_LOG(app, "EPUB: SVG wrapper skip (size/empty)");
-    return false;
-  }
-  bool ok = epub_image_utils::ResolveSvgWrapperImage(
-      uf, svg_path, svg_buf, out, epub_limits::kCoverMaxEntryBytes, resolved_path);
-  if (!ok && app) {
-    char msg[192];
-    snprintf(msg, sizeof(msg), "EPUB: SVG wrapper unresolved path=%s",
-             svg_path.c_str());
-    DBG_LOG(app, msg);
-  }
-  return ok;
 }
 
 static bool
@@ -2674,173 +2651,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
 }
 
 int epub_extract_cover(Book *book, const std::string &epubpath) {
-  const EpubDeps deps = BuildEpubDeps(book);
-  App *app = deps.app;
-  if (book->coverImagePath.empty())
-    return 1;
-
-  unzFile uf = unzOpen(epubpath.c_str());
-  if (!uf)
-    return 2;
-
-  if (!LocateZipEntrySafe(uf, book->coverImagePath, app, "COVER")) {
-    unzClose(uf);
-    return 3;
-  }
-
-  unz_file_info fi;
-  unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0);
-
-  if (fi.uncompressed_size == 0 ||
-      fi.uncompressed_size > epub_limits::kCoverMaxEntryBytes ||
-      fi.uncompressed_size > (uLong)INT_MAX) {
-    unzClose(uf);
-    return 8;
-  }
-
-  std::vector<u8> imgbuf((size_t)fi.uncompressed_size);
-  int rc = unzOpenCurrentFile(uf);
-  if (rc != UNZ_OK) {
-    unzClose(uf);
-    return 5;
-  }
-
-  int total = 0;
-  while (total < (int)imgbuf.size()) {
-    int n = unzReadCurrentFile(uf, imgbuf.data() + total,
-                               (unsigned int)(imgbuf.size() - (size_t)total));
-    if (n < 0) {
-      unzCloseCurrentFile(uf);
-      unzClose(uf);
-      return 5;
-    }
-    if (n == 0)
-      break;
-    total += n;
-  }
-  unzCloseCurrentFile(uf);
-  if (total <= 0) {
-    unzClose(uf);
-    return 5;
-  }
-  imgbuf.resize((size_t)total);
-
-  std::vector<u8> decodebuf = imgbuf;
-  std::string decode_path = book->coverImagePath;
-  if (LooksLikeSvgWrapper(decode_path, decodebuf)) {
-    if (app) {
-      char msg[192];
-      snprintf(msg, sizeof(msg), "EPUB: cover SVG wrapper detected %s",
-               decode_path.c_str());
-      DBG_LOG(app, msg);
-    }
-    std::vector<u8> resolved;
-    std::string resolved_path;
-    if (ResolveSvgImageWrapperPayload(uf, decode_path, decodebuf, &resolved,
-                                      &resolved_path, app)) {
-      decodebuf.swap(resolved);
-      if (!resolved_path.empty())
-        decode_path = resolved_path;
-      if (app) {
-        char msg[192];
-        snprintf(msg, sizeof(msg),
-                 "EPUB: cover SVG wrapper resolved src=%s bytes=%u",
-                 decode_path.c_str(), (unsigned)decodebuf.size());
-        DBG_LOG(app, msg);
-      }
-    } else if (app) {
-      DBG_LOG(app, "EPUB: cover SVG wrapper unresolved");
-    }
-  }
-  unzClose(uf);
-
-  auto IsJpegCover = [&]() -> bool {
-    if (decode_path.size() >= 4) {
-      std::string lower = decode_path;
-      for (size_t i = 0; i < lower.size(); i++)
-        lower[i] = (char)tolower((unsigned char)lower[i]);
-      if (lower.rfind(".jpg") == lower.size() - 4 ||
-          lower.rfind(".jpeg") == lower.size() - 5)
-        return true;
-    }
-    return decodebuf.size() >= 3 && decodebuf[0] == 0xFF &&
-           decodebuf[1] == 0xD8 && decodebuf[2] == 0xFF;
-  };
-
-  if (decodebuf.size() > epub_limits::kCoverMaxNonJpegBytes && !IsJpegCover())
-    return 8;
-
-  int infoW = 0, infoH = 0, infoChannels = 0;
-  bool hasInfo = stbi_info_from_memory(decodebuf.data(), (int)decodebuf.size(),
-                                       &infoW, &infoH, &infoChannels) != 0;
-  if (!hasInfo && decodebuf.size() > epub_limits::kCoverMaxNonJpegBytes)
-    return 9;
-
-  if (hasInfo) {
-    if (infoW <= 0 || infoH <= 0 || infoW > epub_limits::kCoverMaxDimension ||
-        infoH > epub_limits::kCoverMaxDimension)
-      return 7;
-    size_t decoded_bytes = (size_t)infoW * (size_t)infoH * 3;
-    if (decoded_bytes > epub_limits::kCoverMaxDecodedRgbBytes)
-      return 9;
-  }
-
-  // Decode image using stb_image (supports JPEG + PNG)
-  int imgW, imgH, channels;
-  unsigned char *pixels =
-      stbi_load_from_memory(decodebuf.data(), (int)decodebuf.size(), &imgW,
-                            &imgH, &channels, 3); // Force RGB
-
-  if (!pixels)
-    return 4; // Failed to decode image
-
-  // Safety: skip images that are too large for 3DS RAM
-  if (imgW <= 0 || imgH <= 0 || imgW > epub_limits::kCoverMaxDimension ||
-      imgH > epub_limits::kCoverMaxDimension) {
-    stbi_image_free(pixels);
-    return 7;
-  }
-
-  // Scale to portrait thumbnail (85x115 to fit inside 89x119 button)
-  int thumbW = 85;
-  int thumbH = 115;
-  float scaleX = (float)imgW / thumbW;
-  float scaleY = (float)imgH / thumbH;
-  float scale = (scaleX > scaleY) ? scaleX : scaleY;
-  int finalW = (int)(imgW / scale);
-  int finalH = (int)(imgH / scale);
-  if (finalW > thumbW)
-    finalW = thumbW;
-  if (finalH > thumbH)
-    finalH = thumbH;
-
-  if (book->coverPixels) {
-    delete[] book->coverPixels;
-    book->coverPixels = nullptr;
-  }
-  book->coverPixels = new u16[finalW * finalH];
-  book->coverWidth = finalW;
-  book->coverHeight = finalH;
-
-  for (int y = 0; y < finalH; y++) {
-    int srcY = (int)(y * scale);
-    if (srcY >= imgH)
-      srcY = imgH - 1;
-    for (int x = 0; x < finalW; x++) {
-      int srcX = (int)(x * scale);
-      if (srcX >= imgW)
-        srcX = imgW - 1;
-      unsigned char *px = &pixels[(srcY * imgW + srcX) * 3];
-      // Convert RGB to RGB565
-      u16 r = (px[0] >> 3) & 0x1F;
-      u16 g = (px[1] >> 2) & 0x3F;
-      u16 b = (px[2] >> 3) & 0x1F;
-      book->coverPixels[y * finalW + x] = (r << 11) | (g << 5) | b;
-    }
-  }
-
-  stbi_image_free(pixels);
-  return 0;
+  return epub_cover::Extract(book, epubpath);
 }
 
 int epub_resolve_toc(Book *book, std::string filepath) {
