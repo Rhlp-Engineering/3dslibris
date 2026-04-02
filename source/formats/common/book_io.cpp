@@ -9,6 +9,7 @@
 */
 
 #include "book/book.h"
+#include "book/book_parse_deps.h"
 
 #include "shared/status_reporter.h"
 #include "book/book_xml.h"
@@ -75,29 +76,9 @@ static void FlushBufferedStatusLog(
 }
 #endif
 
-struct BookIoDeps {
-  IStatusReporter *reporter;
-  Text *ts;
-  Prefs *prefs;
-  int paragraph_spacing;
-  int paragraph_indent;
-  int orientation;
+typedef BookParseDeps BookIoDeps;
 
-  BookIoDeps()
-      : reporter(NULL), ts(NULL), prefs(NULL), paragraph_spacing(0),
-        paragraph_indent(0), orientation(0) {}
-};
-
-static BookIoDeps BuildBookIoDeps(Book *book) {
-  BookIoDeps deps;
-  deps.reporter = book ? book->GetStatusReporter() : NULL;
-  deps.ts = book ? book->GetText() : NULL;
-  deps.prefs = book ? book->GetPrefs() : NULL;
-  deps.paragraph_spacing = book ? book->GetParagraphSpacing() : 0;
-  deps.paragraph_indent = book ? book->GetParagraphIndent() : 0;
-  deps.orientation = book ? book->GetOrientation() : 0;
-  return deps;
-}
+static BookIoDeps BuildBookIoDeps(Book *book) { return BuildBookParseDeps(book); }
 
 static void InitParsedataWithBookIoDeps(parsedata_t *parsedata, Book *book,
                                         const BookIoDeps &deps) {

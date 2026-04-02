@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
 #include "base64_utils.h"
 #include "book/book.h"
+#include "book/book_parse_deps.h"
 #include "book/book_xml.h"
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
@@ -64,29 +65,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <unordered_map>
 #include <vector>
 
-struct EpubDeps {
-  IStatusReporter *reporter;
-  Text *ts;
-  Prefs *prefs;
-  int paragraph_spacing;
-  int paragraph_indent;
-  int orientation;
+typedef BookParseDeps EpubDeps;
 
-  EpubDeps()
-      : reporter(NULL), ts(NULL), prefs(NULL), paragraph_spacing(0),
-        paragraph_indent(0), orientation(0) {}
-};
-
-static EpubDeps BuildEpubDeps(Book *book) {
-  EpubDeps deps;
-  deps.reporter = book ? book->GetStatusReporter() : NULL;
-  deps.ts = book ? book->GetText() : NULL;
-  deps.prefs = book ? book->GetPrefs() : NULL;
-  deps.paragraph_spacing = book ? book->GetParagraphSpacing() : 0;
-  deps.paragraph_indent = book ? book->GetParagraphIndent() : 0;
-  deps.orientation = book ? book->GetOrientation() : 0;
-  return deps;
-}
+static EpubDeps BuildEpubDeps(Book *book) { return BuildBookParseDeps(book); }
 
 static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
                                       const EpubDeps &deps) {
