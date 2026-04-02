@@ -159,6 +159,7 @@ public:
   int GetParagraphSpacing();
   int GetParagraphIndent();
   int GetOrientation();
+  void DrawBottomGradientBackground();
   inline std::string GetAuthor() { return author; }
   inline bool HasBrowserDisplayNameCache() const {
     return browser_display_name_cached;

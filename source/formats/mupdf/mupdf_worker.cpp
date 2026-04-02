@@ -2,7 +2,6 @@
 
 #include "formats/mupdf/mupdf_worker.h"
 
-#include "app/app.h"
 #include "formats/mupdf/mupdf_view.h"
 
 

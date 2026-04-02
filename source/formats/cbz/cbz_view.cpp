@@ -1,4 +1,3 @@
-#include "app/app.h"
 #include "book/book.h"
 #include "color_utils.h"
 #include "formats/cbz/cbz_archive.h"
@@ -401,8 +400,7 @@ void Book::DrawCurrentCbzView(Text *ts) {
   }
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
-  if (GetApp())
-    GetApp()->DrawBottomGradientBackground();
+  DrawBottomGradientBackground();
   ts->FillRect((u16)preview_layout.x, (u16)preview_layout.y,
                (u16)(preview_layout.x + preview_layout.width),
                (u16)(preview_layout.y + preview_layout.height), kCbzPaper);

@@ -2,7 +2,6 @@
 
 #include "formats/mupdf/mupdf_view.h"
 
-#include "app/app.h"
 #include "book/page.h"
 #include "ui/text.h"
 
@@ -666,8 +665,7 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   }
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
-  if (app)
-    app->DrawBottomGradientBackground();
+  DrawBottomGradientBackground();
   ts->FillRect((u16)preview_layout.x, (u16)preview_layout.y,
                (u16)(preview_layout.x + preview_layout.width),
                (u16)(preview_layout.y + preview_layout.height), kPdfPaper);

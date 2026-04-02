@@ -1275,6 +1275,11 @@ int Book::GetParagraphIndent() { return app ? app->paraindent : 0; }
 
 int Book::GetOrientation() { return app ? app->orientation : 0; }
 
+void Book::DrawBottomGradientBackground() {
+  if (app)
+    app->DrawBottomGradientBackground();
+}
+
 void Book::SetFolderName(const char *name) {
   foldername.clear();
   foldername = name;
