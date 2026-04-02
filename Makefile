@@ -334,23 +334,8 @@ source-release:
 	@echo building source release ...
 	@mkdir -p $(DISTDIR)
 	@rm -f $(SOURCE_ZIP)
-	@tmpdir="$$(mktemp -d)"; \
-	prefix="$(BASE_TARGET)-source"; \
-	mkdir -p "$$tmpdir/$$prefix"; \
-	rsync -a \
-		--exclude '.git' \
-		--exclude 'build' \
-		--exclude 'build-debug' \
-		--exclude 'build-tests' \
-		--exclude 'dist' \
-		--exclude 'third_party/mupdf/build' \
-		--exclude '*.cia' \
-		--exclude '*.3dsx' \
-		--exclude '*.elf' \
-		--exclude '*.smdh' \
-		"$(CURDIR)/" "$$tmpdir/$$prefix/"; \
-	tar -C "$$tmpdir" -czf "$(SOURCE_ZIP)" "$$prefix"; \
-	rm -rf "$$tmpdir"
+	@git -C "$(CURDIR)" archive --format=tar --prefix="$(BASE_TARGET)-source/" HEAD \
+		| gzip -n > "$(SOURCE_ZIP)"
 	@echo built ... $(SOURCE_ZIP)
 
 #---------------------------------------------------------------------------------

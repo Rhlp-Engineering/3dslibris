@@ -194,23 +194,6 @@ static const char *AttrValue(const char **attr, const char *name) {
   return nullptr;
 }
 
-static const char *LocalName(const char *name) {
-  const char *c = strrchr(name, ':');
-  return c ? c + 1 : name;
-}
-
-typedef struct {
-  std::vector<toc_entry_t> *entries;
-  std::string base_path;
-  int depth;
-  int toc_nav_depth;
-  int anchor_depth;
-  int nav_level;
-  int current_level;
-  std::string current_href;
-  std::string current_title;
-} nav_parse_data_t;
-
 typedef struct {
   std::map<std::string, std::string> *fragment_to_href;
   std::string base_path;
@@ -425,71 +408,6 @@ BuildTocProxyMapFromHtmlScan(const std::string &xml,
         (*proxy_map)[pid] = resolved;
     }
   }
-}
-
-static void nav_start(void *userdata, const char *el, const char **attr) {
-  nav_parse_data_t *d = (nav_parse_data_t *)userdata;
-  d->depth++;
-  const char *lname = LocalName(el);
-
-  if (!strcmp(lname, "nav")) {
-    const char *type = AttrValue(attr, "type");
-    if (type && strstr(type, "toc"))
-      d->toc_nav_depth = d->depth;
-  }
-
-  if (d->toc_nav_depth > 0 && !strcmp(lname, "li")) {
-    d->nav_level++;
-  }
-
-  if (d->toc_nav_depth > 0 && !strcmp(lname, "a")) {
-    const char *href = AttrValue(attr, "href");
-    if (href && *href) {
-      d->anchor_depth = d->depth;
-      d->current_href = ResolveRelativePath(d->base_path, href);
-      d->current_level = (d->nav_level > 0) ? (d->nav_level - 1) : 0;
-      d->current_title.clear();
-    }
-  }
-}
-
-static void nav_char(void *userdata, const XML_Char *txt, int len) {
-  nav_parse_data_t *d = (nav_parse_data_t *)userdata;
-  if (d->anchor_depth > 0) {
-    d->current_title.append((const char *)txt, len);
-  }
-}
-
-static void nav_end(void *userdata, const char *el) {
-  nav_parse_data_t *d = (nav_parse_data_t *)userdata;
-  const char *lname = LocalName(el);
-
-  if (d->anchor_depth == d->depth && !strcmp(lname, "a")) {
-    std::string title = Trim(d->current_title);
-    if (!d->current_href.empty() && !title.empty()) {
-      if (d->entries->size() < epub_limits::kTocMaxEntries) {
-        toc_entry_t entry;
-        entry.href = d->current_href;
-        entry.title = title;
-        entry.level = (u8)std::min(15, std::max(0, d->current_level));
-        d->entries->push_back(entry);
-      }
-    }
-    d->anchor_depth = 0;
-    d->current_href.clear();
-    d->current_title.clear();
-  }
-
-  if (d->toc_nav_depth == d->depth && !strcmp(lname, "nav")) {
-    d->toc_nav_depth = 0;
-    d->nav_level = 0;
-  }
-
-  if (d->toc_nav_depth > 0 && !strcmp(lname, "li") && d->nav_level > 0) {
-    d->nav_level--;
-  }
-
-  d->depth--;
 }
 
 static void EpubDiag(App *app, const char *fmt, const char *arg) {
@@ -1103,21 +1021,8 @@ static bool LoadTocEntriesFromPackage(unzFile uf, epub_data_t &parsedata,
     }
     if (ReadZipEntryText(uf, toc_doc_path, toc_xml, app, "NAV")) {
       std::vector<toc_entry_t> nav_entries;
-      nav_parse_data_t navdata;
-      navdata.entries = &nav_entries;
-      navdata.base_path = toc_doc_path;
-      navdata.depth = 0;
-      navdata.toc_nav_depth = 0;
-      navdata.anchor_depth = 0;
-      navdata.nav_level = 0;
-      navdata.current_level = 0;
-      xml_parse_utils::XmlParserOptions nav_options;
-      nav_options.start_element = nav_start;
-      nav_options.end_element = nav_end;
-      nav_options.character_data = nav_char;
-      nav_options.user_data = &navdata;
       bool parsed_nav =
-          xml_parse_utils::ParseXmlString(toc_xml, nav_options).ok;
+          epub_ncx_parser::ParseNavWithExpat(toc_xml, toc_doc_path, &nav_entries);
       if (parsed_nav && app)
         LogTocEntrySamples(app, "NAV parsed", nav_entries, 4);
       if (parsed_nav && looks_reasonable_toc(nav_entries)) {
@@ -1183,21 +1088,8 @@ static bool LoadTocEntriesFromPackage(unzFile uf, epub_data_t &parsedata,
         }
         if (ReadZipEntryText(uf, toc_doc_path, toc_xml, app, "NAV-FALLBACK")) {
           std::vector<toc_entry_t> nav_entries;
-          nav_parse_data_t navdata;
-          navdata.entries = &nav_entries;
-          navdata.base_path = toc_doc_path;
-          navdata.depth = 0;
-          navdata.toc_nav_depth = 0;
-          navdata.anchor_depth = 0;
-          navdata.nav_level = 0;
-          navdata.current_level = 0;
-          xml_parse_utils::XmlParserOptions nav_options;
-          nav_options.start_element = nav_start;
-          nav_options.end_element = nav_end;
-          nav_options.character_data = nav_char;
-          nav_options.user_data = &navdata;
-          bool parsed_nav =
-              xml_parse_utils::ParseXmlString(toc_xml, nav_options).ok;
+          bool parsed_nav = epub_ncx_parser::ParseNavWithExpat(
+              toc_xml, toc_doc_path, &nav_entries);
           if (parsed_nav && app)
             LogTocEntrySamples(app, "NAV fallback parsed", nav_entries, 4);
           if (parsed_nav && looks_reasonable_toc(nav_entries)) {

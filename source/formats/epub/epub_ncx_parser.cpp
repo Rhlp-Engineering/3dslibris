@@ -7,15 +7,13 @@
 #include "formats/epub/epub_ncx_parser.h"
 
 #include "formats/common/xml_parse_utils.h"
+#include "formats/epub/epub_limits.h"
 #include <algorithm>
 #include <ctype.h>
 #include <set>
 #include <string.h>
 
 namespace {
-
-static const size_t EPUB_TOC_MAX_BYTES = 192 * 1024;
-static const size_t EPUB_TOC_MAX_ENTRIES = 2048;
 
 static const char *LocalName(const char *name) {
   const char *colon = strchr(name, ':');
@@ -159,7 +157,7 @@ static void ncx_end(void *userdata, const char *el) {
 
     std::string title = Trim(node.title);
     if (!node.src.empty() && !title.empty() &&
-        d->entries->size() < EPUB_TOC_MAX_ENTRIES) {
+        d->entries->size() < epub_limits::kTocMaxEntries) {
       toc_entry_t entry;
       entry.href = ResolveRelativePath(d->base_path, node.src);
       entry.title = title;
@@ -212,7 +210,7 @@ static void nav_end(void *userdata, const char *el) {
   if (d->anchor_depth == d->depth && !strcmp(lname, "a")) {
     std::string title = Trim(d->current_title);
     if (!d->current_href.empty() && !title.empty()) {
-      if (d->entries->size() < EPUB_TOC_MAX_ENTRIES) {
+      if (d->entries->size() < epub_limits::kTocMaxEntries) {
         toc_entry_t entry;
         entry.href = d->current_href;
         entry.title = title;
@@ -245,7 +243,7 @@ bool ParseNcxWithExpat(const std::string &xml, const std::string &base_path,
                        std::vector<toc_entry_t> *entries) {
   if (xml.empty() || !entries)
     return false;
-  if (xml.size() > EPUB_TOC_MAX_BYTES)
+  if (xml.size() > epub_limits::kTocMaxBytes)
     return false;
 
   ncx_parse_data_t d;
@@ -266,7 +264,7 @@ bool ParseNcxLightweight(const std::string &xml, const std::string &base_path,
                          std::vector<toc_entry_t> *entries) {
   if (xml.empty() || !entries)
     return false;
-  if (xml.size() > EPUB_TOC_MAX_BYTES)
+  if (xml.size() > epub_limits::kTocMaxBytes)
     return false;
 
   std::string lower = xml;
@@ -282,7 +280,7 @@ bool ParseNcxLightweight(const std::string &xml, const std::string &base_path,
   auto try_flush = [&]() {
     if (pending_src.empty() || pending_title.empty())
       return;
-    if (entries->size() >= EPUB_TOC_MAX_ENTRIES)
+    if (entries->size() >= epub_limits::kTocMaxEntries)
       return;
     toc_entry_t entry;
     entry.href = ResolveRelativePath(base_path, pending_src);
@@ -296,7 +294,7 @@ bool ParseNcxLightweight(const std::string &xml, const std::string &base_path,
     pending_title.clear();
   };
 
-  while (pos < lower.size() && entries->size() < EPUB_TOC_MAX_ENTRIES) {
+  while (pos < lower.size() && entries->size() < epub_limits::kTocMaxEntries) {
     size_t content_pos = lower.find("<content", pos);
     size_t text_pos = lower.find("<text", pos);
     if (content_pos == std::string::npos && text_pos == std::string::npos)
@@ -345,7 +343,7 @@ bool ParseNavWithExpat(const std::string &xml, const std::string &base_path,
                        std::vector<toc_entry_t> *entries) {
   if (xml.empty() || !entries)
     return false;
-  if (xml.size() > EPUB_TOC_MAX_BYTES)
+  if (xml.size() > epub_limits::kTocMaxBytes)
     return false;
 
   nav_parse_data_t d;
