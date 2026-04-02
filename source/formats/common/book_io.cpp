@@ -34,6 +34,7 @@
 #include "formats/cbz/cbz.h"
 #include "book/page.h"
 #include "formats/common/page_cache_utils.h"
+#include "formats/common/page_text_extract_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "parse.h"
 #include "shared/app_flow_utils.h"
@@ -1249,62 +1250,6 @@ static u8 ParsePlainTextBuffer(Book *book, const std::string &text_utf8,
   return 0;
 }
 
-static std::vector<std::string> ExtractTextLinesFromPage(Page *page) {
-  std::vector<std::string> lines;
-  if (!page)
-    return lines;
-  const u8 *buf = page->GetBuffer();
-  const int len = page->GetLength();
-  if (!buf || len <= 0)
-    return lines;
-
-  std::string line;
-  line.reserve((size_t)len);
-  int i = 0;
-  while (i < len) {
-    u8 c = buf[i];
-    if (c == '\r' || c == '\n') {
-      lines.push_back(line);
-      line.clear();
-      i++;
-      continue;
-    }
-    if (c == TEXT_IMAGE_CONTEXT_DEFAULT ||
-        c == TEXT_IMAGE_LEADING_PARAGRAPH ||
-        c == TEXT_IMAGE_FIGURE_WITH_CAPTION) {
-      i++;
-      continue;
-    }
-    if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||
-        c == TEXT_ITALIC_OFF) {
-      i++;
-      continue;
-    }
-    if (mobi_heading_markers::HeadingLevelFromMarker(c) > 0) {
-      i++;
-      continue;
-    }
-    if (c == TEXT_IMAGE) {
-      if (!line.empty()) {
-        lines.push_back(line);
-        line.clear();
-      }
-      lines.push_back(std::string());
-      if (i + 2 < len)
-        i += 3;
-      else
-        i++;
-      continue;
-    }
-    line.push_back((char)c);
-    i++;
-  }
-
-  if (!line.empty() || lines.empty())
-    lines.push_back(line);
-  return lines;
-}
-
 static void BuildFb2FallbackChapters(Book *book) {
   if (!book)
     return;
@@ -1317,7 +1262,7 @@ static void BuildFb2FallbackChapters(Book *book) {
   std::vector<u16> line_pages;
   for (u16 page = 0; page < book->GetPageCount(); page++) {
     const std::vector<std::string> page_lines =
-        ExtractTextLinesFromPage(book->GetPage(page));
+        page_text_extract_utils::ExtractTextLinesFromPage(book->GetPage(page));
     for (size_t i = 0; i < page_lines.size(); i++) {
       lines.push_back(page_lines[i]);
       line_pages.push_back(page);
@@ -1993,7 +1938,8 @@ BuildMobiChaptersFromHints(Book *book,
   std::vector<std::vector<std::string>> page_lines;
   page_lines.resize(book->GetPageCount());
   for (u16 p = 0; p < book->GetPageCount(); p++)
-    page_lines[p] = ExtractTextLinesFromPage(book->GetPage(p));
+    page_lines[p] =
+        page_text_extract_utils::ExtractTextLinesFromPage(book->GetPage(p));
 
   size_t mapped = 0;
   u16 scan_start = 0;
@@ -2178,7 +2124,8 @@ static size_t BuildMobiChaptersFromStructuredToc(
   if (needs_heading_search) {
     page_lines.resize(page_count);
     for (u16 p = 0; p < page_count; p++)
-      page_lines[p] = ExtractTextLinesFromPage(book->GetPage(p));
+      page_lines[p] =
+          page_text_extract_utils::ExtractTextLinesFromPage(book->GetPage(p));
   }
 
   std::set<u16> used_pages;
