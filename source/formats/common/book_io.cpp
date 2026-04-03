@@ -39,8 +39,6 @@
 
 namespace {
 
-static const size_t kPlainTextMaxBytes = 12 * 1024 * 1024;
-
 typedef BookParseDeps BookIoDeps;
 using mobi_toc_finalize::MobiHeadingHint;
 
@@ -121,7 +119,6 @@ static bool LooksLikeStructuredMobiChapterTitle(const std::string &title) {
       plain_parser::CollapseAsciiWhitespace(plain_parser::TrimAsciiWhitespace(title));
   if (compact.empty())
     return false;
-  std::string folded = plain_parser::FoldLatinForMatch(compact);
   bool strong_signal = false;
   if (plain_parser::LooksLikePlainChapterHeading(compact, &strong_signal))
     return true;
