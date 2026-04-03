@@ -190,7 +190,12 @@ static std::string XmlEscapeAttr(const char *value) {
   const size_t len = strlen(value);
   out.reserve(len + (len / 4));
   for (size_t i = 0; i < len; i++) {
-    const char c = value[i];
+    const unsigned char c = (unsigned char)value[i];
+    if (c < 0x20 && c != '\t' && c != '\n' && c != '\r') {
+      // XML 1.0 forbids most C0 control chars in attributes.
+      out.push_back(' ');
+      continue;
+    }
     switch (c) {
     case '&':
       out += "&amp;";
