@@ -37,6 +37,7 @@ source/
 │   │   ├── plain_parser.cpp   # TXT/RTF parse flow + plain heading heuristics/callbacks
 │   │   ├── plain_text_stream.cpp # Incremental plain text pagination state machine
 │   │   ├── text_helpers.cpp    # Text normalization (UTF repair, RTF decode, etc.)
+│   │   ├── xml_book_parser.cpp # XML/Fb2 parse route extracted from Book::Parse
 │   │   ├── xml_parse_utils.cpp
 │   │   ├── pdf_view_utils.cpp  # Shared MuPDF viewport/navigation
 │   │   ├── fixed_layout_viewport_utils.h
@@ -181,7 +182,7 @@ Reflowable formats (EPUB, FB2, MOBI, TXT, RTF, ODT) produce `Page` objects with 
 
 **Future direction:** Separate Book (pure model) from BookParser (format-specific) and BookRenderer (format-specific).
 
-### 3. book_io.cpp reduced (443 lines, down from 5369)
+### 3. book_io.cpp reduced (359 lines, down from 5369)
 TXT/RTF parse flow, plain heading heuristics/callbacks, text normalization helpers, MOBI page cache, MOBI parser core helpers (source/header/merge), MOBI deferred runtime state machine, MOBI markup extraction pipeline, MOBI text decode/title extraction, MOBI structured TOC INDX/TAGX/CNCX parsing, MOBI TOC finalization, MOBI TOC prepare/deferred-load wrappers, MOBI TOC resolver (inline/deferred), and MOBI parse orchestration were extracted to separate modules. Remaining content: MOBI callback wiring/hooks and XML dispatch path.
 
 **Impact:** TXT/RTF, plain heading heuristics, and core MOBI parser changes no longer touch book_io.cpp. ODT and shared XML parser path still live there.
@@ -198,6 +199,7 @@ The following modules were extracted to improve testability and reduce monolith 
 | `text_helpers` | book_io.cpp | `NormalizeNewlines`, `NormalizeTextUtf8`, `DecodeRtfToUtf8`, `LooksLikeValidUtf8Bytes` |
 | `plain_text_stream` | book_io.cpp | `InitState()`, `ContinueState()` — incremental pagination state machine |
 | `plain_parser` | book_io.cpp | `ParseBuffer()`, `ParseTxtFile()`, `ParseRtfFile()`, heading heuristics/callback wiring |
+| `xml_book_parser` | book_io.cpp | `ParseXmlBookFile()` — XML/Fb2 parse path and perf/error reporting |
 | `mobi_page_cache` | book_io.cpp | `TryLoad()`, `Save()` — persistent page cache for MOBI |
 | `mobi_parser_core` | book_io.cpp | `LoadMobiSource()`, `ParseMobiHeader()`, `BuildMobiMergedText()` |
 | `mobi_deferred_runtime` | book_io.cpp | `Continue()`, `Finalize()`, deferred state map lifecycle |
@@ -249,7 +251,7 @@ Format parsers (`book_io.cpp`, `epub.cpp`, `mobi.cpp`) include `app/app.h` and c
 
 **Future direction:** Define pure interfaces (`IStatusLogger`, `ParseContext`) that parsers receive instead of `App*`. App implements these interfaces.
 
-### Critical: book_io.cpp remains a monolith (443 lines)
+### Critical: book_io.cpp remains a monolith (359 lines)
 
 Despite recent extractions (txt_loader, rtf_loader, text_helpers, plain_text_stream, plain_parser, mobi_page_cache, mobi_parser_core, mobi_deferred_runtime, mobi_markup_extract, mobi_text_decode, mobi_parser, mobi_structured_toc_parser, mobi_toc_finalize, mobi_toc_prepare, mobi_toc_resolver), the file still contains shared XML parsing and MOBI callback glue in a single translation unit.
 
