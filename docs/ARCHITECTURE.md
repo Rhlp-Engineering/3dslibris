@@ -56,6 +56,8 @@ source/
 │   │   ├── mobi_position_map.cpp
 │   │   ├── mobi_record_decode.cpp
 │   │   ├── mobi_record_scan.cpp
+│   │   ├── mobi_structured_toc_parser.cpp # INDX/TAGX/CNCX structured TOC parser
+│   │   ├── mobi_toc_resolver.cpp # TOC resolver + inline filepos/deferred fallback
 │   │   ├── mobi_text_cleanup.cpp
 │   │   └── mobi_*.h            # Cover utils, deferred finalize
 │   ├── pdf/                    # PDF entry point
@@ -169,12 +171,12 @@ Reflowable formats (EPUB, FB2, MOBI, TXT, RTF, ODT) produce `Page` objects with 
 
 **Future direction:** Separate Book (pure model) from BookParser (format-specific) and BookRenderer (format-specific).
 
-### 3. book_io.cpp reduced (4844 lines, down from 5369)
-TXT and RTF loaders, text normalization helpers, and MOBI page cache were extracted to separate modules. Remaining content: MOBI parsing dispatch and ODT parsing.
+### 3. book_io.cpp reduced (3520 lines, down from 5369)
+TXT and RTF loaders, text normalization helpers, MOBI page cache, MOBI structured TOC INDX/TAGX/CNCX parsing, and MOBI TOC resolver (inline/deferred) were extracted to separate modules. Remaining content: MOBI parsing dispatch and ODT parsing.
 
 **Impact:** TXT and RTF changes no longer touch book_io.cpp. MOBI and ODT still require navigating a large file.
 
-**Future direction:** Extract ODT to its own module (requires decoupling from `FinalizePlainPage`). MOBI parsing (~3000 lines) is the next extraction target.
+**Future direction:** Extract ODT to its own module (requires decoupling from `FinalizePlainPage`). In MOBI, continue by extracting plain-text stream blocks (`PlainTextStreamState` + helpers).
 
 ### 4. Formats extracted from book_io.cpp
 The following modules were extracted to improve testability and reduce monolith size:
@@ -185,6 +187,8 @@ The following modules were extracted to improve testability and reduce monolith 
 | `rtf_loader` | book_io.cpp | `ReadAndDecode()` — reads RTF, decodes to UTF-8 via `text_helpers` |
 | `text_helpers` | book_io.cpp | `NormalizeNewlines`, `NormalizeTextUtf8`, `DecodeRtfToUtf8`, `LooksLikeValidUtf8Bytes` |
 | `mobi_page_cache` | book_io.cpp | `TryLoad()`, `Save()` — persistent page cache for MOBI |
+| `mobi_structured_toc_parser` | book_io.cpp | `ParseStructuredToc()` — INDX/TAGX/CNCX parser with callback-based decoding/filtering |
+| `mobi_toc_resolver` | book_io.cpp | `ParseInlineFileposToc()`, `PrepareStructuredToc()`, `LoadDeferredStructuredToc()` |
 | `StartsWithNoCase` | epub_image_utils.cpp | Generic string utility → `string_utils.h` |
 
 All extracted modules have corresponding test suites using the project's `test_build.sh` helper.
@@ -225,25 +229,25 @@ Format parsers (`book_io.cpp`, `epub.cpp`, `mobi.cpp`) include `app/app.h` and c
 
 **Future direction:** Define pure interfaces (`IStatusLogger`, `ParseContext`) that parsers receive instead of `App*`. App implements these interfaces.
 
-### Critical: book_io.cpp remains a monolith (4844 lines)
+### Critical: book_io.cpp remains a monolith (3520 lines)
 
-Despite recent extractions (txt_loader, rtf_loader, text_helpers, mobi_page_cache), the file still contains MOBI parsing (~3000 lines), ODT parsing, plain text streaming, and TOC heuristics across 90+ functions.
+Despite recent extractions (txt_loader, rtf_loader, text_helpers, mobi_page_cache, mobi_structured_toc_parser), the file still contains MOBI parsing, ODT parsing, plain text streaming, and TOC heuristics across many functions.
 
 **Impact:** High risk of accidental breakage. Difficult to navigate. Every format change touches the same massive file.
 
 **Future direction:** Extract `mobi_parser.cpp`, `mobi_toc_resolver.cpp`, `plain_text_stream.cpp`, `odt_parser.cpp`. Leave book_io.cpp as a thin dispatcher (~200 lines).
 
-### Critical: epub.cpp is a second monolith (3921 lines)
+### High: epub.cpp remains a large critical parser (1328 lines)
 
-Second-largest file in the project. Contains EPUB parsing, page cache management, inline image handling, TOC extraction, and fallback logic across 97+ static functions.
+Contains EPUB parsing, page cache management, inline image handling, TOC extraction, and fallback logic in one compilation unit.
 
-**Impact:** Almost as large as book_io.cpp was before extractions. No tests. Any change risks the most-used format.
+**Impact:** No dedicated tests. Any change still risks the most-used format.
 
 **Future direction:** Extract `epub_cache.cpp`, `epub_toc.cpp`, `epub_manifest.cpp`.
 
 ### High: Zero tests on critical components
 
-App (1164 lines), Book (1640 lines), app_book.cpp (874 lines), epub.cpp (3921 lines), book_io.cpp (4844 lines) have no test coverage. Existing tests only cover pure utilities.
+App (1164 lines), Book (1658 lines), app_book.cpp (873 lines), epub.cpp (1328 lines), book_io.cpp (3520 lines) have no test coverage. Existing tests only cover pure utilities.
 
 **Impact:** Every refactor is a leap of faith. No safety net for the most complex code.
 
@@ -284,5 +288,5 @@ Adding a format requires modifying `parse.cpp`, `book_io.cpp`, `app_flow_utils.c
 | `book_io.cpp:1028-1434` | PlainTextStreamState — complex streaming logic coupled to parsedata_t, BookIoDeps, Book internals |
 | `book.h:237-291` | Public API mixes metadata, rendering, parsing, fixed-layout, async reflow, MOBI deferred |
 | `app.h:120-150` | Public fields (ts, prefs, buttons, books) allow any file to mutate App state directly |
-| `epub.cpp` | 3921 lines, zero tests, most-used format |
+| `epub.cpp` | 1328 lines, zero tests, most-used format |
 | `main.cpp` global `app` | Undefined behavior if accessed before init or after destruction |

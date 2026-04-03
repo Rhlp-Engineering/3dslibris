@@ -23,7 +23,6 @@
 #include "formats/common/plain_text_perf_utils.h"
 #include "formats/mobi/mobi_page_cache.h"
 #include "formats/mobi/mobi.h"
-#include "formats/mobi/mobi_cache_utils.h"
 #include "formats/mobi/mobi_decode_plan.h"
 #include "formats/mobi/mobi_heading_markers.h"
 #include "formats/mobi/mobi_markup_tag.h"
@@ -31,6 +30,7 @@
 #include "formats/mobi/mobi_record_decode.h"
 #include "formats/mobi/mobi_record_scan.h"
 #include "formats/mobi/mobi_structured_toc_parser.h"
+#include "formats/mobi/mobi_toc_resolver.h"
 #include "formats/mobi/mobi_text_cleanup.h"
 #include "formats/pdf/pdf.h"
 #include "formats/cbz/cbz.h"
@@ -1328,21 +1328,6 @@ static bool RejectMobiStructuredTocTitle(const std::string &in) {
   return IsMostlyDigitsOrPunctuation(in);
 }
 
-static bool ParseMobiStructuredToc(const std::string &raw,
-                                   const std::vector<u32> &offsets,
-                                   u32 ncx_index, u32 encoding,
-                                   std::vector<MobiStructuredTocEntry> *out,
-                                   IStatusReporter *reporter) {
-  mobi_structured_toc_parser::ParseCallbacks callbacks = {
-      DecodeMobiStructuredTocBytes,
-      NormalizeMobiStructuredTocTitle,
-      RejectMobiStructuredTocTitle,
-  };
-  return mobi_structured_toc_parser::ParseStructuredToc(raw, offsets, ncx_index,
-                                                        encoding, callbacks, out,
-                                                        reporter);
-}
-
 std::string DecodeUtf16ToUtf8(const std::string &in) {
   std::string out;
   if (in.size() < 2)
@@ -1933,6 +1918,66 @@ static void FinalizeMobiPreparedToc(
   }
 }
 
+static bool MobiInlineLooksLikeStructuredTitle(const std::string &title) {
+  return LooksLikeStructuredMobiChapterTitle(title);
+}
+
+static std::string MobiInlineFoldLatin(const std::string &text) {
+  return FoldLatinForMatch(text);
+}
+
+static size_t MobiInlineCountWords(const std::string &text) {
+  return (size_t)CountAsciiWords(text);
+}
+
+static bool MobiInlineMostlyDigitsOrPunct(const std::string &text) {
+  return IsMostlyDigitsOrPunctuation(text);
+}
+
+static bool PrepareMobiStructuredToc(const std::string &raw,
+                                     const std::vector<u32> &offsets,
+                                     u32 ncx_index, u32 encoding,
+                                     const std::string *markup_utf8,
+                                     u32 text_len,
+                                     std::vector<MobiStructuredTocEntry> *out,
+                                     bool *structured_from_filepos,
+                                     IStatusReporter *reporter) {
+  mobi_toc_resolver::PrepareCallbacks callbacks;
+  callbacks.structured.decode_bytes_to_utf8 = DecodeMobiStructuredTocBytes;
+  callbacks.structured.normalize_title = NormalizeMobiStructuredTocTitle;
+  callbacks.structured.reject_title = RejectMobiStructuredTocTitle;
+  callbacks.inline_title.looks_like_structured_title =
+      MobiInlineLooksLikeStructuredTitle;
+  callbacks.inline_title.fold_latin_for_match = MobiInlineFoldLatin;
+  callbacks.inline_title.count_ascii_words = MobiInlineCountWords;
+  callbacks.inline_title.is_mostly_digits_or_punctuation =
+      MobiInlineMostlyDigitsOrPunct;
+  callbacks.decode_bytes_to_utf8 = DecodeMobiStructuredTocBytes;
+  return mobi_toc_resolver::PrepareStructuredToc(
+      raw, offsets, ncx_index, encoding, markup_utf8, text_len, callbacks, out,
+      structured_from_filepos, reporter);
+}
+
+static bool LoadDeferredMobiStructuredToc(
+    const MobiDeferredState &state, std::vector<MobiStructuredTocEntry> *out,
+    bool *structured_from_filepos, IStatusReporter *reporter) {
+  mobi_toc_resolver::PrepareCallbacks callbacks;
+  callbacks.structured.decode_bytes_to_utf8 = DecodeMobiStructuredTocBytes;
+  callbacks.structured.normalize_title = NormalizeMobiStructuredTocTitle;
+  callbacks.structured.reject_title = RejectMobiStructuredTocTitle;
+  callbacks.inline_title.looks_like_structured_title =
+      MobiInlineLooksLikeStructuredTitle;
+  callbacks.inline_title.fold_latin_for_match = MobiInlineFoldLatin;
+  callbacks.inline_title.count_ascii_words = MobiInlineCountWords;
+  callbacks.inline_title.is_mostly_digits_or_punctuation =
+      MobiInlineMostlyDigitsOrPunct;
+  callbacks.decode_bytes_to_utf8 = DecodeMobiStructuredTocBytes;
+  return mobi_toc_resolver::LoadDeferredStructuredToc(
+      &state.structured_toc, state.have_structured_toc, state.markup_utf8,
+      state.text_len_for_pos, state.source_path, callbacks, out,
+      structured_from_filepos, reporter);
+}
+
 static bool DecodeHtmlEntity(const std::string &entity, std::string *out) {
   if (!out)
     return false;
@@ -1975,513 +2020,6 @@ static bool DecodeHtmlEntity(const std::string &entity, std::string *out) {
   else
     return false;
   return true;
-}
-
-static size_t FindAsciiNoCase(const std::string &haystack, const char *needle,
-                              size_t start, size_t limit) {
-  if (!needle || !*needle)
-    return std::string::npos;
-  if (start >= haystack.size())
-    return std::string::npos;
-  if (limit > haystack.size())
-    limit = haystack.size();
-  if (start >= limit)
-    return std::string::npos;
-
-  const size_t nlen = strlen(needle);
-  if (nlen == 0 || start + nlen > limit)
-    return std::string::npos;
-
-  for (size_t i = start; i + nlen <= limit; i++) {
-    size_t j = 0;
-    for (; j < nlen; j++) {
-      unsigned char a = (unsigned char)haystack[i + j];
-      unsigned char b = (unsigned char)needle[j];
-      if (tolower(a) != tolower(b))
-        break;
-    }
-    if (j == nlen)
-      return i;
-  }
-  return std::string::npos;
-}
-
-static bool ParseMobiAnchorFilepos(const std::string &tag, u32 *out_pos) {
-  if (!out_pos)
-    return false;
-  *out_pos = kMobiNullIndex;
-  if (tag.empty())
-    return false;
-
-  size_t p = FindAsciiNoCase(tag, "filepos", 0, tag.size());
-  if (p == std::string::npos)
-    return false;
-  p += 7;
-  while (p < tag.size() && isspace((unsigned char)tag[p]))
-    p++;
-  if (p >= tag.size() || tag[p] != '=')
-    return false;
-  p++;
-  while (p < tag.size() && isspace((unsigned char)tag[p]))
-    p++;
-  if (p >= tag.size())
-    return false;
-
-  char quote = 0;
-  if (tag[p] == '\'' || tag[p] == '"')
-    quote = tag[p++];
-  if (p >= tag.size())
-    return false;
-
-  size_t d0 = p;
-  while (p < tag.size() && isdigit((unsigned char)tag[p]))
-    p++;
-  if (p <= d0)
-    return false;
-  if (quote != 0 && (p >= tag.size() || tag[p] != quote))
-    return false;
-
-  unsigned long long parsed = 0;
-  if (sscanf(tag.substr(d0, p - d0).c_str(), "%llu", &parsed) != 1)
-    return false;
-  if (parsed == 0ull || parsed > 0xFFFFFFFFull)
-    return false;
-  *out_pos = (u32)parsed;
-  return true;
-}
-
-static std::string DecodeMobiAnchorInnerText(const std::string &in) {
-  std::string out;
-  out.reserve(in.size());
-  bool in_tag = false;
-  bool pending_space = false;
-
-  for (size_t i = 0; i < in.size();) {
-    unsigned char c = (unsigned char)in[i];
-    if (c == '<') {
-      in_tag = true;
-      pending_space = true;
-      i++;
-      continue;
-    }
-    if (in_tag) {
-      if (c == '>')
-        in_tag = false;
-      i++;
-      continue;
-    }
-
-    if (c == '&') {
-      size_t semi = in.find(';', i + 1);
-      if (semi != std::string::npos && semi - i <= 12) {
-        std::string entity = in.substr(i + 1, semi - i - 1);
-        std::string decoded;
-        if (DecodeHtmlEntity(entity, &decoded)) {
-          if (pending_space && !out.empty() && out.back() != ' ')
-            out.push_back(' ');
-          out += decoded;
-          pending_space = false;
-          i = semi + 1;
-          continue;
-        }
-      }
-    }
-
-    if (isspace(c) || c < 0x20) {
-      pending_space = true;
-      i++;
-      continue;
-    }
-
-    if (pending_space && !out.empty() && out.back() != ' ')
-      out.push_back(' ');
-    pending_space = false;
-
-    if (c < 0x80) {
-      out.push_back((char)c);
-      i++;
-      continue;
-    }
-
-    int step = 1;
-    if ((c & 0xE0) == 0xC0)
-      step = 2;
-    else if ((c & 0xF0) == 0xE0)
-      step = 3;
-    else if ((c & 0xF8) == 0xF0)
-      step = 4;
-    if (i + (size_t)step > in.size())
-      step = 1;
-    out.append(in, i, (size_t)step);
-    i += (size_t)step;
-  }
-
-  return CollapseAsciiWhitespace(TrimAsciiWhitespace(out));
-}
-
-static bool IsMobiLikelyTocTitle(const std::string &title) {
-  std::string clean = CollapseAsciiWhitespace(TrimAsciiWhitespace(title));
-  if (clean.size() < 3 || clean.size() > 180)
-    return false;
-  if (IsMostlyDigitsOrPunctuation(clean))
-    return false;
-
-  std::string folded = FoldLatinForMatch(clean);
-  auto contains_ci = [&](const char *needle) -> bool {
-    return (needle && *needle && folded.find(needle) != std::string::npos);
-  };
-  if (folded == "contents" || folded == "table of contents" ||
-      folded == "indice" || folded == "indice de contenido" ||
-      folded == "contenido")
-    return false;
-  if (folded == "index" || folded == "this page" || folded == "cover" ||
-      folded == "title page" || folded == "copyright")
-    return false;
-  if (contains_ci("this page") || contains_ci("page") || contains_ci("back") ||
-      contains_ci("next") || contains_ci("previous") || contains_ci("menu") ||
-      contains_ci("search") || contains_ci("table of contents") ||
-      contains_ci("contents"))
-    return false;
-  if (contains_ci("ep_prh_") || contains_ci("kindle:") ||
-      contains_ci("navpoint"))
-    return false;
-
-  // Avoid obvious long prose lines.
-  if (CountAsciiWords(clean) > 20)
-    return false;
-
-  return true;
-}
-
-static int ScoreMobiTocTitle(const std::string &title) {
-  std::string clean = CollapseAsciiWhitespace(TrimAsciiWhitespace(title));
-  if (clean.empty())
-    return -1000;
-
-  int score = 0;
-  const int words = CountAsciiWords(clean);
-  if (words >= 2 && words <= 12)
-    score += 20;
-  if (words >= 13 && words <= 18)
-    score += 8;
-  if (words <= 1 || words > 20)
-    score -= 30;
-
-  if (LooksLikeStructuredMobiChapterTitle(clean))
-    score += 40;
-
-  std::string folded = FoldLatinForMatch(clean);
-  if (folded == "this page" || folded == "index" || folded == "contents" ||
-      folded == "table of contents")
-    score -= 80;
-  if (folded.find("this page") != std::string::npos ||
-      folded.find(" table of contents") != std::string::npos)
-    score -= 60;
-
-  if ((int)clean.size() >= 8 && (int)clean.size() <= 80)
-    score += 10;
-  else if ((int)clean.size() < 5)
-    score -= 25;
-
-  return score;
-}
-
-static bool ParseMobiInlineFileposToc(const std::string &markup_utf8,
-                                      u32 text_len,
-                                      std::vector<MobiStructuredTocEntry> *out,
-                                      IStatusReporter *reporter) {
-  if (!out)
-    return false;
-  out->clear();
-  if (markup_utf8.empty())
-    return false;
-
-  size_t full_scan_limit = markup_utf8.size();
-  if (text_len > 0) {
-    size_t hint = (size_t)text_len / 3;
-    if (hint < 256 * 1024)
-      hint = 256 * 1024;
-    if (hint > 1024 * 1024)
-      hint = 1024 * 1024;
-    if (hint < full_scan_limit)
-      full_scan_limit = hint;
-  }
-  if (full_scan_limit > markup_utf8.size())
-    full_scan_limit = markup_utf8.size();
-
-  size_t first_pass_limit = full_scan_limit;
-  if (first_pass_limit > 512 * 1024)
-    first_pass_limit = 384 * 1024;
-
-  std::vector<MobiStructuredTocEntry> raw_entries;
-  raw_entries.reserve(256);
-
-  auto scan_for_entries = [&](size_t scan_limit) {
-    size_t pos = 0;
-    while (pos < scan_limit) {
-      size_t a0 = markup_utf8.find("<a", pos);
-      if (a0 == std::string::npos || a0 >= scan_limit)
-        a0 = FindAsciiNoCase(markup_utf8, "<a", pos, scan_limit);
-      if (a0 == std::string::npos)
-        break;
-
-      size_t tag_end = markup_utf8.find('>', a0 + 2);
-      if (tag_end == std::string::npos || tag_end >= scan_limit)
-        break;
-      if (tag_end <= a0 + 2 || (tag_end - (a0 + 2)) > 640) {
-        pos = tag_end + 1;
-        continue;
-      }
-
-      std::string tag = markup_utf8.substr(a0 + 2, tag_end - (a0 + 2));
-      u32 filepos = kMobiNullIndex;
-      if (!ParseMobiAnchorFilepos(tag, &filepos)) {
-        pos = tag_end + 1;
-        continue;
-      }
-
-      if (filepos == 0 || filepos == kMobiNullIndex) {
-        pos = tag_end + 1;
-        continue;
-      }
-      if (text_len > 0) {
-        u32 allowed_max = text_len + (text_len / 8) + 1024;
-        if (filepos > allowed_max) {
-          pos = tag_end + 1;
-          continue;
-        }
-      }
-
-      const size_t close_probe_limit =
-          std::min(scan_limit, tag_end + (size_t)2048);
-      size_t close = markup_utf8.find("</a", tag_end + 1);
-      if (close == std::string::npos || close >= close_probe_limit)
-        close =
-            FindAsciiNoCase(markup_utf8, "</a", tag_end + 1, close_probe_limit);
-      if (close == std::string::npos || close <= tag_end) {
-        pos = tag_end + 1;
-        continue;
-      }
-
-      size_t inner_len = close - (tag_end + 1);
-      if (inner_len > 512)
-        inner_len = 512;
-      std::string inner = markup_utf8.substr(tag_end + 1, inner_len);
-      std::string title = DecodeMobiAnchorInnerText(inner);
-      if (!IsMobiLikelyTocTitle(title)) {
-        pos = close + 4;
-        continue;
-      }
-
-      MobiStructuredTocEntry e;
-      e.title = title;
-      e.pos = filepos;
-      e.level = 0;
-      raw_entries.push_back(e);
-
-      pos = close + 4;
-      if (raw_entries.size() >= 2048)
-        break;
-    }
-  };
-
-  scan_for_entries(first_pass_limit);
-  size_t used_scan_limit = first_pass_limit;
-  if (raw_entries.size() < 8 && first_pass_limit < full_scan_limit) {
-    raw_entries.clear();
-    scan_for_entries(full_scan_limit);
-    used_scan_limit = full_scan_limit;
-  }
-
-  if (raw_entries.size() < 2)
-    return false;
-
-  // Merge duplicates by filepos and keep the best title for each location.
-  std::map<u32, MobiStructuredTocEntry> by_pos;
-  for (size_t i = 0; i < raw_entries.size(); i++) {
-    const MobiStructuredTocEntry &e = raw_entries[i];
-    auto it = by_pos.find(e.pos);
-    if (it == by_pos.end()) {
-      by_pos[e.pos] = e;
-      continue;
-    }
-    int cur_score = ScoreMobiTocTitle(it->second.title);
-    int new_score = ScoreMobiTocTitle(e.title);
-    if (new_score > cur_score ||
-        (new_score == cur_score && e.title.size() > it->second.title.size())) {
-      it->second = e;
-    }
-  }
-
-  size_t structured_like = 0;
-  size_t low_quality = 0;
-  for (const auto &kv : by_pos) {
-    const MobiStructuredTocEntry &e = kv.second;
-    if (LooksLikeStructuredMobiChapterTitle(e.title))
-      structured_like++;
-    if (ScoreMobiTocTitle(e.title) < 0)
-      low_quality++;
-    if (!out->empty() && out->back().pos == e.pos &&
-        out->back().title == e.title)
-      continue;
-    out->push_back(e);
-  }
-
-  if (out->size() < 2) {
-    out->clear();
-    return false;
-  }
-
-  // Quality gate: avoid replacing heuristic TOC with tiny/noisy filepos sets.
-  size_t min_entries = (text_len > 1000000u) ? 8u : 4u;
-  bool weak_size = out->size() < min_entries;
-  bool weak_structure =
-      (out->size() >= 4 && structured_like * 100 < out->size() * 30);
-  bool weak_quality =
-      (out->size() >= 4 && low_quality * 100 > out->size() * 55);
-  if (weak_size || weak_structure || weak_quality) {
-    if (reporter) {
-      char msg[220];
-      snprintf(
-          msg, sizeof(msg),
-          "MOBI: filepos TOC rejected kept=%u structured=%u lowq=%u min=%u",
-          (unsigned)out->size(), (unsigned)structured_like,
-          (unsigned)low_quality, (unsigned)min_entries);
-      DBG_LOG(reporter, msg);
-    }
-    out->clear();
-    return false;
-  }
-
-  if (reporter) {
-    char msg[224];
-    snprintf(msg, sizeof(msg),
-             "MOBI: filepos TOC entries raw=%u kept=%u structured=%u scan=%uKB",
-             (unsigned)raw_entries.size(), (unsigned)out->size(),
-             (unsigned)structured_like, (unsigned)(used_scan_limit / 1024));
-    DBG_LOG(reporter, msg);
-  }
-  return true;
-}
-
-static bool PrepareMobiStructuredToc(const std::string &raw,
-                                     const std::vector<u32> &offsets,
-                                     u32 ncx_index, u32 encoding,
-                                     const std::string *markup_utf8,
-                                     u32 text_len,
-                                     std::vector<MobiStructuredTocEntry> *out,
-                                     bool *structured_from_filepos,
-                                     IStatusReporter *reporter) {
-  if (!out)
-    return false;
-  out->clear();
-  if (structured_from_filepos)
-    *structured_from_filepos = false;
-
-  // Prefer real NCX/INDX TOC data, but keep the inline filepos fallback for
-  // MOBIs that only embed chapter anchors in the markup itself.
-  if (ParseMobiStructuredToc(raw, offsets, ncx_index, encoding, out, reporter))
-    return true;
-
-  if (markup_utf8 &&
-      ParseMobiInlineFileposToc(*markup_utf8, text_len, out, reporter)) {
-    if (structured_from_filepos)
-      *structured_from_filepos = true;
-    return true;
-  }
-
-  return false;
-}
-
-static bool LoadDeferredMobiStructuredToc(
-    const MobiDeferredState &state, std::vector<MobiStructuredTocEntry> *out,
-    bool *structured_from_filepos, IStatusReporter *reporter) {
-  if (!out)
-    return false;
-  if (structured_from_filepos)
-    *structured_from_filepos = false;
-
-  if (mobi_cache_utils::CopyCachedVectorIfReady(state.structured_toc,
-                                                state.have_structured_toc,
-                                                out)) {
-    if (reporter) {
-      DBG_LOGF(reporter, "MOBI: deferred structured TOC reuse entries=%u",
-               (unsigned)out->size());
-    }
-    return true;
-  }
-
-  out->clear();
-
-  if (!state.markup_utf8.empty() &&
-      ParseMobiInlineFileposToc(state.markup_utf8, state.text_len_for_pos, out,
-                                reporter)) {
-    if (structured_from_filepos)
-      *structured_from_filepos = true;
-    return true;
-  }
-
-  if (state.source_path.empty())
-    return false;
-
-  // Re-open the source only after deferred pagination finishes so TOC
-  // extraction does not hold the initial "opening book" path hostage.
-  std::string raw;
-  if (!file_read_utils::ReadPathToStringLimited(state.source_path.c_str(), &raw,
-                                                kMobiMaxBytes))
-    return false;
-
-  std::vector<u32> offsets;
-  if (!mobi_record_scan::ParseRecordOffsets(raw, &offsets) ||
-      offsets.size() < 3)
-    return false;
-
-  const u8 *data = (const u8 *)raw.data();
-  const u32 rec0_start = offsets[0];
-  const u32 rec0_end = offsets[1];
-  if (rec0_end <= rec0_start || rec0_end - rec0_start < 16)
-    return false;
-  const u8 *rec0 = data + rec0_start;
-  const size_t rec0_len = (size_t)(rec0_end - rec0_start);
-
-  mobi_record_decode::MobiRecord0Header rec0_header;
-  if (!mobi_record_decode::ParseRecord0Header(rec0, rec0_len, &rec0_header))
-    return false;
-  if (rec0_header.compression != 1 && rec0_header.compression != 2 &&
-      rec0_header.compression != 17480)
-    return false;
-
-  u32 max_text_records = (u32)offsets.size() - 2;
-  if (rec0_header.text_rec_count == 0 || rec0_header.text_rec_count > max_text_records)
-    rec0_header.text_rec_count = max_text_records;
-  if (rec0_header.resource_start > 1) {
-    u32 boundary = rec0_header.resource_start - 1;
-    if (boundary > 0 && boundary < rec0_header.text_rec_count)
-      rec0_header.text_rec_count = boundary;
-  }
-
-  if (ParseMobiStructuredToc(raw, offsets, rec0_header.indx_index,
-                             rec0_header.encoding, out, reporter))
-    return true;
-
-  std::string merged;
-  if (!mobi_record_decode::BuildMergedText(raw, offsets, rec0_header, &merged))
-    return false;
-
-  std::string utf8 =
-      DecodeMobiBytesToUtf8(merged, rec0_header.encoding, NULL, NULL);
-  if (ParseMobiInlineFileposToc(utf8,
-                                (rec0_header.text_len > 0)
-                                    ? rec0_header.text_len
-                                    : (u32)merged.size(),
-                                out, reporter)) {
-    if (structured_from_filepos)
-      *structured_from_filepos = true;
-    return true;
-  }
-
-  out->clear();
-  return false;
 }
 
 // html_to_text_map: if non-null, receives (html_byte_offset, text_byte_offset)
