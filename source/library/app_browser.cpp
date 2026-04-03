@@ -881,6 +881,49 @@ void LibraryController::browser_handleevent() {
   LayoutBrowserNavButtons(&app_);
 
   u32 keys = hidKeysDown();
+  auto map_grid_nav = [&](u32 key_down, BrowserNavMove *move) -> bool {
+    if (!move)
+      return false;
+    if (!app_.orientation) {
+      if (key_down & KEY_LEFT) {
+        *move = BROWSER_NAV_LEFT;
+        return true;
+      }
+      if (key_down & KEY_RIGHT) {
+        *move = BROWSER_NAV_RIGHT;
+        return true;
+      }
+      if (key_down & KEY_UP) {
+        *move = BROWSER_NAV_UP;
+        return true;
+      }
+      if (key_down & KEY_DOWN) {
+        *move = BROWSER_NAV_DOWN;
+        return true;
+      }
+      return false;
+    }
+
+    // Turned Right (left-handed): rotate d-pad mapping so directional intent
+    // matches the on-screen grid orientation.
+    if (key_down & KEY_DOWN) {
+      *move = BROWSER_NAV_LEFT;
+      return true;
+    }
+    if (key_down & KEY_UP) {
+      *move = BROWSER_NAV_RIGHT;
+      return true;
+    }
+    if (key_down & KEY_LEFT) {
+      *move = BROWSER_NAV_UP;
+      return true;
+    }
+    if (key_down & KEY_RIGHT) {
+      *move = BROWSER_NAV_DOWN;
+      return true;
+    }
+    return false;
+  };
   const u32 release_mask = KEY_TOUCH | KEY_A | KEY_B | KEY_X | KEY_Y |
                            KEY_START | KEY_SELECT | KEY_UP | KEY_DOWN |
                            KEY_LEFT | KEY_RIGHT | KEY_L | KEY_R | KEY_CPAD_UP |
@@ -914,18 +957,14 @@ void LibraryController::browser_handleevent() {
     app_.SetBrowserDirty(true);
   };
 
+  BrowserNavMove nav_move = BROWSER_NAV_LEFT;
+  const bool has_grid_nav = map_grid_nav(keys, &nav_move);
+
   if (keys & KEY_A) {
     // Open selected book with the primary confirm button.
     app_.OpenBook();
-  }
-  else if (keys & app_.key.left) {
-    navigateSelection(BROWSER_NAV_LEFT);
-  } else if (keys & app_.key.right) {
-    navigateSelection(BROWSER_NAV_RIGHT);
-  } else if (keys & app_.key.up) {
-    navigateSelection(BROWSER_NAV_UP);
-  } else if (keys & app_.key.down) {
-    navigateSelection(BROWSER_NAV_DOWN);
+  } else if (has_grid_nav) {
+    navigateSelection(nav_move);
   } else if (keys & app_.key.l) {
     browser_prevpage();
   } else if (keys & app_.key.r) {
