@@ -36,6 +36,7 @@
 #include "formats/cbz/cbz.h"
 #include "book/page.h"
 #include "formats/common/page_cache_utils.h"
+#include "formats/common/plain_text_stream.h"
 #include "formats/common/page_text_extract_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "parse.h"
@@ -853,54 +854,7 @@ static void FinalizePlainPage(parsedata_t *p) {
   }
 }
 
-struct PlainLineChunk {
-  std::string text;
-  bool has_newline;
-  bool valid;
-};
-
-struct PlainTextStreamState {
-  parsedata_t parsedata;
-  size_t cursor;
-  PlainLineChunk curr;
-  PlainLineChunk next;
-  bool prev_blank;
-  bool prev_candidate;
-  bool detect_heuristic_headings;
-  bool initialized;
-  bool completed;
-  // Running count of text bytes fed to chardata() so far.  Used together with
-  // text_cursor_per_page (in ContinuePlainTextStreamState) to record the exact
-  // text byte offset at the start of each page, enabling precise MOBI TOC
-  // html-pos → page mapping later.
-  size_t text_bytes_fed;
-};
-
-static PlainLineChunk ReadNextLineChunk(const std::string &text,
-                                        size_t *cursor) {
-  PlainLineChunk out;
-  out.text.clear();
-  out.has_newline = false;
-  out.valid = false;
-  if (!cursor)
-    return out;
-  if (*cursor > text.size())
-    return out;
-
-  size_t start = *cursor;
-  size_t end = text.find('\n', start);
-  if (end == std::string::npos) {
-    out.text = text.substr(start);
-    out.has_newline = false;
-    *cursor = text.size() + 1;
-  } else {
-    out.text = text.substr(start, end - start);
-    out.has_newline = true;
-    *cursor = end + 1;
-  }
-  out.valid = true;
-  return out;
-}
+typedef plain_text_stream::State PlainTextStreamState;
 
 static bool InitPlainTextStreamState(Book *book, const std::string &text_utf8,
                                      const BookIoDeps &deps,
@@ -909,25 +863,9 @@ static bool InitPlainTextStreamState(Book *book, const std::string &text_utf8,
   if (!book || !deps.ts || !out)
     return false;
 
-  out->cursor = 0;
-  out->prev_blank = true;
-  out->prev_candidate = false;
-  out->detect_heuristic_headings = detect_heuristic_headings;
-  out->initialized = false;
-  out->completed = false;
-  out->text_bytes_fed = 0;
-  out->curr.text.clear();
-  out->curr.has_newline = false;
-  out->curr.valid = false;
-  out->next.text.clear();
-  out->next.has_newline = false;
-  out->next.valid = false;
-  InitParsedataWithBookIoDeps(&out->parsedata, book, deps);
-  parse_push(&out->parsedata, TAG_PRE);
-
-  out->curr = ReadNextLineChunk(text_utf8, &out->cursor);
-  out->next = ReadNextLineChunk(text_utf8, &out->cursor);
-  out->initialized = true;
+  parsedata_t base{};
+  InitParsedataWithBookIoDeps(&base, book, deps);
+  plain_text_stream::InitState(out, base, text_utf8, detect_heuristic_headings);
   return true;
 }
 
@@ -1070,166 +1008,18 @@ static bool ContinuePlainTextStreamState(PlainTextStreamState *state,
                                          u16 min_pages_before_stop,
                                          std::vector<u32> *text_cursor_per_page,
                                          PlainTextStreamPerf *perf_out) {
-  if (!state || !state->initialized || state->completed)
-    return true;
-
-  const u64 t_begin = osGetTime();
-  const u16 page_start = state->parsedata.book->GetPageCount();
-  u16 last_page_count = state->parsedata.book->GetPageCount();
-  const size_t bytes_before_stream = state->text_bytes_fed;
-  PlainTextPerfBaseline perf_baseline;
-  CapturePlainTextPerfBaseline(state->parsedata, &perf_baseline);
-
-  while (state->curr.valid) {
-    bool curr_blank = false;
-    bool next_blank = false;
-    bool curr_candidate = false;
-    const bool heuristic_headings = state->detect_heuristic_headings;
-    bool curr_keep_with_next = false;
-    if (heuristic_headings) {
-      curr_blank = IsBlankLine(state->curr.text);
-      next_blank = !state->next.valid || IsBlankLine(state->next.text);
-
-      bool curr_strong = false;
-      curr_candidate =
-          LooksLikePlainChapterHeading(state->curr.text, &curr_strong);
-      bool next_strong = false;
-      bool next_candidate =
-          state->next.valid &&
-          LooksLikePlainChapterHeading(state->next.text, &next_strong);
-      curr_keep_with_next =
-          curr_candidate &&
-          ShouldAcceptHeuristicHeading(state->curr.text, state->prev_blank,
-                                       next_blank, state->prev_candidate,
-                                       next_candidate, curr_strong);
-    }
-
-    if (heuristic_headings && curr_keep_with_next) {
-      AddChapterIfUnique(state->parsedata.book, state->curr.text, 0);
-    }
-
-    const size_t bytes_before = state->text_bytes_fed;
-    if (!state->curr.text.empty()) {
-      size_t segment_start = 0;
-      size_t pos = 0;
-      while (pos < state->curr.text.size()) {
-        unsigned char c = (unsigned char)state->curr.text[pos];
-        const InlineImageContext image_context =
-            (c == TEXT_IMAGE_CONTEXT_DEFAULT)
-                ? INLINE_IMAGE_CONTEXT_DEFAULT
-            : (c == TEXT_IMAGE_LEADING_PARAGRAPH)
-                ? INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH
-            : (c == TEXT_IMAGE_FIGURE_WITH_CAPTION)
-                ? INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION
-            : INLINE_IMAGE_CONTEXT_DEFAULT;
-        const bool context_marker =
-            c == TEXT_IMAGE_CONTEXT_DEFAULT ||
-            (c == TEXT_IMAGE_LEADING_PARAGRAPH)
-                || c == TEXT_IMAGE_FIGURE_WITH_CAPTION;
-        const int heading_level =
-            mobi_heading_markers::HeadingLevelFromMarker(c);
-        const bool image_marker =
-            (c == TEXT_IMAGE) ||
-            (context_marker && pos + 1 < state->curr.text.size() &&
-             (unsigned char)state->curr.text[pos + 1] == TEXT_IMAGE);
-        if (heading_level > 0) {
-          if (pos > segment_start) {
-            const size_t len = pos - segment_start;
-            xml::book::chardata(&state->parsedata,
-                                state->curr.text.data() + segment_start,
-                                (int)len);
-            state->text_bytes_fed += len;
-          }
-          ApplyPlainHeadingKeepWithNext(&state->parsedata, heading_level);
-          state->text_bytes_fed += 1;
-          pos++;
-          segment_start = pos;
-          continue;
-        }
-        if (!image_marker) {
-          pos++;
-          continue;
-        }
-
-        if (pos > segment_start) {
-          const size_t len = pos - segment_start;
-          xml::book::chardata(&state->parsedata,
-                              state->curr.text.data() + segment_start, (int)len);
-          state->text_bytes_fed += len;
-        }
-
-        size_t image_pos = pos + (context_marker ? 1 : 0);
-        if (image_pos + 2 >= state->curr.text.size()) {
-          state->text_bytes_fed += state->curr.text.size() - pos;
-          segment_start = state->curr.text.size();
-          break;
-        }
-
-        u16 image_id =
-            (u16)(((u8)state->curr.text[image_pos + 1] << 8) |
-                  (u8)state->curr.text[image_pos + 2]);
-        AppendInlineImageToPlainParsedData(&state->parsedata, image_id,
-                                           image_context);
-        size_t consumed = context_marker ? 4 : 3;
-        state->text_bytes_fed += consumed;
-        pos += consumed;
-        segment_start = pos;
-      }
-
-      if (segment_start < state->curr.text.size()) {
-        const size_t len = state->curr.text.size() - segment_start;
-        xml::book::chardata(&state->parsedata,
-                            state->curr.text.data() + segment_start, (int)len);
-        state->text_bytes_fed += len;
-      }
-    }
-    if (state->curr.has_newline) {
-      xml::book::chardata(&state->parsedata, "\n", 1);
-      state->text_bytes_fed += 1;
-    }
-
-    if (text_cursor_per_page) {
-      const u16 new_page_count = state->parsedata.book->GetPageCount();
-      while (last_page_count < new_page_count) {
-        text_cursor_per_page->push_back((u32)bytes_before);
-        last_page_count++;
-      }
-    }
-
-    state->prev_blank = heuristic_headings ? curr_blank : false;
-    state->prev_candidate = heuristic_headings ? curr_candidate : false;
-    state->curr = state->next;
-    state->next = ReadNextLineChunk(text_utf8, &state->cursor);
-
-    const u16 pages_done = state->parsedata.book->GetPageCount() - page_start;
-    const bool have_min_pages =
-        state->parsedata.book->GetPageCount() >= min_pages_before_stop;
-    if (page_budget > 0 && pages_done >= page_budget && have_min_pages)
-      break;
-    if (budget_ms > 0 && (osGetTime() - t_begin) >= budget_ms && have_min_pages)
-      break;
-  }
-
-  if (!state->curr.valid) {
-    parse_pop(&state->parsedata);
-    FinalizePlainPage(&state->parsedata);
-    if (state->detect_heuristic_headings)
-      SetNonEpubTocConfidence(state->parsedata.book, false);
-    else
-      state->parsedata.book->ClearTocConfidence();
-    state->completed = true;
-  }
-
-  if (perf_out) {
-    const u64 stream_ms = osGetTime() - t_begin;
-    const u32 input_bytes = (u32)(state->text_bytes_fed - bytes_before_stream);
-    const u16 pages_generated =
-        state->parsedata.book->GetPageCount() - page_start;
-    FillPlainTextStreamPerf(state->parsedata, perf_baseline, stream_ms,
-                            input_bytes, pages_generated, perf_out);
-  }
-
-  return state->completed;
+  plain_text_stream::ContinueCallbacks callbacks;
+  callbacks.is_blank_line = IsBlankLine;
+  callbacks.looks_like_plain_chapter_heading = LooksLikePlainChapterHeading;
+  callbacks.should_accept_heuristic_heading = ShouldAcceptHeuristicHeading;
+  callbacks.add_chapter_if_unique = AddChapterIfUnique;
+  callbacks.apply_heading_keep_with_next = ApplyPlainHeadingKeepWithNext;
+  callbacks.append_inline_image_to_parsedata = AppendInlineImageToPlainParsedData;
+  callbacks.finalize_plain_page = FinalizePlainPage;
+  callbacks.set_non_epub_toc_confidence = SetNonEpubTocConfidence;
+  return plain_text_stream::ContinueState(
+      state, text_utf8, budget_ms, page_budget, min_pages_before_stop,
+      text_cursor_per_page, perf_out, callbacks);
 }
 
 static u8 ParsePlainTextBuffer(Book *book, const std::string &text_utf8,
