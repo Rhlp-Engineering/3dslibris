@@ -29,7 +29,7 @@
 #include "formats/mobi/mobi_parser_core.h"
 #include "formats/mobi/mobi_position_map.h"
 #include "formats/mobi/mobi_structured_toc_parser.h"
-#include "formats/mobi/mobi_toc_apply.h"
+#include "formats/mobi/mobi_toc_finalize.h"
 #include "formats/mobi/mobi_toc_resolver.h"
 #include "formats/mobi/mobi_text_cleanup.h"
 #include "formats/pdf/pdf.h"
@@ -87,6 +87,8 @@ using plain_text_perf_utils::LogPlainTextStreamPerf;
 using plain_text_perf_utils::PlainTextPerfBaseline;
 using plain_text_perf_utils::PlainTextStreamPerf;
 using mobi_parser_core::MobiHeaderInfo;
+using mobi_toc_finalize::MobiHeadingHint;
+using mobi_toc_finalize::MobiTocFinalizeResult;
 
 static BookIoDeps BuildBookIoDeps(Book *book) { return BuildBookParseDeps(book); }
 
@@ -1186,11 +1188,6 @@ static void AppendSingleSpace(std::string *out) {
     out->push_back(' ');
 }
 
-struct MobiHeadingHint {
-  std::string title;
-  u8 level;
-};
-
 struct MobiDeferredState {
   PlainTextStreamState stream;
   std::string source_path;
@@ -1274,51 +1271,6 @@ static bool PageHasHeadingNeedle(const std::vector<std::string> &lines,
   return false;
 }
 
-static size_t
-BuildMobiChaptersFromHints(Book *book,
-                           const std::vector<MobiHeadingHint> &hints) {
-  if (!book || hints.empty() || book->GetPageCount() == 0)
-    return 0;
-
-  std::vector<std::vector<std::string>> page_lines;
-  page_lines.resize(book->GetPageCount());
-  for (u16 p = 0; p < book->GetPageCount(); p++)
-    page_lines[p] =
-        page_text_extract_utils::ExtractTextLinesFromPage(book->GetPage(p));
-
-  size_t mapped = 0;
-  u16 scan_start = 0;
-  const u16 page_count = book->GetPageCount();
-  for (size_t i = 0; i < hints.size(); i++) {
-    std::string needle = NormalizeHeadingNeedle(hints[i].title);
-    if (needle.size() < 3)
-      continue;
-
-    int best = -1;
-    for (u16 p = scan_start; p < page_count; p++) {
-      if (PageHasHeadingNeedle(page_lines[p], needle)) {
-        best = (int)p;
-        break;
-      }
-    }
-    if (best < 0 && scan_start > 0) {
-      for (u16 p = 0; p < scan_start; p++) {
-        if (PageHasHeadingNeedle(page_lines[p], needle)) {
-          best = (int)p;
-          break;
-        }
-      }
-    }
-    if (best < 0)
-      continue;
-
-    AddChapterAtPageIfUnique(book, (u16)best, hints[i].title, hints[i].level);
-    mapped++;
-    scan_start = (u16)best;
-  }
-  return mapped;
-}
-
 static std::string MobiTocApplyNormalizeNeedle(const std::string &text) {
   return NormalizeHeadingNeedle(text);
 }
@@ -1334,137 +1286,36 @@ static void MobiTocApplyAddChapterAtPageIfUnique(Book *book, u16 page,
   AddChapterAtPageIfUnique(book, page, title, level);
 }
 
-struct MobiTocFinalizeResult {
-  size_t mapped_chapters;
-  size_t structured_entries;
-  size_t structured_direct;
-  bool structured_from_filepos;
-};
+static size_t MobiTocFinalizePruneFrontMatter(Book *book,
+                                               IStatusReporter *reporter) {
+  return PruneMobiFrontMatterTocCluster(book, reporter);
+}
 
-static void FinalizeMobiPreparedToc(
-    Book *book, IStatusReporter *reporter,
-    const std::vector<MobiStructuredTocEntry> &structured_toc,
-    bool have_structured_toc, bool structured_from_filepos,
-    const std::vector<MobiHeadingHint> &heading_hints, u32 text_len_for_pos,
-    const std::vector<std::pair<u32, u32>> &html_to_text_map,
-    const std::vector<u32> &text_cursor_per_page,
-    MobiTocFinalizeResult *out) {
-  if (!book)
-    return;
-
-  if (out) {
-    out->mapped_chapters = 0;
-    out->structured_entries = structured_toc.size();
-    out->structured_direct = 0;
-    out->structured_from_filepos = structured_from_filepos;
+static bool MobiTocFinalizeIsHeuristicNoisy(
+    Book *book, mobi_toc_finalize::MobiChapterQualityStats *stats_out) {
+  MobiChapterQualityStats local_stats;
+  if (!IsMobiHeuristicChapterSetNoisy(book, stats_out ? &local_stats : NULL))
+    return false;
+  if (stats_out) {
+    stats_out->chapters = local_stats.chapters;
+    stats_out->unique_pages = local_stats.unique_pages;
+    stats_out->early_hits = local_stats.early_hits;
+    stats_out->tiny_titles = local_stats.tiny_titles;
+    stats_out->noisy_titles = local_stats.noisy_titles;
+    stats_out->structured_titles = local_stats.structured_titles;
+    stats_out->early_window = local_stats.early_window;
   }
+  return true;
+}
 
-  size_t mapped_chapters = 0;
-  size_t mapped_structured = 0;
-  size_t structured_direct = 0;
-  bool structured_used = false;
-
-  if (have_structured_toc) {
-    const std::vector<ChapterEntry> fallback = book->GetChapters();
-    book->ClearChapters();
-    mobi_toc_apply::BuildCallbacks toc_callbacks;
-    toc_callbacks.normalize_heading_needle = MobiTocApplyNormalizeNeedle;
-    toc_callbacks.page_has_heading_needle = MobiTocApplyPageHasNeedle;
-    toc_callbacks.add_chapter_at_page_if_unique =
-        MobiTocApplyAddChapterAtPageIfUnique;
-    mapped_structured = mobi_toc_apply::BuildChaptersFromStructuredToc(
-        book, structured_toc, text_len_for_pos, &structured_direct,
-        !structured_from_filepos, html_to_text_map, text_cursor_per_page,
-        toc_callbacks, reporter);
-    if (mapped_structured >= 2) {
-      structured_used = true;
-      PruneMobiFrontMatterTocCluster(book, reporter);
-      mapped_structured = book->GetChapters().size();
-
-      u16 direct = (structured_direct > 65535) ? 65535 : (u16)structured_direct;
-      u16 unresolved = 0;
-      if (structured_toc.size() > mapped_structured) {
-        size_t miss = structured_toc.size() - mapped_structured;
-        unresolved = (miss > 65535) ? 65535 : (u16)miss;
-      }
-      TocQuality quality = TOC_QUALITY_MIXED;
-      if (unresolved == 0 && mapped_structured > 0 &&
-          structured_direct * 100 >= mapped_structured * 85) {
-        quality = TOC_QUALITY_STRONG;
-      }
-      book->SetTocConfidence(quality, direct, 0, unresolved);
-      mapped_chapters = mapped_structured;
-      if (reporter && structured_from_filepos) {
-        char msg[160];
-        snprintf(msg, sizeof(msg),
-                 "MOBI: filepos TOC mapped=%u direct=%u unresolved=%u",
-                 (unsigned)mapped_structured, (unsigned)direct,
-                 (unsigned)unresolved);
-        DBG_LOG(reporter, msg);
-      }
-    } else {
-      book->ClearChapters();
-      for (size_t i = 0; i < fallback.size(); i++) {
-        book->AddChapter(fallback[i].page, fallback[i].title,
-                         fallback[i].level);
-      }
-    }
-  }
-
-  size_t mapped_hints = 0;
-  if (!structured_used && !heading_hints.empty()) {
-    const std::vector<ChapterEntry> fallback = book->GetChapters();
-    book->ClearChapters();
-    mapped_hints = BuildMobiChaptersFromHints(book, heading_hints);
-    if (mapped_hints < 2) {
-      book->ClearChapters();
-      for (size_t i = 0; i < fallback.size(); i++) {
-        book->AddChapter(fallback[i].page, fallback[i].title,
-                         fallback[i].level);
-      }
-    } else {
-      mapped_chapters = mapped_hints;
-    }
-  }
-
-  if (!structured_used && mapped_hints >= 2) {
-    u16 mapped = (mapped_hints > 65535) ? 65535 : (u16)mapped_hints;
-    u16 unresolved = 0;
-    if (heading_hints.size() > mapped_hints) {
-      size_t miss = heading_hints.size() - mapped_hints;
-      unresolved = (miss > 65535) ? 65535 : (u16)miss;
-    }
-    TocQuality quality =
-        (unresolved == 0) ? TOC_QUALITY_STRONG : TOC_QUALITY_MIXED;
-    book->SetTocConfidence(quality, mapped, 0, unresolved);
-  } else if (!structured_used) {
-    PruneMobiFrontMatterTocCluster(book, reporter);
-
-    MobiChapterQualityStats q;
-    if (IsMobiHeuristicChapterSetNoisy(book, &q)) {
-      book->ClearChapters();
-      book->ClearTocConfidence();
-      if (reporter) {
-        char msg[224];
-        snprintf(
-            msg, sizeof(msg),
-            "MOBI: TOC heuristic rejected ch=%u uniq=%u early=%u/%u noisy=%u "
-            "structured=%u win<=%u",
-            (unsigned)q.chapters, (unsigned)q.unique_pages,
-            (unsigned)q.early_hits, (unsigned)q.chapters,
-            (unsigned)(q.tiny_titles + q.noisy_titles),
-            (unsigned)q.structured_titles, (unsigned)q.early_window);
-        DBG_LOG(reporter, msg);
-      }
-    }
-  }
-
-  if (out) {
-    out->mapped_chapters = mapped_chapters;
-    out->structured_entries = structured_toc.size();
-    out->structured_direct = structured_direct;
-    out->structured_from_filepos = structured_from_filepos;
-  }
+static mobi_toc_finalize::FinalizeCallbacks MakeMobiTocFinalizeCallbacks() {
+  mobi_toc_finalize::FinalizeCallbacks callbacks;
+  callbacks.normalize_heading_needle = MobiTocApplyNormalizeNeedle;
+  callbacks.page_has_heading_needle = MobiTocApplyPageHasNeedle;
+  callbacks.add_chapter_at_page_if_unique = MobiTocApplyAddChapterAtPageIfUnique;
+  callbacks.prune_front_matter_toc_cluster = MobiTocFinalizePruneFrontMatter;
+  callbacks.is_heuristic_chapter_set_noisy = MobiTocFinalizeIsHeuristicNoisy;
+  return callbacks;
 }
 
 static bool MobiInlineLooksLikeStructuredTitle(const std::string &title) {
@@ -2472,11 +2323,12 @@ static void FinalizeImmediateMobiParse(Book *book, const char *path,
         deferred->text_len_for_pos, &deferred->structured_toc,
         &deferred->structured_from_filepos, reporter);
   }
-  FinalizeMobiPreparedToc(
+  mobi_toc_finalize::FinalizePreparedToc(
       book, reporter, deferred->structured_toc, deferred->have_structured_toc,
       deferred->structured_from_filepos, deferred->heading_hints,
       deferred->text_len_for_pos, deferred->html_to_text_map,
-      deferred->text_cursor_per_page, toc_result);
+      deferred->text_cursor_per_page, MakeMobiTocFinalizeCallbacks(),
+      toc_result);
   deferred->t_after_toc = osGetTime();
   SaveMobiPageCache(book, path, deps, deferred->line_wrap_fix_applied);
   book->MarkMobiRenderSettingsApplied(deferred->line_wrap_fix_applied);
@@ -2732,12 +2584,12 @@ static bool FinalizeDeferredMobiState(Book *book, MobiDeferredState *state) {
     return false;
   case mobi_deferred_finalize_utils::FinalizeStage::ApplyToc: {
     MobiTocFinalizeResult toc_result;
-    FinalizeMobiPreparedToc(book, reporter, state->structured_toc,
-                            state->have_structured_toc,
-                            state->structured_from_filepos,
-                            state->heading_hints, state->text_len_for_pos,
-                            state->html_to_text_map,
-                            state->text_cursor_per_page, &toc_result);
+    mobi_toc_finalize::FinalizePreparedToc(
+        book, reporter, state->structured_toc, state->have_structured_toc,
+        state->structured_from_filepos, state->heading_hints,
+        state->text_len_for_pos, state->html_to_text_map,
+        state->text_cursor_per_page, MakeMobiTocFinalizeCallbacks(),
+        &toc_result);
     state->t_after_toc = osGetTime();
     state->toc_applied = true;
 
