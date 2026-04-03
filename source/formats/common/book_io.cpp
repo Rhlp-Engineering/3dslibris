@@ -16,30 +16,24 @@
 #include "formats/common/book_error.h"
 #include "debug_log.h"
 #include "formats/common/plain_parser.h"
-#include "formats/common/plain_text_perf_utils.h"
 #include "formats/mobi/mobi.h"
 #include "formats/mobi/mobi_deferred_runtime.h"
 #include "formats/mobi/mobi_markup_extract.h"
 #include "formats/mobi/mobi_parser.h"
+#include "formats/common/xml_book_parser.h"
 #include "formats/mobi/mobi_toc_finalize.h"
 #include "formats/mobi/mobi_toc_prepare.h"
 #include "formats/mobi/mobi_text_decode.h"
 #include "formats/pdf/pdf.h"
 #include "formats/cbz/cbz.h"
 #include "formats/common/page_cache_utils.h"
-#include "formats/common/xml_parse_utils.h"
-#include "parse.h"
 #include "formats/odt/odt_loader.h"
-#include "shared/parser_limits.h"
 #include "string_utils.h"
-#include "shared/utf8_utils.h"
 #include <algorithm>
 #include <ctype.h>
 #include <set>
 #include <stdio.h>
-#include <string.h>
 #include <sys/param.h>
-#include <sys/stat.h>
 #include <utility>
 #include <vector>
 
@@ -48,25 +42,9 @@ namespace {
 static const size_t kPlainTextMaxBytes = 12 * 1024 * 1024;
 
 typedef BookParseDeps BookIoDeps;
-using plain_text_perf_utils::CapturePlainTextPerfBaseline;
-using plain_text_perf_utils::FillPlainTextStreamPerf;
-using plain_text_perf_utils::LogPlainTextStreamPerf;
-using plain_text_perf_utils::PlainTextPerfBaseline;
-using plain_text_perf_utils::PlainTextStreamPerf;
 using mobi_toc_finalize::MobiHeadingHint;
 
 static BookIoDeps BuildBookIoDeps(Book *book) { return BuildBookParseDeps(book); }
-
-static void InitParsedataWithBookIoDeps(parsedata_t *parsedata, Book *book,
-                                        const BookIoDeps &deps) {
-  if (!parsedata)
-    return;
-  parse_init(parsedata);
-  parsedata->reporter = deps.reporter;
-  parsedata->ts = deps.ts;
-  parsedata->prefs = deps.prefs;
-  parsedata->book = book;
-}
 
 static std::string DecodeMobiBytesToUtf8(const std::string &in, u32 encoding,
                                          bool *used_utf8_guess,
@@ -362,73 +340,11 @@ u8 Book::Parse(bool fulltext) {
   if (fulltext && HasExtCI(GetFileName(), ".cbz"))
     return ParseCbzFile(this, path);
 
-  FILE *fp = fopen(path, "r");
-  if (!fp) {
-    rc = 255;
-    return (rc);
-  }
-
   const BookIoDeps deps = BuildBookIoDeps(this);
-  parsedata_t parsedata;
-  InitParsedataWithBookIoDeps(&parsedata, this, deps);
-  parsedata.fb2_mode = fulltext && HasExtCI(GetFileName(), ".fb2");
-#ifdef DSLIBRIS_DEBUG
-  const u64 xml_parse_begin = osGetTime();
-  const u16 xml_pages_before = GetPageCount();
-#endif
-  PlainTextPerfBaseline xml_perf_baseline;
-  CapturePlainTextPerfBaseline(parsedata, &xml_perf_baseline);
-
-  xml_parse_utils::XmlParserOptions options;
-  options.user_data = &parsedata;
-  options.default_handler = xml::book::fallback;
-  options.processing_instruction = xml::book::instruction;
-  options.start_element = xml::book::start;
-  options.end_element = xml::book::end;
-  options.character_data = xml::book::chardata;
-  if (!fulltext) {
-    options.start_element = xml::book::metadata::start;
-    options.end_element = xml::book::metadata::end;
-    options.character_data = xml::book::metadata::chardata;
-  }
-  xml_parse_utils::XmlParseResult parse_result =
-      xml_parse_utils::ParseXmlFileStream(
-          fp, options, parser_limits::kXmlStreamBufferSize,
-          [](void *user_data) {
-            parsedata_t *parsedata = static_cast<parsedata_t *>(user_data);
-            return parsedata && parsedata->status;
-          });
-  fclose(fp);
-  if (!parse_result.ok) {
-    if (deps.reporter)
-      deps.reporter->PrintStatus(
-          xml_parse_utils::FormatXmlParseError(parse_result).c_str());
-    rc = 254;
-  }
-
-  if (rc == 0 && fulltext && parsedata.fb2_mode) {
-    bool has_structured_toc = !chapters.empty();
-    if (!has_structured_toc)
-      plain_parser::BuildFb2FallbackChapters(this);
-    if (!chapters.empty())
-      plain_parser::SetNonEpubTocConfidence(this, has_structured_toc);
-    else
-      ClearTocConfidence();
-  }
-
-#ifdef DSLIBRIS_DEBUG
-  if (deps.reporter && fulltext) {
-    PlainTextStreamPerf perf;
-    FillPlainTextStreamPerf(parsedata, xml_perf_baseline,
-                            osGetTime() - xml_parse_begin, 0,
-                            GetPageCount() - xml_pages_before, &perf);
-    LogPlainTextStreamPerf(
-        deps.reporter, parsedata.fb2_mode ? "FB2 layout" : "XML layout", perf,
-        rc == 0);
-  }
-#endif
-
-  return (rc);
+  rc = xml_book_parser::ParseXmlBookFile(
+      this, path, fulltext, deps, plain_parser::BuildFb2FallbackChapters,
+      plain_parser::SetNonEpubTocConfidence);
+  return rc;
 }
 
 bool Book::HasDeferredMobiParse() const {
