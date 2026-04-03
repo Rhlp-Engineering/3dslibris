@@ -16,7 +16,6 @@
 #include "formats/common/buffered_status_log.h"
 #include "formats/common/book_error.h"
 #include "debug_log.h"
-#include "formats/epub/epub.h"
 #include "formats/common/file_read_utils.h"
 #include "book/heading_layout.h"
 #include "path_utils.h"
@@ -1701,46 +1700,6 @@ static bool ContinueDeferredMobiState(Book *book, MobiDeferredState *state,
 }
 
 } // namespace
-
-u8 Book::Open() {
-  PrepareForOpen();
-  return OpenPrepared();
-}
-
-u8 Book::Index() {
-  if (metadataIndexTried)
-    return metadataIndexed ? 0 : 1;
-  metadataIndexTried = true;
-
-  int err = 1;
-  if (format == FORMAT_EPUB) {
-    std::string path;
-    path.append(GetFolderName());
-    path.append("/");
-    path.append(GetFileName());
-    err = epub(this, path, true);
-  } else if (format == FORMAT_PDF) {
-    std::string path;
-    path.append(GetFolderName());
-    path.append("/");
-    path.append(GetFileName());
-    err = IndexPdfMetadata(this, path.c_str());
-  } else if (format == FORMAT_CBZ) {
-    std::string path;
-    path.append(GetFolderName());
-    path.append("/");
-    path.append(GetFileName());
-    err = IndexCbzMetadata(this, path.c_str());
-  } else {
-    // Non-EPUB files currently use filename labels in browser; defer full parse
-    // until open to keep startup responsive.
-    err = 0;
-  }
-  if (!err) {
-    metadataIndexed = true;
-  }
-  return err;
-}
 
 u8 Book::Parse(bool fulltext) {
   //! Parse full text (true) or titles only (false).
