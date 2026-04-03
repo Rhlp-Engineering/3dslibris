@@ -29,6 +29,7 @@
 #include "formats/mobi/mobi_markup_tag.h"
 #include "formats/mobi/mobi_position_map.h"
 #include "formats/mobi/mobi_record_decode.h"
+#include "formats/mobi/mobi_record_scan.h"
 #include "formats/mobi/mobi_text_cleanup.h"
 #include "formats/pdf/pdf.h"
 #include "formats/cbz/cbz.h"
@@ -1310,35 +1311,6 @@ static u8 ParseRtfFile(Book *book, const char *path) {
   return ParsePlainTextBuffer(book, text);
 }
 
-static u16 ReadBE16(const u8 *p) { return (u16)((u16)p[0] << 8 | (u16)p[1]); }
-
-static u32 ReadBE32(const u8 *p) {
-  return (u32)((u32)p[0] << 24 | (u32)p[1] << 16 | (u32)p[2] << 8 | (u32)p[3]);
-}
-
-static bool ParseMobiOffsets(const std::string &raw,
-                             std::vector<u32> *offsets) {
-  if (!offsets || raw.size() < 78)
-    return false;
-
-  const u8 *buf = (const u8 *)raw.data();
-  const u16 rec_count = ReadBE16(buf + 76);
-  if (rec_count == 0 || raw.size() < 78 + (size_t)rec_count * 8)
-    return false;
-
-  offsets->assign((size_t)rec_count + 1, 0);
-  for (u16 i = 0; i < rec_count; i++) {
-    u32 off = ReadBE32(buf + 78 + (size_t)i * 8);
-    if (off >= raw.size())
-      return false;
-    if (i > 0 && off < (*offsets)[(size_t)i - 1])
-      return false;
-    (*offsets)[i] = off;
-  }
-  (*offsets)[(size_t)rec_count] = (u32)raw.size();
-  return true;
-}
-
 static const u32 kMobiNullIndex = 0xFFFFFFFFu;
 
 struct MobiStructuredTocEntry {
@@ -1428,10 +1400,10 @@ static bool ParseMobiIndxHeader(const u8 *data, size_t len,
     return false;
   if (memcmp(data, "INDX", 4) != 0)
     return false;
-  out->start = ReadBE32(data + 20);
-  out->count = ReadBE32(data + 24);
-  out->ncncx = ReadBE32(data + 52);
-  out->tagx = ReadBE32(data + 180);
+  out->start = (u32)mobi_record_scan::ReadBE32(data + 20);
+  out->count = (u32)mobi_record_scan::ReadBE32(data + 24);
+  out->ncncx = (u32)mobi_record_scan::ReadBE32(data + 52);
+  out->tagx = (u32)mobi_record_scan::ReadBE32(data + 180);
   out->header_end = 184;
   return true;
 }
@@ -1447,8 +1419,8 @@ static bool ParseMobiTagxSection(const u8 *data, size_t len, size_t tagx_start,
   if (tagx_start + 12 > len || memcmp(data + tagx_start, "TAGX", 4) != 0)
     return false;
 
-  const u32 first_entry_off = ReadBE32(data + tagx_start + 4);
-  *control_bytes = ReadBE32(data + tagx_start + 8);
+  const u32 first_entry_off = (u32)mobi_record_scan::ReadBE32(data + tagx_start + 4);
+  *control_bytes = (u32)mobi_record_scan::ReadBE32(data + tagx_start + 8);
   if (first_entry_off < 12 || tagx_start + first_entry_off > len)
     return false;
 
@@ -1689,7 +1661,8 @@ static bool ParseMobiStructuredToc(const std::string &raw,
     std::vector<size_t> idx_positions;
     idx_positions.reserve((size_t)hdr.count + 1);
     for (u32 i = 0; i < hdr.count; i++) {
-      const size_t pos = (size_t)ReadBE16(rec + hdr.start + 4 + i * 2);
+      const size_t pos =
+          (size_t)mobi_record_scan::ReadBE16(rec + hdr.start + 4 + i * 2);
       if (pos >= rec_len || pos >= (size_t)hdr.start)
         continue;
       idx_positions.push_back(pos);
@@ -2863,7 +2836,8 @@ static bool LoadDeferredMobiStructuredToc(
     return false;
 
   std::vector<u32> offsets;
-  if (!ParseMobiOffsets(raw, &offsets) || offsets.size() < 3)
+  if (!mobi_record_scan::ParseRecordOffsets(raw, &offsets) ||
+      offsets.size() < 3)
     return false;
 
   const u8 *data = (const u8 *)raw.data();
@@ -3625,7 +3599,8 @@ static u8 ParseMobiHeader(const std::string &raw, MobiHeaderInfo *header) {
     return 254;
 
   header->offsets.clear();
-  if (!ParseMobiOffsets(raw, &header->offsets) || header->offsets.size() < 3)
+  if (!mobi_record_scan::ParseRecordOffsets(raw, &header->offsets) ||
+      header->offsets.size() < 3)
     return BOOK_ERR_CORRUPT;
 
   const u8 *data = (const u8 *)raw.data();
