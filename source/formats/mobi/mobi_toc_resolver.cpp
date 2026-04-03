@@ -16,6 +16,7 @@
 #include "formats/common/file_read_utils.h"
 #include "formats/mobi/mobi_record_decode.h"
 #include "formats/mobi/mobi_record_scan.h"
+#include "shared/status_reporter.h"
 
 namespace {
 

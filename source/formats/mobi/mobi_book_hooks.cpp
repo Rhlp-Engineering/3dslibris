@@ -8,6 +8,7 @@
 #include "formats/mobi/mobi_text_decode.h"
 #include "formats/mobi/mobi_toc_finalize.h"
 #include "formats/mobi/mobi_toc_prepare.h"
+#include "shared/status_reporter.h"
 
 #include <ctype.h>
 #include <set>

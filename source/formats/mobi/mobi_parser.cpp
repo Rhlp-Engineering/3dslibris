@@ -12,6 +12,7 @@
 #include "formats/mobi/mobi_text_cleanup.h"
 #include "formats/mobi/mobi_text_decode.h"
 #include "parse.h"
+#include "shared/status_reporter.h"
 #include "ui/text.h"
 
 #include <stdio.h>

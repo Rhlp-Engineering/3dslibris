@@ -8,6 +8,7 @@
 #include "formats/common/page_text_extract_utils.h"
 #include "formats/mobi/mobi_toc_apply.h"
 #include "debug_log.h"
+#include "shared/status_reporter.h"
 
 #include <algorithm>
 
