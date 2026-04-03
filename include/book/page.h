@@ -41,7 +41,7 @@ class Book;
 class Page {
 	class Book *book;
 	std::vector<u8> storage;
-	void DrawNumber(Text *ts);
+	void DrawNumber(Text *ts, u16 *number_screen);
 	void SyncBufferAlias();
 
  public:

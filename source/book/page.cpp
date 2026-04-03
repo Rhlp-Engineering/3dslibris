@@ -93,6 +93,17 @@ void Page::Draw(Text *ts) {
   // On the 320px screen we only need a small footer for page number.
   int rightBottomMargin =
       (savedBottomMargin > 16) ? 16 : savedBottomMargin;
+  const bool turned_right = (book && book->GetOrientation() != 0);
+  u16 *first_screen = turned_right ? ts->screenright : ts->screenleft;
+  u16 *second_screen = turned_right ? ts->screenleft : ts->screenright;
+
+  auto screen_bottom_margin = [&](u16 *screen) -> int {
+    return (screen == ts->screenleft) ? leftBottomMargin : rightBottomMargin;
+  };
+
+  auto screen_max_height = [&](u16 *screen) -> int {
+    return (screen == ts->screenleft) ? 400 : 320;
+  };
 
   //! Write to offscreen buffer, then blit to video memory, for both screens.
   ts->InitPen();
@@ -105,19 +116,19 @@ void Page::Draw(Text *ts) {
   auto pushscreen = ts->screen;
   ts->SetScreen(ts->offscreen);
 #else
-  ts->SetScreen(ts->screenleft);
+  ts->SetScreen(first_screen);
 #endif
 
   auto advance_to_next_screen = [&]() -> bool {
-    if (ts->GetScreen() == ts->screenleft) {
+    if (ts->GetScreen() == first_screen) {
 #ifdef OFFSCREEN
-      ts->SetScreen(ts->screenleft);
+      ts->SetScreen(second_screen);
       ts->CopyScreen(ts->offscreen, ts->screen);
       ts->SetScreen(ts->offscreen);
 #else
-      ts->SetScreen(ts->screenright);
+      ts->SetScreen(second_screen);
 #endif
-      ts->margin.bottom = rightBottomMargin;
+      ts->margin.bottom = screen_bottom_margin(second_screen);
       ts->ClearScreen();
       ts->InitPen();
       ts->linebegan = false;
@@ -125,13 +136,13 @@ void Page::Draw(Text *ts) {
     }
     return false;
   };
-  ts->margin.bottom = leftBottomMargin;
+  ts->margin.bottom = screen_bottom_margin(first_screen);
   // Clear both page buffers through Text API so dirty flags stay coherent.
   ts->SetScreen(ts->screenleft);
   ts->ClearScreen();
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
-  ts->SetScreen(ts->screenleft);
+  ts->SetScreen(first_screen);
 
   u16 i = 0;
   InlineImageContext next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;
@@ -142,23 +153,21 @@ void Page::Draw(Text *ts) {
       i++;
       next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;
 
-      int maxHeight = (ts->GetScreen() == ts->screenleft) ? 400 : 320;
-      int currentBottomMargin =
-          (ts->GetScreen() == ts->screenleft) ? leftBottomMargin
-                                              : rightBottomMargin;
+      int maxHeight = screen_max_height(ts->GetScreen());
+      int currentBottomMargin = screen_bottom_margin(ts->GetScreen());
       ts->margin.bottom = currentBottomMargin;
       if (ts->GetPenY() + ts->GetHeight() + ts->linespacing >
           maxHeight - currentBottomMargin) {
-        // Move to right page
-        if (ts->GetScreen() == ts->screenleft) {
+        // Move to second page
+        if (ts->GetScreen() == first_screen) {
 #ifdef OFFSCREEN
-          ts->SetScreen(ts->screenleft);
+          ts->SetScreen(second_screen);
           ts->CopyScreen(ts->offscreen, ts->screen);
           ts->SetScreen(ts->offscreen);
 #else
-          ts->SetScreen(ts->screenright);
+          ts->SetScreen(second_screen);
 #endif
-          ts->margin.bottom = rightBottomMargin;
+          ts->margin.bottom = screen_bottom_margin(second_screen);
           ts->ClearScreen();
           ts->InitPen();
           ts->linebegan = false;
@@ -194,7 +203,7 @@ void Page::Draw(Text *ts) {
         i += 3;
 
         InlineImageLayoutPlan image_plan{};
-        int current_screen = (ts->GetScreen() == ts->screenleft) ? 0 : 1;
+        int current_screen = (ts->GetScreen() == first_screen) ? 0 : 1;
         book->PlanInlineImageLayout(ts, image_id, current_screen, ts->GetPenX(),
                                     ts->GetPenY(), ts->linebegan, next_image_context,
                                     &image_plan);
@@ -264,16 +273,16 @@ void Page::Draw(Text *ts) {
     }
   }
 
-  DrawNumber(ts);
+  DrawNumber(ts, second_screen);
 #ifdef OFFSCREEN
-  ts->SetScreen(ts->screenright);
+  ts->SetScreen(second_screen);
   ts->CopyScreen(ts->offscreen, ts->screen);
   ts->SetScreen(pushscreen);
 #endif
   ts->margin.bottom = savedBottomMargin;
 }
 
-void Page::DrawNumber(Text *ts) {
+void Page::DrawNumber(Text *ts, u16 *number_screen) {
   //! Draw page number on current screen.
   char msg[64];
 
@@ -312,15 +321,17 @@ void Page::DrawNumber(Text *ts) {
   // Position page number in horizontal proportion
   // to our current progress in the book.
   int stringwidth = ts->GetStringAdvance(msg);
-  // Put it at the bottom-right corner of the right screen.
+  // Put it at the bottom-right corner of the second reading screen.
   int location = ts->display.width - ts->margin.right - stringwidth - 4;
 
   // UI elements should not be clipped by page margins.
   int savedBottomMargin = ts->margin.bottom;
   ts->margin.bottom = 0;
 
-  ts->SetScreen(ts->screenright); // Screen 1 is the physically 320px tall screen
-  ts->SetPen((u8)location, 310);
+  u16 *target = number_screen ? number_screen : ts->screenright;
+  ts->SetScreen(target);
+  const int baseline_y = (target == ts->screenleft) ? 390 : 310;
+  ts->SetPen((u8)location, (u16)baseline_y);
   ts->PrintString(msg);
   ts->margin.bottom = savedBottomMargin;
 }
