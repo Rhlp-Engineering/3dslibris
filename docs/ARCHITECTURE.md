@@ -181,7 +181,7 @@ TXT and RTF loaders, text normalization helpers, MOBI page cache, MOBI parser co
 
 **Impact:** TXT and RTF changes no longer touch book_io.cpp. MOBI and ODT still require navigating a large file.
 
-**Future direction:** Extract ODT to its own module (requires decoupling from `FinalizePlainPage`). In MOBI, continue with parser split (`mobi_parser.cpp`) and TOC-application mapping/refine split.
+**Future direction:** Keep `book_io.cpp` as thin dispatch + shared plain-text helpers. In MOBI, continue with parser split (`mobi_parser.cpp`) and deferred-open lifecycle split (state machine + finalize stages).
 
 ### 4. Formats extracted from book_io.cpp
 The following modules were extracted to improve testability and reduce monolith size:
