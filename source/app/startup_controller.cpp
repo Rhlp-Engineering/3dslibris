@@ -9,6 +9,7 @@
 #include "book/book.h"
 #include "debug_log.h"
 #include "main.h"
+#include "path_utils.h"
 #include "settings/prefs.h"
 #include "ui/text.h"
 #include "version.h"

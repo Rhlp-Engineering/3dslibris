@@ -11,6 +11,7 @@
 #include "book/book.h"
 #include "book/book_context.h"
 #include "debug_log.h"
+#include "path_utils.h"
 #include "shared/app_flow_utils.h"
 #include "shared/utf8_utils.h"
 

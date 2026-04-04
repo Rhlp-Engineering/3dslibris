@@ -22,9 +22,9 @@
 
 #include "app/app.h"
 #include "ui/button.h"
-#include "main.h"
+#include "font_constants.h"
 #include "settings/prefs.h"
-#include "string_utils.h"
+#include "shared/string_utils.h"
 #include "ui/text.h"
 #include "ui/touch_utils.h"
 
