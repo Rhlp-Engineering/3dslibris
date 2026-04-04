@@ -12,7 +12,7 @@
 #include "book/page.h"
 #include "formats/epub/epub_toc_diag_utils.h"
 #include "string_utils.h"
-#include "ui/text.h"
+#include "ui/text_tokens.h"
 
 namespace {
 

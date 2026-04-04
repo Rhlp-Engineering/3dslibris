@@ -13,7 +13,6 @@
 #include "formats/mobi/mobi_text_decode.h"
 #include "parse.h"
 #include "shared/status_reporter.h"
-#include "ui/text.h"
 
 #include <stdio.h>
 #include <sys/param.h>
@@ -50,7 +49,7 @@ static bool TryLoadMobiPageCache(Book *book, const char *book_path,
   if (!book || !book_path || !deps.reporter || !deps.ts)
     return false;
   Text *ts = deps.ts;
-  std::string font = ts->GetFontFile(TEXT_STYLE_REGULAR);
+  std::string font = deps.regular_font_path;
   return mobi_page_cache::TryLoad(
       book, book_path, (int)ts->GetPixelSize(), (int)ts->linespacing,
       deps.paragraph_spacing, deps.paragraph_indent, deps.orientation,
@@ -65,7 +64,7 @@ static void SaveMobiPageCache(Book *book, const char *book_path,
       book->GetPageCount() == 0)
     return;
   Text *ts = deps.ts;
-  std::string font = ts->GetFontFile(TEXT_STYLE_REGULAR);
+  std::string font = deps.regular_font_path;
   mobi_page_cache::Save(book, book_path, (int)ts->GetPixelSize(),
                         (int)ts->linespacing, deps.paragraph_spacing,
                         deps.paragraph_indent, deps.orientation,

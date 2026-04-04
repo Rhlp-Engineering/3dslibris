@@ -8,7 +8,7 @@
 
 #include "book/book_xml.h"
 #include "formats/mobi/mobi_heading_markers.h"
-#include "ui/text.h"
+#include "ui/text_tokens.h"
 
 namespace plain_text_stream {
 
