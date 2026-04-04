@@ -34,3 +34,5 @@
 
 # Runtime logs (on host-side tests)
 *.log
+*.bak
+.worktrees/
