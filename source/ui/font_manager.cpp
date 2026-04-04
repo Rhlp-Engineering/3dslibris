@@ -7,6 +7,7 @@
 
 #include "app/app.h"
 #include "font_constants.h"
+#include "path_utils.h"
 #include "screen_constants.h"
 #include "ui/text.h"
 #include "ui/text_cache_utils.h"

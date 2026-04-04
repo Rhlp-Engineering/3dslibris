@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "app/app.h"
+#include "path_utils.h"
 #include "version.h"
 
 static void PresentCurrentFrameToBothBuffers(Text *presenter) {
