@@ -25,14 +25,6 @@
 #include <unordered_map>
 #include <vector>
 
-typedef enum {
-  FORMAT_UNDEF,
-  FORMAT_XHTML,
-  FORMAT_EPUB,
-  FORMAT_PDF,
-  FORMAT_CBZ
-} format_t;
-
 class IStatusReporter;
 class Page;
 class Text;

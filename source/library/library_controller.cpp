@@ -20,22 +20,6 @@
 
 namespace {
 
-static format_t ToBookFormat(app_flow_utils::BookFileFormat format) {
-  switch (format) {
-  case app_flow_utils::BookFileFormat::Epub:
-    return FORMAT_EPUB;
-  case app_flow_utils::BookFileFormat::MuPdf:
-    return FORMAT_PDF;
-  case app_flow_utils::BookFileFormat::Cbz:
-    return FORMAT_CBZ;
-  case app_flow_utils::BookFileFormat::XhtmlLike:
-    return FORMAT_XHTML;
-  case app_flow_utils::BookFileFormat::Unsupported:
-  default:
-    return FORMAT_UNDEF;
-  }
-}
-
 static bool BookTitleLessThan(Book *a, Book *b) {
   return strcasecmp(a->GetTitle(), b->GetTitle()) < 0;
 }
@@ -121,7 +105,7 @@ static void AppendBookFromFilename(App *app, const std::string &source_dir,
                                    const char *filename) {
   if (!app || !app_flow_utils::ShouldIndexBookFilename(filename))
     return;
-  format_t format = ToBookFormat(app_flow_utils::DetectBookFormat(filename));
+  format_t format = app_flow_utils::DetectBookFormat(filename);
   if (format == FORMAT_UNDEF)
     return;
 

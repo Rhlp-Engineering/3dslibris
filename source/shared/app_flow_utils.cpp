@@ -17,23 +17,23 @@ bool EndsWithNoCase(const char *value, const char *suffix) {
 
 } // namespace
 
-BookFileFormat DetectBookFormat(const char *filename) {
+format_t DetectBookFormat(const char *filename) {
   if (!filename)
-    return BookFileFormat::Unsupported;
+    return FORMAT_UNDEF;
   if (EndsWithNoCase(filename, ".epub"))
-    return BookFileFormat::Epub;
+    return FORMAT_EPUB;
   if (EndsWithNoCase(filename, ".pdf") || EndsWithNoCase(filename, ".xps") ||
       EndsWithNoCase(filename, ".oxps"))
-    return BookFileFormat::MuPdf;
+    return FORMAT_PDF;
   if (EndsWithNoCase(filename, ".cbz"))
-    return CbzSupportEnabled() ? BookFileFormat::Cbz
-                               : BookFileFormat::Unsupported;
+    return CbzSupportEnabled() ? FORMAT_CBZ
+                               : FORMAT_UNDEF;
   if (EndsWithNoCase(filename, ".fb2") || EndsWithNoCase(filename, ".txt") ||
       EndsWithNoCase(filename, ".rtf") || EndsWithNoCase(filename, ".odt") ||
       EndsWithNoCase(filename, ".mobi")) {
-    return BookFileFormat::XhtmlLike;
+    return FORMAT_XHTML;
   }
-  return BookFileFormat::Unsupported;
+  return FORMAT_UNDEF;
 }
 
 bool CbzSupportEnabled() { return true; }
@@ -83,11 +83,11 @@ bool ShouldIndexBookFilename(const char *filename) {
     return false;
   if (filename[0] == '.')
     return false;
-  return DetectBookFormat(filename) != BookFileFormat::Unsupported;
+  return DetectBookFormat(filename) != FORMAT_UNDEF;
 }
 
-bool SupportsMetadataIndexing(BookFileFormat format) {
-  return format == BookFileFormat::Epub || format == BookFileFormat::MuPdf;
+bool SupportsMetadataIndexing(format_t format) {
+  return format == FORMAT_EPUB || format == FORMAT_PDF;
 }
 
 std::string SdmcToArchiveRelPath(const std::string &path) {
@@ -150,7 +150,7 @@ BookmarkJumpResult FindBookmarkJumpTarget(
 }
 
 ChaptersViewDecision DecideChaptersView(bool has_current_book,
-                                        BookFileFormat format,
+                                        format_t format,
                                         bool toc_quality_known,
                                         bool toc_resolve_tried,
                                         size_t chapter_count) {
@@ -159,11 +159,11 @@ ChaptersViewDecision DecideChaptersView(bool has_current_book,
   }
   if (chapter_count > 0) {
     const bool queue_toc_resolve =
-        format == BookFileFormat::Epub && !toc_quality_known &&
+        format == FORMAT_EPUB && !toc_quality_known &&
         !toc_resolve_tried;
     return {true, queue_toc_resolve, ChaptersViewReason::OpenChapters};
   }
-  return {false, format == BookFileFormat::Epub && !toc_quality_known &&
+  return {false, format == FORMAT_EPUB && !toc_quality_known &&
                       !toc_resolve_tried,
           ChaptersViewReason::NoChapters};
 }

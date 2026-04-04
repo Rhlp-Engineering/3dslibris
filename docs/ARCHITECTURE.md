@@ -1,6 +1,6 @@
 # Architecture
 
-High-level architecture of 3dslibris as of v2.0.3. This document describes the current structure, module responsibilities, and known design trade-offs.
+High-level architecture of 3dslibris. This document describes the current structure, module responsibilities, and known design trade-offs.
 
 ## Module map
 
@@ -51,8 +51,16 @@ source/
 │   │   └── txt_loader.cpp     # ReadAndNormalize() with CP1252 repair
 │   ├── rtf/                    # Rich Text Format loader
 │   │   └── rtf_loader.cpp     # ReadAndDecode() with RTF→UTF-8
-│   ├── epub/                   # EPUB2/EPUB3 parser
-│   │   └── epub.cpp            # Full EPUB parsing + page cache
+ │   ├── epub/                   # EPUB2/EPUB3 parser
+ │   │   ├── epub.cpp            # EPUB parse orchestration (384 lines, down from 1328)
+ │   │   ├── epub_toc.cpp        # TOC parsing (NAV/NCX fallback, structured extraction)
+ │   │   ├── epub_cache.cpp      # Page/resource cache management
+ │   │   ├── epub_manifest.cpp   # Manifest parsing + item resolution
+ │   │   ├── epub_cover.cpp      # Cover extraction
+ │   │   ├── epub_ncx_parser.cpp # NCX TOC parser
+ │   │   ├── epub_zip_utils.cpp  # ZIP access helpers
+ │   │   ├── epub_page_cache.cpp # Persistent page cache
+ │   │   └── epub_*_utils.cpp    # TOC title match, package loader, package TOC, diagnostics
 │   ├── fb2/                    # FictionBook 2 parser
 │   │   └── fb2.cpp
 │   ├── mobi/                   # MOBI/KF8 parser
@@ -93,9 +101,11 @@ source/
 │       ├── mupdf_view.cpp/h
 │       ├── mupdf_worker.cpp/h
 │       └── mupdf_state.h
-├── ui/                         # UI primitives
-│   ├── text.cpp                # FreeType text renderer, framebuffers
-│   ├── button.cpp              # Button rendering + hit-testing
+ ├── ui/                         # UI primitives
+ │   ├── text.cpp                # FreeType text renderer (289 lines, down from 1349)
+ │   ├── text_renderer.cpp/h     # Extracted FreeType rendering engine
+ │   ├── font_manager.cpp/h      # Font config, paths, metrics
+ │   ├── button.cpp              # Button rendering + hit-testing
 │   ├── ui_button_skin.cpp      # Procedural button skins + icon loading
 │   ├── touch_utils.cpp         # Touch gesture interpretation
 │   ├── browser_nav.cpp         # Browser navigation helpers
@@ -120,6 +130,10 @@ source/
     └── parse.cpp               # Parser dispatch entry point
 
 include/                        # Public headers (mirrors source/ structure)
+├── book/book_context.h        # BookContext struct (replaces App* back-pointer)
+├── shared/status_reporter.h   # IStatusReporter interface
+├── ui/text_renderer.h         # TextRenderer class
+├── ui/font_manager.h          # FontManager class
 └── string_utils.h             # Inline string utilities (StartsWithNoCase, etc.)
 
 third_party/                    # External dependencies
@@ -235,88 +249,96 @@ All extracted modules have corresponding test suites using the project's `test_b
 
 All SD card paths are centralized in `include/path_utils.h` under the `paths::` namespace. If the directory layout changes, update constants there only.
 
-## Architectural review (v2.0.3)
+## Architectural review
 
 Critical design issues identified during architectural audit, ordered by severity.
 
-### Critical: App ↔ Book circular dependency
+### ~~Critical: App ↔ Book circular dependency~~ (resolved)
 
-`Book` holds an `App*` pointer and includes `app/app.h`. `App` holds `std::vector<Book*>` and includes `book/book.h`. A global `App *app` variable in `main.cpp` is accessed directly from 23+ files.
+`Book` no longer holds an `App*` pointer. The dependency was broken via `BookContext` (`include/book/book_context.h`), a struct that injects only the interfaces Book needs: `Text*`, `Prefs*`, `IStatusReporter*`, and callbacks. The global `App *app` variable was removed from file scope — `App` is now heap-allocated locally in `main()`.
 
-**Impact:** Book cannot be tested or reused outside this project. Any refactor of one requires modifying the other. Format parsers reach into App state through Book.
+**Impact:** Book can be tested and reused independently. The circular dependency is broken.
 
-**Evidence:** `include/book/book.h:122` (`App *app`), `source/main.cpp:32` (`App *app` global), 23 files include `app/app.h`, 21 files include `book/book.h`.
+**Remaining:** `App *app` is still a singleton passed around by pointer (not a file-scope global, but still widely accessible). 20 files include `app/app.h` directly.
 
-**Future direction:** Remove `App*` from Book. Pass required state (`Text*`, `Prefs*`, margins, orientation) as explicit parameters via a `RenderParams` or `BookContext` struct. Eliminate the global `app` variable.
+### ~~Critical: Format layer coupled to App/UI~~ (resolved for MOBI)
 
-### Critical: Format layer coupled to App/UI
+`mobi.cpp` no longer includes `app/app.h`. MOBI parsers communicate via `IStatusReporter` interface and `BookContext`. EPUB parsers may still have residual coupling — needs verification.
 
-Format parsers still have App/UI coupling in some modules (`epub.cpp`, `mobi.cpp`) where `app/app.h` is included and parser code reaches UI/application state.
+### ~~Critical: book_io.cpp remains a monolith~~ (resolved)
 
-**Impact:** Parsers depend on the UI layer. Changing UI can break parsing. Cannot test parsers without App stubs.
+`book_io.cpp` is now a thin format dispatcher. All parser logic lives in dedicated modules.
 
-**Evidence:** `source/formats/mobi/mobi.cpp:12`, `source/formats/epub/epub.cpp:33` include `app/app.h`. `book_io.cpp` no longer does.
+### ~~High: epub.cpp remains a large critical parser~~ (resolved)
 
-**Future direction:** Define pure interfaces (`IStatusLogger`, `ParseContext`) that parsers receive instead of `App*`. App implements these interfaces.
+epub.cpp was reduced from 1328 → 384 lines. Three major extractions completed:
+- `epub_toc.cpp` (624 lines) — TOC parsing with NAV/NCX fallback
+- `epub_cache.cpp` (65 lines) — page/resource cache management  
+- `epub_manifest.cpp` (430 lines) — manifest parsing and item resolution
 
-### Critical: book_io.cpp remains a monolith (resolved)
+Additional files extracted: `epub_cover.cpp`, `epub_ncx_parser.cpp`, `epub_zip_utils.cpp`, `epub_page_cache.cpp`, and various TOC utility modules.
 
-Recent extractions (txt_loader, rtf_loader, text_helpers, plain_text_stream, plain_parser, xml_book_parser, mobi_page_cache, mobi_parser_core, mobi_deferred_runtime, mobi_markup_extract, mobi_text_decode, mobi_parser, mobi_book_hooks, mobi_structured_toc_parser, mobi_toc_finalize, mobi_toc_prepare, mobi_toc_resolver) removed parser logic from `book_io.cpp`.
-
-**Impact:** `book_io.cpp` is now a low-risk dispatcher. Parser work happens in dedicated modules.
-
-**Future direction:** Keep dispatcher slim and evolve parser modules independently. Optional: move ODT route to dedicated dispatcher table.
-
-### High: epub.cpp remains a large critical parser (1328 lines)
-
-Contains EPUB parsing, page cache management, inline image handling, TOC extraction, and fallback logic in one compilation unit.
-
-**Impact:** No dedicated tests. Any change still risks the most-used format.
-
-**Future direction:** Extract `epub_cache.cpp`, `epub_toc.cpp`, `epub_manifest.cpp`.
+**Remaining:** epub.cpp itself still has zero dedicated tests.
 
 ### High: Zero tests on critical components
 
-Core runtime units still lack broad integration coverage (`source/app/app.cpp` now 686 lines, `source/reader/app_book.cpp` 903 lines, `source/formats/epub/epub.cpp` 1328 lines). Existing tests mostly cover pure utilities.
+49 host-compiled unit tests now exist covering utilities (MOBI parsing, text layout, UTF-8, XML, path utils, page cache, glyph cache, etc.) with ~769 assertions. Test infrastructure includes `test_assert.h`, `run_all_tests.sh`, `make test-host`, and a CI job.
 
-**Impact:** Every refactor is a leap of faith. No safety net for the most complex code.
+**Still untested:** `app.cpp` (686 lines), `app_book.cpp` (903 lines), `epub.cpp` (384 lines). No integration tests load real book files (.epub, .mobi, etc.) — all tests use synthetic in-memory data.
 
-**Future direction:** Adopt a header-only test framework (Catch2/doctest). Add integration tests that load minimal books. Centralize test macros.
+**Future direction:** Adopt Catch2/doctest for richer test DSL. Add integration tests with minimal real books. Centralize test macros (some .cpp files still define their own).
 
-### High: UI and business logic mixed across layers
+### ~~High: UI and business logic mixed~~ (partially resolved)
 
-`Text` (1349 lines) mixes FreeType rendering, gradient generation, font path resolution, and UI label rendering. `App` is smaller than before but still mixes orchestration with shared runtime state and compatibility wrapper methods.
+`TextRenderer` (FreeType pure) and `FontManager` (config, paths, metrics) have been extracted. `text.cpp` reduced from 1349 → 289 lines (-79%).
 
-**Impact:** Changing the renderer requires recompiling App. Changing UI requires understanding business logic.
+**Remaining:** `UIManager` does not exist — UI orchestration still lives in `App` (686 lines). `App` mixes orchestration with shared runtime state and compatibility wrappers.
 
-**Future direction:** Separate `TextRenderer` (FreeType pure) from `FontManager` (config, paths, metrics). Extract `UIManager` from App.
+**Future direction:** Extract `UIManager` from App to separate UI lifecycle from business orchestration.
 
-### Medium: Inconsistent third-party dependency management
+### ~~Medium: Inconsistent third-party dependency management~~ (resolved)
 
-Some deps are vendored as source (expat, utf8proc, libunibreak), some as precompiled binaries (libbz2.a, libexpat.a in lib/), MuPDF has a custom build script. No unified version tracking.
+`DEPENDENCIES.md` exists with version table for all vendored deps. Cleanup completed:
+- `third_party/minizip/` removed — dead vendored source; 3DS build uses devkitPro portlib `-lminizip`
+- `lib/libbz2.a` removed — duplicated devkitPro bzip2 portlib
+- Remaining inconsistencies:
+  - MuPDF is a full upstream tree with no update strategy
+  - No git submodules — all deps are full copies with no provenance tracking
 
-**Future direction:** Unify strategy — all as source compiled by Makefile, or all as git submodules. Document versions in `DEPENDENCIES.md`.
+**Future direction:** Consider git submodules or commit-hash pinning in DEPENDENCIES.md.
 
-### Medium: Global `App *app` variable
+### Medium: Global `App *app` singleton
 
-`source/main.cpp:32` exposes `App *app` globally. Any file including `main.h` can access full application state.
+`App *app` is heap-allocated in `main()` (not a file-scope global), but still functions as a de facto singleton. 20 files include `app/app.h` and access App state directly.
 
-**Impact:** Implicit dependencies the compiler cannot verify. Impossible to reason about data flow. Blocks parallel testing.
+**Impact:** Implicit dependencies the compiler cannot verify. Impossible to reason about data flow.
 
-**Future direction:** Eliminate global. Pass App as explicit parameter. Use context structs for frequently-needed data.
+**Future direction:** Eliminate singleton pattern. Pass App as explicit parameter or use context structs for frequently-needed data.
 
 ### Medium: No clear extension points for new formats
 
-Adding a format requires modifying `parse.cpp`, `book_io.cpp`, `app_flow_utils.cpp`, `format_t` enum in `book.h`, and `Makefile`. No `FormatParser` interface.
+Adding a format requires modifying `book_io.cpp` (dispatch), `app_flow_utils.cpp` (detection), `format_t` enum in `app_flow_utils.h`, and `Makefile`. No `FormatParser` interface or registry exists.
 
-**Future direction:** Define abstract `FormatParser` interface. Register parsers by extension in a map. `parse.cpp` becomes a generic dispatcher.
+**Future direction:** Define abstract `FormatParser` interface. Register parsers by extension in a map. `book_io.cpp` becomes a generic dispatcher.
 
 ### Fragile zones
 
 | Zone | Why fragile |
 |------|-------------|
 | `plain_parser.cpp` | Plain text parse heuristics + callback wiring still complex and regression-prone without integration tests |
-| `book.h:237-291` | Public API mixes metadata, rendering, parsing, fixed-layout, async reflow, MOBI deferred |
+| `book.h` public API | Mixes metadata, rendering, parsing, fixed-layout, async reflow, MOBI deferred |
 | `include/app/app.h` public section | Public fields (`ts`, `prefs`, `buttons`, `books`) still allow broad external mutation of App state |
-| `epub.cpp` | 1328 lines, zero tests, most-used format |
-| `main.cpp` global `app` | Undefined behavior if accessed before init or after destruction |
+| `epub.cpp` | 384 lines, zero dedicated tests, most-used format |
+| `App *app` singleton | Heap-allocated in main() but still widely accessible — UB if accessed before init or after destruction |
+| `app.cpp` / `app_book.cpp` | 686 + 903 lines, zero test coverage |
+
+### Resolved items (for reference)
+
+| Item | Resolution |
+|------|-----------|
+| `Book` → `App*` back-pointer | Replaced by `BookContext` DI struct with `IStatusReporter*` |
+| `book_io.cpp` monolith | Reduced to thin dispatcher; 18+ modules extracted |
+| `epub.cpp` 1328 lines | Reduced to 384 lines; 12+ modules extracted |
+| `text.cpp` 1349 lines | Reduced to 289 lines; `TextRenderer` + `FontManager` extracted |
+| `DEPENDENCIES.md` missing | Created with version table for all vendored deps |
+| Test infrastructure | 49 host tests, ~769 assertions, `make test-host`, CI job |

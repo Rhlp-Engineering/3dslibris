@@ -49,6 +49,13 @@
 
 namespace {} // end anonymous namespace
 #include "color_utils.h"
+
+App* App::s_instance_ = nullptr;
+
+App* App::GetInstance() { return s_instance_; }
+
+void App::SetInstance(App* instance) { s_instance_ = instance; }
+
 namespace {
 
 static std::string ResolveDefaultFontDir() {
@@ -556,17 +563,10 @@ void App::ShowBookmarksView() {
 
 void App::ShowChaptersView() {
   Book *book = reader_state_.bookcurrent;
-  app_flow_utils::BookFileFormat format =
-      app_flow_utils::BookFileFormat::Unsupported;
+  format_t format = FORMAT_UNDEF;
   bool toc_quality_known = false;
   if (book) {
-    format = (book->format == FORMAT_EPUB)
-                 ? app_flow_utils::BookFileFormat::Epub
-                 : (book->format == FORMAT_PDF)
-                       ? app_flow_utils::BookFileFormat::MuPdf
-                       : (book->format == FORMAT_CBZ)
-                             ? app_flow_utils::BookFileFormat::Cbz
-                       : app_flow_utils::BookFileFormat::XhtmlLike;
+    format = book->format;
     toc_quality_known = book->GetTocQuality() != TOC_QUALITY_UNKNOWN;
   }
   app_flow_utils::ChaptersViewDecision decision =

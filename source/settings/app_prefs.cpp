@@ -120,7 +120,7 @@ void SettingsController::ShowSettingsView(bool from_book) {
 }
 
 void SettingsController::ToggleCurrentBookMobiLineWrapFix() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   if (!CurrentBookUsesLineWrapFixSlot(app))
     return;
   Book *book = app->GetCurrentBook();
@@ -137,7 +137,7 @@ u8 SettingsController::PrefsVisibleButtonCount() const {
 }
 
 void SettingsController::PrefsInit() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   const std::vector<std::string> labels{
       "font configuration", "font size",    "paragraph spacing",
       "screen orientation", "clock format", "color mode",
@@ -157,7 +157,7 @@ void SettingsController::PrefsInit() {
 }
 
 void SettingsController::PrefsDraw() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   int colorMode = app->ts->GetColorMode();
   u16 *screen = app->ts->GetScreen();
   int style = app->ts->GetStyle();
@@ -235,7 +235,7 @@ void SettingsController::PrefsDraw() {
 }
 
 void SettingsController::PrefsHandleEvent() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   u32 keys = hidKeysDown();
   u8 visibleCount = NormalizeVisibleCount(PrefsVisibleButtonCount());
   int selected_index = app->GetPrefsSelectedIndex();
@@ -274,7 +274,7 @@ void SettingsController::PrefsHandleEvent() {
 }
 
 void SettingsController::PrefsHandleTouch() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   touchPosition coord = app->TouchRead();
   const int footerX = (int)coord.px;
   const int footerY = (int)coord.py;
@@ -335,7 +335,7 @@ void SettingsController::PrefsHandleTouch() {
 }
 
 void SettingsController::PrefsIncreasePixelSize() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   if (app->IsBookSettingsContext() && !CurrentBookUsesTextLayoutSettings(app))
     return;
   if (app->ts->pixelsize < kTextPixelSizeMax) {
@@ -347,7 +347,7 @@ void SettingsController::PrefsIncreasePixelSize() {
 }
 
 void SettingsController::PrefsDecreasePixelSize() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   if (app->IsBookSettingsContext() && !CurrentBookUsesTextLayoutSettings(app))
     return;
   if (app->ts->pixelsize > kTextPixelSizeMin) {
@@ -359,7 +359,7 @@ void SettingsController::PrefsDecreasePixelSize() {
 }
 
 void SettingsController::PrefsIncreaseParaspacing() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   if (app->IsBookSettingsContext() && !CurrentBookUsesTextLayoutSettings(app))
     return;
   if (app->paraspacing < 2) {
@@ -371,7 +371,7 @@ void SettingsController::PrefsIncreaseParaspacing() {
 }
 
 void SettingsController::PrefsDecreaseParaspacing() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   if (app->IsBookSettingsContext() && !CurrentBookUsesTextLayoutSettings(app))
     return;
   if (app->paraspacing > 0) {
@@ -383,7 +383,7 @@ void SettingsController::PrefsDecreaseParaspacing() {
 }
 
 void SettingsController::PrefsFlipOrientation() {
-  App *app = &app_;
+  App *app = App::GetInstance();
   app->SetOrientation(!app->orientation);
   app->MarkBookLayoutDirty();
   PrefsRefreshButton(PREFS_BUTTON_ORIENTATION);
@@ -393,7 +393,7 @@ void SettingsController::PrefsFlipOrientation() {
 }
 
 void SettingsController::PrefsRefreshButton(int index) {
-  App *app = &app_;
+  App *app = App::GetInstance();
   char msg[64];
   switch (index) {
   case PREFS_BUTTON_FONT_CONFIG:
@@ -474,7 +474,7 @@ void SettingsController::PrefsRefreshButton(int index) {
 }
 
 void SettingsController::PrefsHandlePress() {
-  App *app = &app_;
+  App *app = App::GetInstance();
 
   if (app->GetPrefsSelectedIndex() == PREFS_BUTTON_ORIENTATION) {
     PrefsFlipOrientation();

@@ -35,6 +35,16 @@ jobs:
             exit 1
           fi
 
+  test-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run host tests
+        run: |
+          set -euo pipefail
+          make test-host
+
   build-3dsx:
     runs-on: ubuntu-latest
     env:

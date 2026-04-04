@@ -2,11 +2,13 @@
 .SUFFIXES:
 #---------------------------------------------------------------------------------
 
+TOPDIR ?= $(CURDIR)
+TEST_HOST_GOAL := $(filter test-host,$(MAKECMDGOALS))
+
+ifeq ($(TEST_HOST_GOAL),)
 ifeq ($(strip $(DEVKITARM)),)
 $(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM")
 endif
-
-TOPDIR ?= $(CURDIR)
 include $(DEVKITARM)/3ds_rules
 
 #---------------------------------------------------------------------------------
@@ -240,7 +242,7 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx cia stage-romfs mupdf-minimal
+.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx cia stage-romfs mupdf-minimal test-host
 
 #---------------------------------------------------------------------------------
 all: stage-romfs mupdf-minimal $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
@@ -416,3 +418,12 @@ $(OUTPUT).cia	:	$(OUTPUT).elf $(OUTPUT).smdh $(TOPDIR)/$(CIA_RSF) $(TOPDIR)/$(CI
 #---------------------------------------------------------------------------------------
 endif
 #---------------------------------------------------------------------------------------
+
+endif
+
+#---------------------------------------------------------------------------------
+# Host test runner - compiles and runs all tests natively (no 3DS toolchain needed)
+#---------------------------------------------------------------------------------
+test-host:
+	@echo "Running host tests..."
+	@cd tests && ./run_all_tests.sh

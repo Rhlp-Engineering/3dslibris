@@ -121,6 +121,9 @@ struct app_job_t {
 
 class App : public IStatusReporter {
 public:
+  static App* GetInstance();
+  static void SetInstance(App* instance);
+
   App();
   ~App();
 
@@ -267,6 +270,7 @@ public:
   bool BookNeedsRelayout(Book *book) const;
 
 private:
+  static App* s_instance_;
   struct BrowserState {
     Book *selected_book;
     int page_start;

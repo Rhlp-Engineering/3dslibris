@@ -110,8 +110,10 @@ int main(int argc, char **argv) {
   mkdir(paths::kCoverCacheDir, 0777);
 
   App *app = new App();
+  App::SetInstance(app);
   int result = app->Run();
 
+  App::SetInstance(nullptr);
   delete app;
   app = NULL;
 

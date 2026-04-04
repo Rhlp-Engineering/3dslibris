@@ -35,5 +35,5 @@ Versions of all third-party components used in 3dslibris. Update this file when 
 ## Notes
 
 - MuPDF is built with a custom minimal configuration via `scripts/build_mupdf_minimal.sh`
-- All vendored dependencies are compiled as part of the project Makefile; no precompiled binaries are shipped in `lib/`
+- `lib/libexpat.a` is a precompiled artifact from `third_party/expat/` inline compilation (not a vendored binary)
 - The Docker image (`docker/Dockerfile.cia`) is based on `devkitpro/devkitarm`

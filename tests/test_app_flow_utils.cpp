@@ -37,27 +37,25 @@ void ExpectFloatEq(const char *label, float actual, float expected) {
 }
 
 void TestDetectBookFormat() {
-  using app_flow_utils::BookFileFormat;
-
   ExpectEq("epub", app_flow_utils::DetectBookFormat("book.epub"),
-           BookFileFormat::Epub);
+           FORMAT_EPUB);
   ExpectEq("epub uppercase", app_flow_utils::DetectBookFormat("BOOK.EPUB"),
-           BookFileFormat::Epub);
+           FORMAT_EPUB);
   ExpectEq("txt", app_flow_utils::DetectBookFormat("book.txt"),
-           BookFileFormat::XhtmlLike);
+           FORMAT_XHTML);
   ExpectEq("mobi", app_flow_utils::DetectBookFormat("book.mobi"),
-           BookFileFormat::XhtmlLike);
+           FORMAT_XHTML);
   ExpectEq("pdf", app_flow_utils::DetectBookFormat("book.pdf"),
-           BookFileFormat::MuPdf);
+           FORMAT_PDF);
   ExpectEq("xps", app_flow_utils::DetectBookFormat("book.xps"),
-           BookFileFormat::MuPdf);
+           FORMAT_PDF);
   ExpectEq("oxps", app_flow_utils::DetectBookFormat("book.oxps"),
-           BookFileFormat::MuPdf);
+           FORMAT_PDF);
   ExpectTrue("cbz support enabled", app_flow_utils::CbzSupportEnabled());
   ExpectEq("cbz enabled", app_flow_utils::DetectBookFormat("comic.cbz"),
-           BookFileFormat::Cbz);
+           FORMAT_CBZ);
   ExpectEq("cbr unsupported", app_flow_utils::DetectBookFormat("comic.cbr"),
-           BookFileFormat::Unsupported);
+           FORMAT_UNDEF);
 }
 
 void TestMuPdfDocumentKindHelpers() {
@@ -140,20 +138,16 @@ void TestShouldIndexBookFilename() {
 }
 
 void TestSupportsMetadataIndexing() {
-  using app_flow_utils::BookFileFormat;
-
   ExpectTrue("epub metadata indexing",
-             app_flow_utils::SupportsMetadataIndexing(BookFileFormat::Epub));
+             app_flow_utils::SupportsMetadataIndexing(FORMAT_EPUB));
   ExpectTrue("mupdf metadata indexing",
-             app_flow_utils::SupportsMetadataIndexing(BookFileFormat::MuPdf));
+             app_flow_utils::SupportsMetadataIndexing(FORMAT_PDF));
   ExpectFalse("cbz metadata indexing disabled in v1",
-              app_flow_utils::SupportsMetadataIndexing(BookFileFormat::Cbz));
+              app_flow_utils::SupportsMetadataIndexing(FORMAT_CBZ));
   ExpectFalse("xhtml-like no metadata indexing",
-              app_flow_utils::SupportsMetadataIndexing(
-                  BookFileFormat::XhtmlLike));
+              app_flow_utils::SupportsMetadataIndexing(FORMAT_XHTML));
   ExpectFalse("unsupported no metadata indexing",
-              app_flow_utils::SupportsMetadataIndexing(
-                  BookFileFormat::Unsupported));
+              app_flow_utils::SupportsMetadataIndexing(FORMAT_UNDEF));
 }
 
 void TestSdmcToArchiveRelPath() {
@@ -213,11 +207,10 @@ void TestFindBookmarkJumpTarget() {
 }
 
 void TestDecideChaptersView() {
-  using app_flow_utils::BookFileFormat;
   using app_flow_utils::ChaptersViewReason;
 
   app_flow_utils::ChaptersViewDecision no_book =
-      app_flow_utils::DecideChaptersView(false, BookFileFormat::Unsupported,
+      app_flow_utils::DecideChaptersView(false, FORMAT_UNDEF,
                                          false, false, 0);
   ExpectFalse("no book does not open chapters", no_book.open_chapters);
   ExpectFalse("no book does not queue toc", no_book.queue_toc_resolve);
@@ -225,7 +218,7 @@ void TestDecideChaptersView() {
            ChaptersViewReason::NoCurrentBook);
 
   app_flow_utils::ChaptersViewDecision epub_needs_toc =
-      app_flow_utils::DecideChaptersView(true, BookFileFormat::Epub, false,
+      app_flow_utils::DecideChaptersView(true, FORMAT_EPUB, false,
                                          false, 0);
   ExpectFalse("epub without toc does not open chapters yet",
               epub_needs_toc.open_chapters);
@@ -234,7 +227,7 @@ void TestDecideChaptersView() {
            ChaptersViewReason::NoChapters);
 
   app_flow_utils::ChaptersViewDecision epub_fallback_chapters =
-      app_flow_utils::DecideChaptersView(true, BookFileFormat::Epub, false,
+      app_flow_utils::DecideChaptersView(true, FORMAT_EPUB, false,
                                          false, 12);
   ExpectTrue("epub fallback chapters open", epub_fallback_chapters.open_chapters);
   ExpectTrue("epub fallback chapters queue resolve",
@@ -243,7 +236,7 @@ void TestDecideChaptersView() {
            ChaptersViewReason::OpenChapters);
 
   app_flow_utils::ChaptersViewDecision epub_known_toc =
-      app_flow_utils::DecideChaptersView(true, BookFileFormat::Epub, true,
+      app_flow_utils::DecideChaptersView(true, FORMAT_EPUB, true,
                                          false, 12);
   ExpectTrue("epub known toc opens", epub_known_toc.open_chapters);
   ExpectFalse("epub known toc does not queue resolve",
@@ -252,7 +245,7 @@ void TestDecideChaptersView() {
            ChaptersViewReason::OpenChapters);
 
   app_flow_utils::ChaptersViewDecision empty_after_try =
-      app_flow_utils::DecideChaptersView(true, BookFileFormat::Epub, false,
+      app_flow_utils::DecideChaptersView(true, FORMAT_EPUB, false,
                                          true, 0);
   ExpectFalse("no chapters after toc attempt stays out",
               empty_after_try.open_chapters);
@@ -262,7 +255,7 @@ void TestDecideChaptersView() {
            ChaptersViewReason::NoChapters);
 
   app_flow_utils::ChaptersViewDecision has_chapters =
-      app_flow_utils::DecideChaptersView(true, BookFileFormat::XhtmlLike, false,
+      app_flow_utils::DecideChaptersView(true, FORMAT_XHTML, false,
                                          true, 3);
   ExpectTrue("chapters open", has_chapters.open_chapters);
   ExpectFalse("chapters do not queue toc", has_chapters.queue_toc_resolve);

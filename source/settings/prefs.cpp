@@ -35,7 +35,7 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
   // Central XML dispatcher for preference tags.
   // Each branch maps one persisted element into runtime App/Text state.
   parsedata_t *p = (parsedata_t *)data;
-  App *app = p->reporter ? static_cast<App *>(p->reporter) : NULL;
+  App *app = App::GetInstance();
   if (!app || !p->prefs || !p->ts)
     return;
   int position = 0; //! Page position in book.
@@ -223,7 +223,7 @@ static std::string XmlEscapeAttr(const char *value) {
 } // namespace
 
 Prefs::Prefs(App *_app) {
-  app = _app;
+  app = App::GetInstance();
   Init();
 }
 Prefs::~Prefs() {}

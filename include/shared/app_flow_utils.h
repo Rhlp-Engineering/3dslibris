@@ -3,15 +3,15 @@
 #include <list>
 #include <string>
 
-namespace app_flow_utils {
+typedef enum {
+  FORMAT_UNDEF,
+  FORMAT_XHTML,
+  FORMAT_EPUB,
+  FORMAT_PDF,
+  FORMAT_CBZ
+} format_t;
 
-enum class BookFileFormat {
-  Unsupported = 0,
-  XhtmlLike = 1,
-  Epub = 2,
-  MuPdf = 3,
-  Cbz = 4,
-};
+namespace app_flow_utils {
 
 enum class MuPdfDocumentKind {
   Unknown = 0,
@@ -59,7 +59,7 @@ struct StatusSnapshot {
   int next_locked_pagecount;
 };
 
-BookFileFormat DetectBookFormat(const char *filename);
+format_t DetectBookFormat(const char *filename);
 bool CbzSupportEnabled();
 MuPdfDocumentKind DetectMuPdfDocumentKind(const char *filename);
 const char *GetMuPdfDocumentLabel(MuPdfDocumentKind kind);
@@ -67,7 +67,7 @@ float GetMuPdfReadingBaseZoom(MuPdfDocumentKind kind);
 bool MuPdfWantsFinalQualityRender(MuPdfDocumentKind kind);
 bool MuPdfShouldPrefetchAdjacent(MuPdfDocumentKind kind);
 bool ShouldIndexBookFilename(const char *filename);
-bool SupportsMetadataIndexing(BookFileFormat format);
+bool SupportsMetadataIndexing(format_t format);
 std::string SdmcToArchiveRelPath(const std::string &path);
 bool NeedsBookRelayout(int page_count, unsigned int book_layout_revision,
                        unsigned int app_layout_revision,
@@ -76,7 +76,7 @@ BookmarkJumpResult FindBookmarkJumpTarget(
     const std::list<unsigned short> &bookmarks, unsigned short current_page,
     BookmarkJumpDirection direction);
 ChaptersViewDecision DecideChaptersView(bool has_current_book,
-                                        BookFileFormat format,
+                                        format_t format,
                                         bool toc_quality_known,
                                         bool toc_resolve_tried,
                                         size_t chapter_count);

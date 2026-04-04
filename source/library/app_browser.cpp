@@ -653,7 +653,7 @@ void LibraryController::QueueBookWarmup(Book *book) {
   const bool should_queue_cover = browser_warmup_utils::ShouldQueueCoverWarmup(
       is_selected_book, warmup_idle, heavy_idle);
 
-  const app_flow_utils::BookFileFormat format =
+  const format_t format =
       app_flow_utils::DetectBookFormat(book->GetFileName());
 
   if (book->format == FORMAT_EPUB) {
