@@ -25,6 +25,7 @@
 #include "book/reflow_cache_save_utils.h"
 #include "screen_constants.h"
 #include "shared/text_layout_utils.h"
+#include "shared/text_bidi_utils.h"
 #include "shared/text_unicode_utils.h"
 #include <algorithm>
 #include <stdio.h>
@@ -85,6 +86,36 @@ static void AppendParsedCodepoints(parsedata_t *p, const char *utf8,
     parse_append_page_byte(p, (u32)cp);
     offset += consumed;
   }
+}
+
+static void EmitBidiSegment(
+    parsedata_t *p,
+    const std::vector<text_layout_utils::ShapedGlyph> &run,
+    size_t seg_start, size_t seg_end,
+    const std::vector<text_bidi_utils::BidiRun> &runs) {
+  if (seg_start >= seg_end)
+    return;
+  std::vector<uint32_t> cps;
+  cps.reserve(seg_end - seg_start);
+  for (size_t i = seg_start; i < seg_end; i++)
+    cps.push_back(run[i].text.codepoint);
+  text_bidi_utils::ReorderLineForDisplay(cps, 0, cps.size(), runs);
+  for (size_t i = 0; i < cps.size(); i++)
+    parse_append_page_byte(p, (u32)cps[i]);
+}
+
+static bool DetectParagraphRTL(
+    const std::vector<text_layout_utils::ShapedGlyph> &run) {
+  for (size_t i = 0; i < run.size(); i++) {
+    uint32_t cp = run[i].text.codepoint;
+    if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A))
+      return false;
+    if ((cp >= 0x0590 && cp <= 0x05FF) || (cp >= 0x0600 && cp <= 0x06FF) ||
+        (cp >= 0x08A0 && cp <= 0x08FF) || (cp >= 0xFB50 && cp <= 0xFDFF) ||
+        (cp >= 0xFE70 && cp <= 0xFEFF))
+      return true;
+  }
+  return false;
 }
 
 static void RestoreParsedStyleMarkers(parsedata_t *p) {
@@ -881,10 +912,25 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
     }
 
     std::vector<text_layout_utils::ShapedGlyph> pre_run;
-    if (!text_layout_utils::ShapeTextRunUtf8(txt, (size_t)txtlen, NULL,
+    bool pre_has_rtl = false;
+    if (!text_layout_utils::ShapeTextRunBidi(txt, (size_t)txtlen, NULL,
                                              MeasureParsedTextAdvance, ts,
-                                             &pre_run)) {
+                                             &pre_run, &pre_has_rtl)) {
       return;
+    }
+
+    std::vector<text_bidi_utils::BidiRun> pre_bidi_runs;
+    if (pre_has_rtl) {
+      std::vector<uint32_t> pre_cps;
+      pre_cps.reserve(pre_run.size());
+      for (size_t ci = 0; ci < pre_run.size(); ci++)
+        pre_cps.push_back(pre_run[ci].text.codepoint);
+      text_bidi_utils::AnalyzeBidiRuns(pre_cps.data(), pre_cps.size(),
+                                       &pre_bidi_runs);
+      if (DetectParagraphRTL(pre_run))
+        AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
+      else
+        AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
     }
 
     const int maxPreLineWidth =
@@ -929,7 +975,12 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
         AdvanceParsedPageOnOverflow(p, lineheight);
       }
 
-      AppendParsedCodepoints(p, txt + segment_start, segment_end - segment_start);
+      if (pre_has_rtl)
+        EmitBidiSegment(p, pre_run, unit_index, segment_end_index,
+                        pre_bidi_runs);
+      else
+        AppendParsedCodepoints(p, txt + segment_start,
+                               segment_end - segment_start);
       p->pen.x += advance;
       p->linebegan = true;
       unit_index = segment_end_index;
@@ -947,9 +998,25 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
   }
 
   std::vector<text_layout_utils::ShapedGlyph> run;
-  if (!text_layout_utils::ShapeTextRunUtf8(txt, (size_t)txtlen, NULL,
-                                           MeasureParsedTextAdvance, ts, &run))
+  bool has_rtl = false;
+  if (!text_layout_utils::ShapeTextRunBidi(txt, (size_t)txtlen, NULL,
+                                           MeasureParsedTextAdvance, ts,
+                                           &run, &has_rtl))
     return;
+
+  std::vector<text_bidi_utils::BidiRun> bidi_runs;
+  if (has_rtl) {
+    std::vector<uint32_t> run_cps;
+    run_cps.reserve(run.size());
+    for (size_t ci = 0; ci < run.size(); ci++)
+      run_cps.push_back(run[ci].text.codepoint);
+    text_bidi_utils::AnalyzeBidiRuns(run_cps.data(), run_cps.size(),
+                                     &bidi_runs);
+    if (DetectParagraphRTL(run))
+      AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
+    else
+      AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
+  }
 
   const int maxLineWidth = ts->display.width - ts->margin.right - ts->margin.left;
   size_t unit_index = 0;
@@ -1004,7 +1071,11 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
     }
 
     AdvanceParsedPageOnOverflow(p, lineheight);
-    AppendParsedCodepoints(p, txt + segment_start, segment_end - segment_start);
+    if (has_rtl)
+      EmitBidiSegment(p, run, unit_index, segment_end_index, bidi_runs);
+    else
+      AppendParsedCodepoints(p, txt + segment_start,
+                             segment_end - segment_start);
     p->linebegan = true;
     p->pen.x += advance;
     unit_index = segment_end_index;

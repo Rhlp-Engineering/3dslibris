@@ -6,6 +6,8 @@
 
 #include <time.h>
 
+#include "shared/text_bidi_utils.h"
+
 namespace text_layout_utils {
 
 namespace {
@@ -88,6 +90,7 @@ bool ShapeTextRunUtf8(const char *s, size_t len, const char *lang,
     glyph.text = text_run[i];
     glyph.advance =
         measure_codepoint(text_run[i].codepoint, measure_ctx);
+    glyph.bidi_level = 0;
     out->push_back(glyph);
   }
   g_perf_stats.shape_calls++;
@@ -152,6 +155,42 @@ LineBreakMeasureResult FindPreformattedLineBreakAndMeasure(
   g_perf_stats.pre_line_break_calls++;
   g_perf_stats.pre_line_break_ms += PerfNowMs() - t_begin;
   return result;
+}
+
+bool ShapeTextRunBidi(const char *s, size_t len, const char *lang,
+                      MeasureCodepointFn measure_codepoint, void *measure_ctx,
+                      std::vector<ShapedGlyph> *out, bool *has_rtl) {
+  if (has_rtl)
+    *has_rtl = false;
+  if (!ShapeTextRunUtf8(s, len, lang, measure_codepoint, measure_ctx, out))
+    return false;
+  if (!out || out->empty())
+    return true;
+
+  std::vector<uint32_t> cps;
+  cps.reserve(out->size());
+  for (size_t i = 0; i < out->size(); i++)
+    cps.push_back((*out)[i].text.codepoint);
+
+  if (!text_bidi_utils::ContainsRTL(cps.data(), cps.size()))
+    return true;
+
+  if (has_rtl)
+    *has_rtl = true;
+
+  std::vector<text_bidi_utils::BidiRun> runs;
+  text_bidi_utils::AnalyzeBidiRuns(cps.data(), cps.size(), &runs);
+
+  for (size_t r = 0; r < runs.size(); r++) {
+    const text_bidi_utils::BidiRun &run_info = runs[r];
+    for (size_t j = 0; j < run_info.length; j++) {
+      size_t idx = run_info.start + j;
+      if (idx < out->size())
+        (*out)[idx].bidi_level = (uint8_t)run_info.bidi_level;
+    }
+  }
+
+  return true;
 }
 
 } // namespace text_layout_utils

@@ -13,6 +13,7 @@ typedef int (*MeasureCodepointFn)(uint32_t codepoint, void *ctx);
 struct ShapedGlyph {
   text_unicode_utils::TextCodepoint text;
   int advance;
+  uint8_t bidi_level; // 0=LTR (default), odd=RTL
 };
 
 struct LineBreakMeasureResult {
@@ -44,6 +45,9 @@ struct PerfStats {
 bool ShapeTextRunUtf8(const char *s, size_t len, const char *lang,
                       MeasureCodepointFn measure_codepoint, void *measure_ctx,
                       std::vector<ShapedGlyph> *out);
+bool ShapeTextRunBidi(const char *s, size_t len, const char *lang,
+                      MeasureCodepointFn measure_codepoint, void *measure_ctx,
+                      std::vector<ShapedGlyph> *out, bool *has_rtl);
 PerfStats GetPerfStats();
 void ResetPerfStats();
 int MeasureTextRun(const std::vector<ShapedGlyph> &run, size_t start,

@@ -147,9 +147,18 @@ void Page::Draw(Text *ts) {
 
   u16 i = 0;
   InlineImageContext next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;
+  bool rtl_paragraph = false;
   while (i < length) {
     u32 c = buf[i];
-    if (c == '\n') {
+    if (c == TEXT_PARAGRAPH_RTL) {
+      rtl_paragraph = true;
+      i++;
+      continue;
+    } else if (c == TEXT_PARAGRAPH_LTR) {
+      rtl_paragraph = false;
+      i++;
+      continue;
+    } else if (c == '\n') {
       // line break, page breaking if necessary
       i++;
       next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;
@@ -258,6 +267,21 @@ void Page::Draw(Text *ts) {
       ts->margin.bottom = (on_first_screen == first_is_left)
                               ? leftBottomMargin
                               : rightBottomMargin;
+
+      if (rtl_paragraph && !ts->linebegan) {
+        int line_width = 0;
+        for (u16 scan = (u16)(i - 1); scan < length; scan++) {
+          u32 sc = buf[scan];
+          if (sc == '\n' || sc < 32)
+            break;
+          line_width += ts->GetAdvance((u16)sc);
+        }
+        int right_edge = ts->display.width - ts->margin.right;
+        int rtl_x = right_edge - line_width;
+        if (rtl_x < ts->margin.left)
+          rtl_x = ts->margin.left;
+        ts->SetPen((u8)rtl_x, ts->GetPenY());
+      }
 
       if (ts->bold && ts->italic)
         ts->PrintChar(c, TEXT_STYLE_BOLDITALIC);
