@@ -36,12 +36,18 @@ enum FontTarget : u8 {
   FONT_TARGET_ITALIC = 2,
   FONT_TARGET_BOLDITALIC = 3,
   FONT_TARGET_BROWSER = 4,
-  FONT_TARGET_COUNT = 5
+  FONT_TARGET_FALLBACK_1 = 5,
+  FONT_TARGET_FALLBACK_2 = 6,
+  FONT_TARGET_FALLBACK_3 = 7,
+  FONT_TARGET_FALLBACK_4 = 8,
+  FONT_TARGET_COUNT = 9
 };
+static const u8 kFallbackTargetStart = FONT_TARGET_FALLBACK_1;
 
 static const char *kFontTargetLabels[FONT_TARGET_COUNT] = {
     "regular font", "bold font", "italic font", "bold italic font",
-    "mono/ui font"};
+    "mono/ui font", "fallback font 1", "fallback font 2",
+    "fallback font 3", "fallback font 4"};
 
 static std::string BasenameOnly(const std::string &path) {
   size_t slash = path.find_last_of("/\\");
@@ -68,6 +74,16 @@ static u8 StyleFromTarget(u8 target) {
   default:
     return TEXT_STYLE_REGULAR;
   }
+}
+
+static bool IsFallbackTarget(u8 target) {
+  return target >= kFallbackTargetStart && target < FONT_TARGET_COUNT;
+}
+
+static int FallbackIndexFromTarget(u8 target) {
+  if (!IsFallbackTarget(target))
+    return -1;
+  return (int)(target - kFallbackTargetStart);
 }
 
 static const char *DefaultFontForStyle(u8 style) {
@@ -194,11 +210,17 @@ void FontMenu::findFiles() {
 
 void FontMenu::refreshTargetButtons() {
   for (u8 i = 0; i < targetButtons.size() && i < FONT_TARGET_COUNT; i++) {
-    u8 style = StyleFromTarget(i);
-    std::string current = app->ts->GetFontFile(style);
-    if (current.empty())
-      current = DefaultFontForStyle(style);
-    targetButtons[i]->SetLabel2(BasenameOnly(current));
+    if (IsFallbackTarget(i)) {
+      int fb_idx = FallbackIndexFromTarget(i);
+      std::string fb_file = app->ts->fm->GetFallbackFile(fb_idx);
+      targetButtons[i]->SetLabel2(fb_file.empty() ? "(none)" : BasenameOnly(fb_file));
+    } else {
+      u8 style = StyleFromTarget(i);
+      std::string current = app->ts->GetFontFile(style);
+      if (current.empty())
+        current = DefaultFontForStyle(style);
+      targetButtons[i]->SetLabel2(BasenameOnly(current));
+    }
   }
 }
 
@@ -472,13 +494,25 @@ void FontMenu::handleButtonPress() {
     return;
   }
 
-  const u8 style = StyleFromTarget(targetSelected);
-  const std::string previous = app->ts->GetFontFile(style);
-  app->ts->SetFontFile(filename, style);
-  if (style != TEXT_STYLE_BROWSER && previous != filename)
-    app->MarkBookLayoutDirty();
-  app->PrefsRefreshButton(PREFS_BUTTON_FONT_CONFIG);
-  app->prefs->Write();
+  if (IsFallbackTarget(targetSelected)) {
+    int fb_idx = FallbackIndexFromTarget(targetSelected);
+    if (app->ts->fm->LoadFallbackFont(filename)) {
+      char msg[64];
+      snprintf(msg, sizeof(msg), "fallback %d: %s", fb_idx + 1, BasenameOnly(filename).c_str());
+      app->PrintStatus(msg);
+      app->MarkBookLayoutDirty();
+    } else {
+      app->PrintStatus("error loading fallback font");
+    }
+  } else {
+    const u8 style = StyleFromTarget(targetSelected);
+    const std::string previous = app->ts->GetFontFile(style);
+    app->ts->SetFontFile(filename, style);
+    if (style != TEXT_STYLE_BROWSER && previous != filename)
+      app->MarkBookLayoutDirty();
+    app->PrefsRefreshButton(PREFS_BUTTON_FONT_CONFIG);
+    app->prefs->Write();
+  }
   refreshTargetButtons();
   enterTargetView(targetSelected);
 }

@@ -35,6 +35,8 @@ public:
 
 class FontManager {
 public:
+  static const int kMaxFallbackFaces = 4;
+
   FontManager(Text *parent);
   ~FontManager();
 
@@ -58,6 +60,13 @@ public:
   void ClearCache(FT_Face face);
   int GetGlyphBitmap(u32 ucs, FTC_SBit *sbit, FTC_Node *anode = nullptr);
 
+  // Font fallback for CJK/Hebrew/Arabic scripts.
+  bool LoadFallbackFont(const char *path);
+  void UnloadFallbackFonts();
+  int GetFallbackCount() const;
+  std::string GetFallbackFile(int index) const;
+  void AutoLoadCjkFallbackFonts();
+
   int Init();
   void ReportFace(FT_Face face);
 
@@ -79,6 +88,13 @@ private:
   struct {
     int left, right, top, bottom;
   } margin;
+
+  // Fallback font faces for scripts not covered by primary fonts.
+  FT_Face fallback_faces_[kMaxFallbackFaces];
+  std::string fallback_filenames_[kMaxFallbackFaces];
+  int fallback_count_;
+
+  FT_Face FindFallbackFace(u32 ucs);
 
   FT_Error InitFreeTypeCache();
   int InitCache();

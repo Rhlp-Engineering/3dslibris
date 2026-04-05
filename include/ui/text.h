@@ -144,6 +144,7 @@ public:
 private:
   friend class FontManager;
   friend class TextRenderer;
+  friend class FontMenu;
   FontManager *fm;
   TextRenderer *tr;
 

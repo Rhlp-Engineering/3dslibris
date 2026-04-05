@@ -63,6 +63,23 @@ static const char *kDefaultFonts[][2] = {
 };
 static const int kDefaultFontCount = 5;
 
+// CJK fallback font filename patterns (checked in order of preference).
+// When a font filename contains any of these substrings, it is auto-loaded
+// as a fallback face for CJK glyph coverage.
+static const char *kCjkFontPatterns[] = {
+    "NotoSansCJK",
+    "NotoSerifCJK",
+    "SourceHanSans",
+    "SourceHanSerif",
+    "WenQuanYi",
+    "ARPLUKai",
+    "ARPLUMing",
+    "DroidSansFallback",
+    "HanaMin",
+    "CJK",
+};
+static const int kCjkFontPatternCount = 10;
+
 } // namespace paths
 
 // --- URL decoding ---

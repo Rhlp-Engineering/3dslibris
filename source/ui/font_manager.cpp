@@ -1,5 +1,6 @@
 #include "ui/font_manager.h"
 
+#include <dirent.h>
 #include <new>
 #include <stdio.h>
 #include <string>
@@ -64,7 +65,9 @@ static FT_Error TextFaceRequester(FTC_FaceID face_id, FT_Library library,
 
 FontManager::FontManager(Text *owner)
     : parent(owner), library(nullptr), error(0), ftc(false), charmap_index(0),
-      pixelsize(12) {
+      pixelsize(12), fallback_count_(0) {
+  for (int i = 0; i < kMaxFallbackFaces; i++)
+    fallback_faces_[i] = nullptr;
   filenames[TEXT_STYLE_REGULAR] = FONTREGULARFILE;
   filenames[TEXT_STYLE_BOLD] = FONTBOLDFILE;
   filenames[TEXT_STYLE_ITALIC] = FONTITALICFILE;
@@ -92,6 +95,7 @@ FontManager::FontManager(Text *owner)
 }
 
 FontManager::~FontManager() {
+  UnloadFallbackFonts();
   ClearCache();
   for (std::map<FT_Face, Cache *>::iterator iter = textCache.begin();
        iter != textCache.end(); iter++) {
@@ -219,10 +223,14 @@ int FontManager::InitCache(void) {
 int FontManager::Init() {
   if (parent)
     pixelsize = parent->pixelsize;
+  int err;
   if (ftc)
-    return InitFreeTypeCache();
+    err = InitFreeTypeCache();
   else
-    return InitCache();
+    err = InitCache();
+  if (err == 0)
+    AutoLoadCjkFallbackFonts();
+  return err;
 }
 
 void FontManager::ReportFace(FT_Face face) {
@@ -293,6 +301,13 @@ int FontManager::GetGlyphBitmap(u32 ucs, FTC_SBit *asbit, FTC_Node *anode) {
 FT_GlyphSlot FontManager::GetGlyph(u32 ucs, int flags, FT_Face face) {
   if (ftc)
     halt(parent, "error: GetGlyph() called with ftc enabled");
+
+  // Try fallback if primary face lacks this glyph.
+  if (face && fallback_count_ > 0 && !FT_Get_Char_Index(face, ucs)) {
+    FT_Face fb = FindFallbackFace(ucs);
+    if (fb)
+      face = fb;
+  }
 
   Cache *face_cache = text_cache_utils::FindFaceCache(textCache, face);
   if (!face || !face_cache) {
@@ -381,6 +396,49 @@ u8 FontManager::GetAdvance(u32 ucs, FT_Face face) {
     }
 #endif
   }
+
+  // Primary face lacks this glyph — try fallback faces.
+  if (face && fallback_count_ > 0 && !FT_Get_Char_Index(face, ucs)) {
+    FT_Face fb = FindFallbackFace(ucs);
+    if (fb) {
+      if (ftc) {
+        // FTC path: look up glyph index in fallback face
+        FTC_FaceID fb_face_id = (FTC_FaceID)fb;
+        auto gindex = FTC_CMapCache_Lookup(cache.cmap, fb_face_id, -1, ucs);
+        if (gindex) {
+          FTC_SBit psbit;
+          error = FTC_SBitCache_Lookup(cache.sbit, &imagetype, gindex, &psbit, NULL);
+          if (!error)
+            return psbit->xadvance;
+
+          FT_Glyph glyph;
+          error = FTC_ImageCache_Lookup(cache.image, &imagetype, gindex, &glyph, NULL);
+          if (!error)
+            return (glyph->advance).x;
+        }
+      } else {
+#ifdef ADVANCE_NO_CACHE
+        error = FT_Load_Char(fb, ucs, FT_LOAD_DEFAULT);
+        if (!error)
+          return fb->glyph->advance.x >> 6;
+#else
+        // Check fallback face's advance cache
+        auto &fbAdvanceCache = advanceCache[fb];
+        auto fb_iter = fbAdvanceCache.find(ucs);
+        if (fb_iter != fbAdvanceCache.end())
+          return fb_iter->second;
+
+        error = FT_Load_Char(fb, ucs, FT_LOAD_DEFAULT);
+        if (!error) {
+          u8 advance = fb->glyph->advance.x >> 6;
+          fbAdvanceCache.insert(std::make_pair(ucs, advance));
+          return advance;
+        }
+#endif
+      }
+    }
+  }
+
   return 0;
 }
 
@@ -456,3 +514,131 @@ void FontManager::SetPixelSize(u8 size) {
 }
 
 int FontManager::GetPixelSize() const { return pixelsize; }
+
+bool FontManager::LoadFallbackFont(const char *path) {
+  if (!path || !*path)
+    return false;
+  if (fallback_count_ >= kMaxFallbackFaces) {
+    printf("[WARN] Fallback font limit reached (%d)\n", kMaxFallbackFaces);
+    return false;
+  }
+
+  const std::string resolved = ResolveFontPath(parent ? parent->app : nullptr, path);
+  if (!FileReadable(resolved.c_str())) {
+    printf("[WARN] Fallback font not found: %s\n", resolved.c_str());
+    return false;
+  }
+
+  FT_Face face = nullptr;
+  FT_Error err = FT_New_Face(library, resolved.c_str(), 0, &face);
+  if (err || !face) {
+    printf("[FAIL] Fallback font(%d): %s\n", err, resolved.c_str());
+    return false;
+  }
+
+  err = FT_Select_Charmap(face, FT_ENCODING_UNICODE);
+  if (err) {
+    printf("[FAIL] Fallback charmap(%d): %s\n", err, resolved.c_str());
+    FT_Done_Face(face);
+    return false;
+  }
+
+  err = FT_Set_Pixel_Sizes(face, 0, pixelsize);
+  if (err) {
+    printf("[FAIL] Fallback pixel size(%d): %s\n", err, resolved.c_str());
+    FT_Done_Face(face);
+    return false;
+  }
+
+  Cache *new_cache = new (std::nothrow) Cache();
+  if (!new_cache) {
+    FT_Done_Face(face);
+    return false;
+  }
+
+  int idx = fallback_count_;
+  fallback_faces_[idx] = face;
+  fallback_filenames_[idx] = std::string(path);
+  fallback_count_++;
+  textCache[face] = new_cache;
+
+  printf("[OK] Fallback font[%d]: %s\n", idx, resolved.c_str());
+  return true;
+}
+
+void FontManager::UnloadFallbackFonts() {
+  for (int i = 0; i < fallback_count_; i++) {
+    FT_Face face = fallback_faces_[i];
+    if (!face)
+      continue;
+    ClearCache(face);
+    std::map<FT_Face, Cache *>::iterator it = textCache.find(face);
+    if (it != textCache.end()) {
+      delete it->second;
+      textCache.erase(it);
+    }
+    advanceCache.erase(face);
+    FT_Done_Face(face);
+    fallback_faces_[i] = nullptr;
+    fallback_filenames_[i].clear();
+  }
+  fallback_count_ = 0;
+}
+
+int FontManager::GetFallbackCount() const { return fallback_count_; }
+
+std::string FontManager::GetFallbackFile(int index) const {
+  if (index < 0 || index >= fallback_count_)
+    return std::string();
+  return fallback_filenames_[index];
+}
+
+FT_Face FontManager::FindFallbackFace(u32 ucs) {
+  for (int i = 0; i < fallback_count_; i++) {
+    if (fallback_faces_[i] && FT_Get_Char_Index(fallback_faces_[i], ucs))
+      return fallback_faces_[i];
+  }
+  return nullptr;
+}
+
+static bool FilenameMatchesCjkPattern(const char *filename) {
+  if (!filename)
+    return false;
+  for (int i = 0; i < paths::kCjkFontPatternCount; i++) {
+    if (strstr(filename, paths::kCjkFontPatterns[i]))
+      return true;
+  }
+  return false;
+}
+
+void FontManager::AutoLoadCjkFallbackFonts() {
+  const std::string font_dir =
+      (parent && parent->app && !parent->app->fontdir.empty())
+          ? parent->app->fontdir
+          : std::string(paths::kFontDir);
+
+  DIR *dp = opendir(font_dir.c_str());
+  if (!dp)
+    return;
+
+  struct dirent *ent;
+  int loaded = 0;
+  while ((ent = readdir(dp)) && loaded < kMaxFallbackFaces) {
+    if (ent->d_type == DT_DIR)
+      continue;
+    const char *name = ent->d_name;
+    const char *ext = strrchr(name, '.');
+    if (!ext || (strcmp(ext, ".ttf") && strcmp(ext, ".otf") && strcmp(ext, ".ttc")))
+      continue;
+    if (!FilenameMatchesCjkPattern(name))
+      continue;
+
+    std::string full_path = font_dir + "/" + name;
+    if (LoadFallbackFont(full_path.c_str()))
+      loaded++;
+  }
+  closedir(dp);
+
+  if (loaded > 0)
+    printf("[OK] Auto-loaded %d CJK fallback font(s)\n", loaded);
+}
