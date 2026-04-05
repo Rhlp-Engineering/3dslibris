@@ -119,7 +119,7 @@ ARCH	:=	-march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft
 
 PORTLIBS := $(DEVKITPRO)/portlibs/3ds
 
-CFLAGS	:=	-g -Wall -O2 -mword-relocations \
+CFLAGS	:=	-Wall -O3 -mword-relocations \
 			-ffunction-sections \
 			$(ARCH)
 
@@ -133,12 +133,12 @@ CFLAGS	+=	$(INCLUDE) -I$(PORTLIBS)/include/freetype2 -I$(PORTLIBS)/include \
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
 ifeq ($(DEBUG_LOGGING),1)
-CFLAGS		+=	-DDSLIBRIS_DEBUG
+CFLAGS		+=	-DDSLIBRIS_DEBUG -g -O2
 CXXFLAGS	+=	-DDSLIBRIS_DEBUG
 endif
 
 ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS	=	-specs=3dsx.specs $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS	:= -lmupdf -lmupdf-third -lfreetype -lpng -lbz2 -lminizip -lz -lm -lctru
 

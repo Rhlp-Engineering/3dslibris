@@ -24,16 +24,18 @@ static inline void RGB565ToU8(u16 c, int *r, int *g, int *b) {
   *b = (b5 << 3) | (b5 >> 2);
 }
 
+static inline int div255(int x) { return (x * 257 + 128) >> 16; }
+
 static inline u16 BlendRGB565(u16 fg, u16 bg, u8 alpha) {
   int fr, fgc, fb, br, bgc, bb;
   RGB565ToU8(fg, &fr, &fgc, &fb);
   RGB565ToU8(bg, &br, &bgc, &bb);
   const int a = (int)alpha;
   const int ia = 255 - a;
-  const int r = (fr * a + br * ia + 127) / 255;
-  const int g = (fgc * a + bgc * ia + 127) / 255;
-  const int b = (fb * a + bb * ia + 127) / 255;
-  return RGB565FromU8((float)r, (float)g, (float)b);
+  const int r = div255(fr * a + br * ia + 127);
+  const int g = div255(fgc * a + bgc * ia + 127);
+  const int b = div255(fb * a + bb * ia + 127);
+  return (u16)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
 }
 
 static inline u16 SepiaGradientPixel(int x, int y, int w, int h) {
@@ -71,14 +73,14 @@ static inline u16 SepiaGradientPixel(int x, int y, int w, int h) {
 static const u16 kSepiaTextColor = RGB565FromU8(70.0f, 52.0f, 32.0f);
 static const u16 kSepiaBgMidColor = RGB565FromU8(241.0f, 223.0f, 190.0f);
 
+static std::vector<u16> grad320;
+static std::vector<u16> grad400;
+static int grad320w = 0;
+static int grad400w = 0;
+
 static void FillSepiaGradient(u16 *dst, int stride, int w, int logical_h) {
   if (!dst || stride <= 0 || w <= 0 || logical_h <= 0)
     return;
-
-  static std::vector<u16> grad320;
-  static std::vector<u16> grad400;
-  static int grad320w = 0;
-  static int grad400w = 0;
 
   std::vector<u16> *grad = nullptr;
   int *cached_w = nullptr;
@@ -109,7 +111,7 @@ static void FillSepiaGradient(u16 *dst, int stride, int w, int logical_h) {
   }
 }
 
-}
+}  // anonymous namespace
 
 TextRenderer::TextRenderer(Text *owner)
     : parent(owner), turned_right(false), style(TEXT_STYLE_REGULAR), codeprev(0),
@@ -156,16 +158,33 @@ void TextRenderer::ClearRect(u16 xl, u16 yl, u16 xh, u16 yh) {
   else
     clearcolor = 0xFFFF;
   int maxHeight = (parent->screen == parent->screenleft ? 400 : 320);
+  // Pre-clamp to valid range
+  if (xl >= (u16)parent->display.width || yl >= (u16)maxHeight) return;
+  xh = std::min((int)xh, (int)parent->display.width);
+  yh = std::min((int)yh, (int)maxHeight);
+  // Sepia mode: copy from cached gradient instead of per-pixel powf
+  if (colorMode == 2) {
+    // Ensure full-screen gradient cache is populated
+    std::vector<u16> *grad = (maxHeight <= 320) ? &grad320 : &grad400;
+    int *cached_w = (maxHeight <= 320) ? &grad320w : &grad400w;
+    if (grad->empty() || *cached_w != (int)parent->display.width) {
+      FillSepiaGradient(parent->screen, parent->display.height,
+                        (int)parent->display.width, maxHeight);
+    }
+    // Copy just the rect region from cache
+    const int rw = (int)xh - (int)xl;
+    const int rh = (int)yh - (int)yl;
+    for (int y = 0; y < rh; y++) {
+      memcpy(parent->screen + (size_t)(yl + y) * (size_t)parent->display.height + (size_t)xl,
+             grad->data() + (size_t)y * (size_t)*cached_w + (size_t)xl,
+             (size_t)rw * sizeof(u16));
+    }
+    return;
+  }
   for (u16 y = yl; y < yh; y++) {
+    u16 *row = parent->screen + (size_t)y * (size_t)parent->display.height + (size_t)xl;
     for (u16 x = xl; x < xh; x++) {
-      if (y < maxHeight && x < (u16)parent->display.width) {
-        if (colorMode == 2) {
-          parent->screen[y * parent->display.height + x] = SepiaGradientPixel(
-              (int)x, (int)y, (int)parent->display.width, maxHeight);
-        } else {
-          parent->screen[y * parent->display.height + x] = clearcolor;
-        }
-      }
+      *row++ = clearcolor;
     }
   }
 }
@@ -190,10 +209,16 @@ u16 TextRenderer::GetBgColor() {
 
 void TextRenderer::FillRect(u16 xl, u16 yl, u16 xh, u16 yh, u16 color) {
   MarkCurrentScreenDirtyRect((int)xl, (int)yl, (int)xh, (int)yh);
-  for (u16 y = yl; y < yh; y++) {
-    for (u16 x = xl; x < xh; x++) {
-      if (y < (u16)parent->display.height && x < (u16)parent->display.width)
-        parent->screen[y * parent->display.height + x] = color;
+  int maxH = (parent->screen == parent->screenleft) ? 400 : 320;
+  // Pre-clamp to valid range
+  if (xl >= (u16)parent->display.width || yl >= (u16)maxH) return;
+  xh = std::min((int)xh, (int)parent->display.width);
+  yh = std::min((int)yh, (int)maxH);
+  const int stride = parent->display.height;
+  for (u16 y = yl; y < (u16)yh; y++) {
+    u16 *row = parent->screen + (size_t)y * (size_t)stride + (size_t)xl;
+    for (u16 x = xl; x < (u16)xh; x++) {
+      *row++ = color;
     }
   }
 }
@@ -291,6 +316,13 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
                              (int)pen.x + (int)bx + (int)width,
                              (int)pen.y - (int)by + (int)height);
 
+  // Pre-resolve foreground color components (constant for this character)
+  int fg_r, fg_g, fg_b;
+  const u16 fg_color = (colorMode == 0) ? 0x0000
+                       : (colorMode == 1) ? 0xFFFF
+                       : kSepiaTextColor;
+  RGB565ToU8(fg_color, &fg_r, &fg_g, &fg_b);
+
   for (u16 gy = 0; gy < height; gy++) {
     for (u16 gx = 0; gx < width; gx++) {
       u8 a = buffer[gy * width + gx];
@@ -303,15 +335,13 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
       const size_t dst_index =
           (size_t)sy * (size_t)parent->display.height + (size_t)sx;
 
-      u16 pixel;
-      if (colorMode == 0) {
-        pixel = BlendRGB565(0x0000, parent->screen[dst_index], a);
-      } else if (colorMode == 1) {
-        pixel = BlendRGB565(0xFFFF, parent->screen[dst_index], a);
-      } else {
-        pixel = BlendRGB565(kSepiaTextColor, parent->screen[dst_index], a);
-      }
-      parent->screen[dst_index] = pixel;
+      int br, bgc, bb;
+      RGB565ToU8(parent->screen[dst_index], &br, &bgc, &bb);
+      const int ia = 255 - (int)a;
+      const int r = div255(fg_r * (int)a + br * ia + 127);
+      const int g = div255(fg_g * (int)a + bgc * ia + 127);
+      const int b = div255(fg_b * (int)a + bb * ia + 127);
+      parent->screen[dst_index] = (u16)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
     }
   }
 
