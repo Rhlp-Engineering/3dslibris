@@ -647,6 +647,17 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
                                       split_y, kPdfZoomScreenHeight,
                                       mupdf_state->current_preview, viewport,
                                       high_quality_viewport);
+      } else {
+        // No tile or preview available yet (e.g. original 3DS low-memory).
+        // Blit the partial buffer for the unrendered region too — strips not
+        // yet rendered are initialised to kPdfPaper (white), so the lower
+        // portion shows paper colour instead of the black left by ClearScreen.
+        BlitRawBitmapViewportRegion(ts, ts->screenleft, kPdfZoomScreenHeight,
+                                    kPdfZoomScreenWidth, kPdfZoomScreenHeight,
+                                    split_y, kPdfZoomScreenHeight,
+                                    inc.partial_pixels,
+                                    inc.partial_width, inc.partial_height,
+                                    0.0f, 0.0f, 1.0f, 1.0f, viewport);
       }
     }
   } else if (has_interactive_tile) {
