@@ -19,7 +19,7 @@ public:
   void browser_nextpage();
   void browser_prevpage();
   void LoadVisibleBrowserCoverCaches();
-  void PruneBrowserWarmupJobs(Book *selected_book);
+  void PrioritizeSelectedBookJobs(Book *selected_book);
   bool HasQueuedJob(app_job_type_t type, Book *book) const;
   void EnqueueJob(app_job_type_t type, Book *book);
   void TickBrowserWarmup();

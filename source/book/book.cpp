@@ -213,7 +213,7 @@ Book::Book(const BookContext &c) : ctx(c) {
   coverWidth = 0;
   coverHeight = 0;
   coverImagePath.clear();
-  coverTried = false;
+  coverAttempts = 0;
   metadataIndexTried = false;
   metadataIndexed = false;
   tocResolveTried = false;

@@ -486,7 +486,7 @@ Book::Book(const BookContext &ctx) : ctx(ctx) {
   coverPixels = nullptr;
   coverWidth = 0;
   coverHeight = 0;
-  coverTried = false;
+  coverAttempts = 0;
   metadataIndexTried = false;
   metadataIndexed = false;
   tocResolveTried = false;

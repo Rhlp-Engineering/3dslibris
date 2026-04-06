@@ -131,7 +131,7 @@ public:
   int coverWidth;
   int coverHeight;
   std::string coverImagePath; //! path inside EPUB zip
-  bool coverTried;
+  uint8_t coverAttempts; // 0=never tried; incremented on failure; capped at kCoverMaxAttempts
   bool metadataIndexTried;
   bool metadataIndexed;
   bool tocResolveTried;

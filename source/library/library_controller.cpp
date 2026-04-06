@@ -243,8 +243,8 @@ bool App::HasQueuedJob(app_job_type_t type, Book *book) const {
   return library_controller_->HasQueuedJob(type, book);
 }
 
-void App::PruneBrowserWarmupJobs(Book *selected_book) {
-  library_controller_->PruneBrowserWarmupJobs(selected_book);
+void App::PrioritizeSelectedBookJobs(Book *selected_book) {
+  library_controller_->PrioritizeSelectedBookJobs(selected_book);
 }
 
 void App::EnqueueJob(app_job_type_t type, Book *book) {

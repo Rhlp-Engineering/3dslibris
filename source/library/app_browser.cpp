@@ -59,8 +59,11 @@ namespace {
 static const char *kCoverCacheBaseDir = paths::kCacheBaseDir;
 static const char *kCoverCacheDir = paths::kCoverCacheDir;
 static const char *kCoverCacheMagic = "CVR2";
-static const size_t kCoverCacheMaxFiles = 256;
-static const size_t kCoverCacheMaxBytes = 6 * 1024 * 1024;
+static const size_t kCoverCacheMaxFiles = 512;
+static const size_t kCoverCacheMaxBytes = 16 * 1024 * 1024;
+// Max extraction attempts per session before a book is skipped.
+// One retry absorbs transient SD-card read failures without retrying forever.
+static const uint8_t kCoverMaxAttempts = 2;
 static const int kCoverThumbMaxW = 85;
 static const int kCoverThumbMaxH = 115;
 static const int kBrowserGridCols = 2;
@@ -362,7 +365,7 @@ void LibraryController::LoadVisibleBrowserCoverCaches() {
     if (path.empty())
       continue;
     if (TryLoadCoverCache(book, path)) {
-      book->coverTried = true;
+      book->coverAttempts = kCoverMaxAttempts;
       if (book->format == FORMAT_EPUB) {
         book->metadataIndexTried = true;
         book->metadataIndexed = true;
@@ -613,18 +616,34 @@ bool LibraryController::HasQueuedJob(app_job_type_t type, Book *book) const {
   return false;
 }
 
-void LibraryController::PruneBrowserWarmupJobs(Book *selected_book) {
-  const size_t removed = browser_job_queue_utils::PruneWarmupJobsForOtherBooks(
-      &job_queue_, selected_book, APP_JOB_INDEX_METADATA,
-      APP_JOB_EXTRACT_COVER);
+void LibraryController::PrioritizeSelectedBookJobs(Book *selected_book) {
+  if (!selected_book || job_queue_.empty())
+    return;
+
+  // Move the selected book's pending jobs to the front so they run first,
+  // but keep all other books' jobs in the queue — they will be processed
+  // during subsequent idle periods rather than being discarded.
+  std::deque<app_job_t> selected_jobs;
+  std::deque<app_job_t> other_jobs;
+  for (size_t i = 0; i < job_queue_.size(); i++) {
+    if (job_queue_[i].book == selected_book)
+      selected_jobs.push_back(job_queue_[i]);
+    else
+      other_jobs.push_back(job_queue_[i]);
+  }
+  job_queue_.clear();
+  for (size_t i = 0; i < selected_jobs.size(); i++)
+    job_queue_.push_back(selected_jobs[i]);
+  for (size_t i = 0; i < other_jobs.size(); i++)
+    job_queue_.push_back(other_jobs[i]);
+
 #ifdef DSLIBRIS_DEBUG
-  if (removed > 0) {
+  if (!selected_jobs.empty()) {
     DBG_LOGF(&app_,
-             "BROWSER: pruned warmup jobs removed=%u queue=%u selected=%s",
-             (unsigned)removed, (unsigned)job_queue_.size(),
-             (selected_book && selected_book->GetFileName())
-                 ? selected_book->GetFileName()
-                 : "(null)");
+             "BROWSER: prioritized selected book jobs=%u queue=%u book=%s",
+             (unsigned)selected_jobs.size(), (unsigned)job_queue_.size(),
+             selected_book->GetFileName() ? selected_book->GetFileName()
+                                          : "(null)");
   }
 #endif
 }
@@ -641,7 +660,7 @@ void LibraryController::EnqueueJob(app_job_type_t type, Book *book) {
 }
 
 void LibraryController::QueueBookWarmup(Book *book) {
-  if (!book || book->coverPixels || book->coverTried)
+  if (!book || book->coverPixels || book->coverAttempts >= kCoverMaxAttempts)
     return;
   const size_t queue_before = job_queue_.size();
   const bool is_selected_book = (book == app_.GetSelectedBook());
@@ -775,24 +794,25 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
               app_flow_utils::DetectBookFormat(book->GetFileName()))) {
         rc = book->Index();
         if (rc != 0)
-          book->coverTried = true;
+          book->coverAttempts++;
         app_.SetBrowserDirty(true);
       }
     } else if (job.type == APP_JOB_EXTRACT_COVER) {
-      if (!book->coverPixels && !book->coverTried) {
+      if (!book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
         std::string path = BuildBookPath(book);
         if (path.empty()) {
           rc = 1;
-          book->coverTried = true;
+          book->coverAttempts = kCoverMaxAttempts; // path failure is permanent
           app_.SetBrowserDirty(true);
         } else {
 #ifdef DSLIBRIS_DEBUG
-        DBG_LOGF(&app_, "COVER: extract start book=%s format=%d",
+        DBG_LOGF(&app_, "COVER: extract start book=%s format=%d attempt=%u",
                  book->GetFileName() ? book->GetFileName() : "(null)",
-                 (int)book->format);
+                 (int)book->format, (unsigned)book->coverAttempts);
 #endif
         if (book->format == FORMAT_EPUB) {
           if (!book->metadataIndexTried) {
+            // Metadata not yet attempted; queue it first and retry cover after.
             EnqueueJob(APP_JOB_INDEX_METADATA, book);
             EnqueueJob(APP_JOB_EXTRACT_COVER, book);
           } else {
@@ -800,9 +820,15 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
               rc = epub_extract_cover(book, path);
               if (rc == 0 && book->coverPixels) {
                 SaveCoverCache(book, path);
+                book->coverAttempts = kCoverMaxAttempts; // success
+              } else if (rc != 0) {
+                book->coverAttempts++; // transient failure, allow retry
+              } else {
+                book->coverAttempts = kCoverMaxAttempts; // decoded nothing, permanent
               }
+            } else {
+              book->coverAttempts = kCoverMaxAttempts; // no cover in this EPUB, permanent
             }
-            book->coverTried = true;
             app_.SetBrowserDirty(true);
           }
         } else if (book->format == FORMAT_XHTML &&
@@ -810,36 +836,52 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           rc = fb2_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
+            book->coverAttempts = kCoverMaxAttempts;
+          } else if (rc != 0) {
+            book->coverAttempts++;
+          } else {
+            book->coverAttempts = kCoverMaxAttempts;
           }
-          book->coverTried = true;
           app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_XHTML &&
                    HasExtCI(book->GetFileName(), ".mobi")) {
           rc = mobi_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
+            book->coverAttempts = kCoverMaxAttempts;
+          } else if (rc != 0) {
+            book->coverAttempts++;
+          } else {
+            book->coverAttempts = kCoverMaxAttempts;
           }
-          book->coverTried = true;
           app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_PDF) {
           rc = pdf_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
+            book->coverAttempts = kCoverMaxAttempts;
+          } else if (rc != 0) {
+            book->coverAttempts++;
+          } else {
+            book->coverAttempts = kCoverMaxAttempts;
           }
-          book->coverTried = true;
           app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_CBZ) {
           rc = cbz_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
+            book->coverAttempts = kCoverMaxAttempts;
+          } else if (rc != 0) {
+            book->coverAttempts++;
+          } else {
+            book->coverAttempts = kCoverMaxAttempts;
           }
-          book->coverTried = true;
           app_.SetBrowserDirty(true);
         }
 #ifdef DSLIBRIS_DEBUG
-        DBG_LOGF(&app_, "COVER: extract end rc=%d book=%s pixels=%u tried=%u",
+        DBG_LOGF(&app_, "COVER: extract end rc=%d book=%s pixels=%u attempts=%u",
                  rc, book->GetFileName() ? book->GetFileName() : "(null)",
-                 book->coverPixels ? 1u : 0u, book->coverTried ? 1u : 0u);
+                 book->coverPixels ? 1u : 0u, (unsigned)book->coverAttempts);
 #endif
         }
       }
@@ -954,7 +996,7 @@ void LibraryController::browser_handleevent() {
     if (app_.GetBrowserPageStart() != old_page_start)
       LoadVisibleBrowserCoverCaches();
     if (app_.GetSelectedBook() != old_selected) {
-      PruneBrowserWarmupJobs(app_.GetSelectedBook());
+      PrioritizeSelectedBookJobs(app_.GetSelectedBook());
       app_.SetBrowserLastInteractionMs(osGetTime());
     }
     app_.SetBrowserDirty(true);
@@ -1027,7 +1069,7 @@ void LibraryController::browser_handleevent() {
                 app_.OpenBook();
               } else {
                 app_.SetSelectedBook(app_.books[book_idx]);
-                PruneBrowserWarmupJobs(app_.GetSelectedBook());
+                PrioritizeSelectedBookJobs(app_.GetSelectedBook());
                 app_.SetBrowserLastInteractionMs(osGetTime());
                 app_.SetBrowserDirty(true);
               }
@@ -1047,7 +1089,7 @@ void LibraryController::browser_handleevent() {
             app_.OpenBook();
           } else {
             app_.SetSelectedBook(app_.books[i]);
-            PruneBrowserWarmupJobs(app_.GetSelectedBook());
+            PrioritizeSelectedBookJobs(app_.GetSelectedBook());
             app_.SetBrowserLastInteractionMs(osGetTime());
             app_.SetBrowserDirty(true);
           }
@@ -1095,7 +1137,7 @@ void LibraryController::browser_init(void) {
         (app_.GetBookIndex(app_.GetSelectedBook()) / APP_BROWSER_BUTTON_COUNT) *
         APP_BROWSER_BUTTON_COUNT);
   }
-  PruneBrowserWarmupJobs(app_.GetSelectedBook());
+  PrioritizeSelectedBookJobs(app_.GetSelectedBook());
   app_.SetBrowserLastInteractionMs(osGetTime());
   LoadVisibleBrowserCoverCaches();
 }
@@ -1105,7 +1147,7 @@ void LibraryController::browser_nextpage() {
     app_.SetBrowserPageStart(app_.GetBrowserPageStart() +
                              APP_BROWSER_BUTTON_COUNT);
     app_.SetSelectedBook(app_.books[app_.GetBrowserPageStart()]);
-    PruneBrowserWarmupJobs(app_.GetSelectedBook());
+    PrioritizeSelectedBookJobs(app_.GetSelectedBook());
     app_.SetBrowserLastInteractionMs(osGetTime());
     LoadVisibleBrowserCoverCaches();
     app_.SetBrowserDirty(true);
@@ -1118,7 +1160,7 @@ void LibraryController::browser_prevpage() {
                              APP_BROWSER_BUTTON_COUNT);
     app_.SetSelectedBook(
         app_.books[app_.GetBrowserPageStart() + APP_BROWSER_BUTTON_COUNT - 1]);
-    PruneBrowserWarmupJobs(app_.GetSelectedBook());
+    PrioritizeSelectedBookJobs(app_.GetSelectedBook());
     app_.SetBrowserLastInteractionMs(osGetTime());
     LoadVisibleBrowserCoverCaches();
     app_.SetBrowserDirty(true);
