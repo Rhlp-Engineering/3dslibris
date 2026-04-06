@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include "shared/status_reporter.h"
+
 #ifdef DSLIBRIS_DEBUG
 
 // Log a literal string.
