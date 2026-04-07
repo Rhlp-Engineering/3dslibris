@@ -14,9 +14,9 @@ static void TestSanitizeSpecialChars() {
 }
 
 static void TestSanitizeNonAscii() {
-  // UTF-8 bytes for Japanese characters are >= 0x80, replaced with _
+  // UTF-8 e-acute (\xc3\xa9) is a valid 2-byte sequence — preserved.
   std::string r = SanitizeFat32Name("book\xc3\xa9name");
-  test::ExpectStrEq("non-ascii", r.c_str(), "book_name");
+  test::ExpectStrEq("non-ascii utf8", r.c_str(), "book\xc3\xa9name");
 }
 
 static void TestSanitizeCollapseUnderscores() {
@@ -65,6 +65,56 @@ static void TestSanitizeControlChars() {
   test::ExpectStrEq("control chars", r.c_str(), "a_b");
 }
 
+static void TestSanitizeCjk() {
+  // U+65E5 U+672C U+8A9E = "日本語"
+  std::string r = SanitizeFat32Name("\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+  test::ExpectStrEq("CJK preserved", r.c_str(),
+                     "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+}
+
+static void TestSanitizeArabic() {
+  // U+0643 U+062A U+0627 U+0628 = "كتاب"
+  std::string r = SanitizeFat32Name("\xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8");
+  test::ExpectStrEq("Arabic preserved", r.c_str(),
+                     "\xd9\x83\xd8\xaa\xd8\xa7\xd8\xa8");
+}
+
+static void TestSanitizeHebrew() {
+  // U+05E1 U+05E4 U+05E8 = "ספר"
+  std::string r = SanitizeFat32Name("\xd7\xa1\xd7\xa4\xd7\xa8");
+  test::ExpectStrEq("Hebrew preserved", r.c_str(),
+                     "\xd7\xa1\xd7\xa4\xd7\xa8");
+}
+
+static void TestSanitizeMixedAsciiCjk() {
+  std::string r = SanitizeFat32Name(
+      "My_Book_\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+  test::ExpectStrEq("mixed ascii+CJK", r.c_str(),
+                     "My_Book_\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+}
+
+static void TestSanitizeTruncateUtf8Boundary() {
+  // 3 CJK chars = 9 bytes. Truncating at max_len=8 must not split a char.
+  std::string input = "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e";
+  std::string r = SanitizeFat32Name(input, 8);
+  // Should yield 2 complete CJK chars = 6 bytes.
+  test::ExpectEq("truncated CJK length", (int)r.size(), 6);
+  test::ExpectStrEq("truncated CJK value", r.c_str(),
+                     "\xe6\x97\xa5\xe6\x9c\xac");
+}
+
+static void TestSanitizeInvalidUtf8() {
+  // 0xFE is never a valid UTF-8 lead byte.
+  std::string r = SanitizeFat32Name("a\xfe" "b");
+  test::ExpectStrEq("invalid utf8 byte", r.c_str(), "a_b");
+}
+
+static void TestSanitizeBrokenContinuation() {
+  // Lead byte for 3-byte seq (0xE6) but only 1 continuation byte.
+  std::string r = SanitizeFat32Name("a\xe6\x97" "b");
+  test::ExpectStrEq("broken continuation", r.c_str(), "a_b");
+}
+
 int main() {
   TestSanitizeBasic();
   TestSanitizeSpecialChars();
@@ -77,6 +127,13 @@ int main() {
   TestSanitizeTruncateNoTrailingUnderscore();
   TestSanitizeLeadingDots();
   TestSanitizeControlChars();
+  TestSanitizeCjk();
+  TestSanitizeArabic();
+  TestSanitizeHebrew();
+  TestSanitizeMixedAsciiCjk();
+  TestSanitizeTruncateUtf8Boundary();
+  TestSanitizeInvalidUtf8();
+  TestSanitizeBrokenContinuation();
   printf("All SanitizeFat32Name tests passed.\n");
   return 0;
 }

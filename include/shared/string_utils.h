@@ -187,18 +187,48 @@ inline std::string SanitizeFat32Name(const std::string &input,
                                      size_t max_len = 80) {
   std::string out;
   out.reserve(input.size());
-  for (size_t i = 0; i < input.size(); i++) {
+  for (size_t i = 0; i < input.size(); ) {
     unsigned char c = (unsigned char)input[i];
-    if (c < 0x20 || c >= 0x80) {
+    // ASCII control characters.
+    if (c < 0x20) {
       out.push_back('_');
+      i++;
       continue;
     }
+    // FAT32-illegal ASCII characters.
     if (c == '\\' || c == '/' || c == ':' || c == '*' || c == '?' ||
         c == '"' || c == '<' || c == '>' || c == '|') {
       out.push_back('_');
+      i++;
       continue;
     }
-    out.push_back((char)c);
+    // Valid ASCII passthrough.
+    if (c < 0x80) {
+      out.push_back((char)c);
+      i++;
+      continue;
+    }
+    // UTF-8 multibyte: detect expected continuation byte count.
+    size_t need = 0;
+    if ((c & 0xE0) == 0xC0)      need = 1;  // 2-byte
+    else if ((c & 0xF0) == 0xE0) need = 2;  // 3-byte (CJK, etc.)
+    else if ((c & 0xF8) == 0xF0) need = 3;  // 4-byte
+    bool valid = (need > 0 && i + need < input.size());
+    if (valid) {
+      for (size_t j = 1; j <= need; j++) {
+        if (((unsigned char)input[i + j] & 0xC0) != 0x80) {
+          valid = false;
+          break;
+        }
+      }
+    }
+    if (valid) {
+      out.append(input, i, need + 1);
+      i += need + 1;
+    } else {
+      out.push_back('_');
+      i++;
+    }
   }
   // Collapse runs of underscores/spaces into a single underscore.
   std::string collapsed;
@@ -221,8 +251,14 @@ inline std::string SanitizeFat32Name(const std::string &input,
   while (e > s && (collapsed[e - 1] == '_' || collapsed[e - 1] == '.'))
     e--;
   std::string result = collapsed.substr(s, e - s);
-  if (result.size() > max_len)
-    result.resize(max_len);
+  if (result.size() > max_len) {
+    size_t cut = max_len;
+    // Walk back past any UTF-8 continuation bytes to avoid splitting a char.
+    while (cut > 0 && ((unsigned char)result[cut] & 0xC0) == 0x80)
+      cut--;
+    // cut now points at a lead byte that doesn't fit; remove it too.
+    result.resize(cut);
+  }
   while (!result.empty() && (result.back() == '_' || result.back() == '.'))
     result.pop_back();
   if (result.empty())
