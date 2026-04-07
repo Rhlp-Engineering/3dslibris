@@ -64,10 +64,11 @@ static const char *kDefaultFonts[][2] = {
 };
 static const int kDefaultFontCount = 5;
 
-// CJK fallback font filename patterns (checked in order of preference).
+// Fallback font filename patterns (checked in order of preference).
 // When a font filename contains any of these substrings, it is auto-loaded
-// as a fallback face for CJK glyph coverage.
+// as a fallback face for non-Latin glyph coverage (CJK, Hebrew, Arabic).
 static const char *kCjkFontPatterns[] = {
+    // CJK (Chinese / Japanese / Korean)
     "NotoSansCJK",
     "NotoSerifCJK",
     "SourceHanSans",
@@ -78,8 +79,18 @@ static const char *kCjkFontPatterns[] = {
     "DroidSansFallback",
     "HanaMin",
     "CJK",
+    // Hebrew
+    "NotoSansHebrew",
+    "NotoSerifHebrew",
+    "FrankRuhl",
+    "Alef",
+    // Arabic
+    "NotoSansArabic",
+    "NotoNaskhArabic",
+    "Amiri",
+    "Scheherazade",
 };
-static const int kCjkFontPatternCount = 10;
+static const int kCjkFontPatternCount = 18;
 
 } // namespace paths
 

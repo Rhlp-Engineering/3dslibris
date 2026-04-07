@@ -108,6 +108,52 @@ void TestGenericCjkDetected() {
              FilenameMatchesCjkPattern("My-CJK-Font.ttf"));
 }
 
+// --- Hebrew font patterns ---
+
+void TestNotoSansHebrewDetected() {
+  ExpectTrue("NotoSansHebrew-Regular.ttf",
+             FilenameMatchesCjkPattern("NotoSansHebrew-Regular.ttf"));
+  ExpectTrue("NotoSansHebrew-Bold.ttf",
+             FilenameMatchesCjkPattern("NotoSansHebrew-Bold.ttf"));
+}
+
+void TestNotoSerifHebrewDetected() {
+  ExpectTrue("NotoSerifHebrew-Regular.ttf",
+             FilenameMatchesCjkPattern("NotoSerifHebrew-Regular.ttf"));
+}
+
+void TestFrankRuhlDetected() {
+  ExpectTrue("FrankRuhlLibre-Regular.ttf",
+             FilenameMatchesCjkPattern("FrankRuhlLibre-Regular.ttf"));
+}
+
+void TestAlefDetected() {
+  ExpectTrue("Alef-Regular.ttf",
+             FilenameMatchesCjkPattern("Alef-Regular.ttf"));
+}
+
+// --- Arabic font patterns ---
+
+void TestNotoSansArabicDetected() {
+  ExpectTrue("NotoSansArabic-Regular.ttf",
+             FilenameMatchesCjkPattern("NotoSansArabic-Regular.ttf"));
+}
+
+void TestNotoNaskhArabicDetected() {
+  ExpectTrue("NotoNaskhArabic-Regular.ttf",
+             FilenameMatchesCjkPattern("NotoNaskhArabic-Regular.ttf"));
+}
+
+void TestAmiriDetected() {
+  ExpectTrue("Amiri-Regular.ttf",
+             FilenameMatchesCjkPattern("Amiri-Regular.ttf"));
+}
+
+void TestScheherazadeDetected() {
+  ExpectTrue("ScheherazadeNew-Regular.ttf",
+             FilenameMatchesCjkPattern("ScheherazadeNew-Regular.ttf"));
+}
+
 // --- Non-CJK fonts must NOT match ---
 
 void TestNonCjkNotDetected() {
@@ -140,7 +186,7 @@ void TestEmptyFilename() {
 }
 
 void TestCjkPatternCount() {
-  ExpectEq("kCjkFontPatternCount", paths::kCjkFontPatternCount, 10);
+  ExpectEq("kCjkFontPatternCount", paths::kCjkFontPatternCount, 18);
 }
 
 void TestAllPatternsNonEmpty() {
@@ -166,6 +212,14 @@ int main() {
   TestDroidSansFallbackDetected();
   TestHanaMinDetected();
   TestGenericCjkDetected();
+  TestNotoSansHebrewDetected();
+  TestNotoSerifHebrewDetected();
+  TestFrankRuhlDetected();
+  TestAlefDetected();
+  TestNotoSansArabicDetected();
+  TestNotoNaskhArabicDetected();
+  TestAmiriDetected();
+  TestScheherazadeDetected();
   TestNonCjkNotDetected();
   TestNullFilename();
   TestEmptyFilename();
