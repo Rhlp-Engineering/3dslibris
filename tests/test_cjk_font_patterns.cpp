@@ -154,6 +154,45 @@ void TestScheherazadeDetected() {
              FilenameMatchesCjkPattern("ScheherazadeNew-Regular.ttf"));
 }
 
+// --- Korean font patterns ---
+
+void TestNanumGothicDetected() {
+  ExpectTrue("NanumGothic-Regular.ttf",
+             FilenameMatchesCjkPattern("NanumGothic-Regular.ttf"));
+  ExpectTrue("NanumGothicCoding.ttf",
+             FilenameMatchesCjkPattern("NanumGothicCoding.ttf"));
+}
+
+void TestNanumMyeongjoDetected() {
+  ExpectTrue("NanumMyeongjo-Regular.ttf",
+             FilenameMatchesCjkPattern("NanumMyeongjo-Regular.ttf"));
+}
+
+void TestNotoSansKRDetected() {
+  ExpectTrue("NotoSansKR-Regular.otf",
+             FilenameMatchesCjkPattern("NotoSansKR-Regular.otf"));
+}
+
+void TestNotoSerifKRDetected() {
+  ExpectTrue("NotoSerifKR-Regular.otf",
+             FilenameMatchesCjkPattern("NotoSerifKR-Regular.otf"));
+}
+
+void TestUnBatangDetected() {
+  ExpectTrue("UnBatang.ttf",
+             FilenameMatchesCjkPattern("UnBatang.ttf"));
+}
+
+void TestUnDotumDetected() {
+  ExpectTrue("UnDotum.ttf",
+             FilenameMatchesCjkPattern("UnDotum.ttf"));
+}
+
+void TestBaekmukDetected() {
+  ExpectTrue("Baekmuk-Batang.ttf",
+             FilenameMatchesCjkPattern("Baekmuk-Batang.ttf"));
+}
+
 // --- Non-CJK fonts must NOT match ---
 
 void TestNonCjkNotDetected() {
@@ -186,7 +225,7 @@ void TestEmptyFilename() {
 }
 
 void TestCjkPatternCount() {
-  ExpectEq("kCjkFontPatternCount", paths::kCjkFontPatternCount, 18);
+  ExpectEq("kCjkFontPatternCount", paths::kCjkFontPatternCount, 25);
 }
 
 void TestAllPatternsNonEmpty() {
@@ -220,6 +259,13 @@ int main() {
   TestNotoNaskhArabicDetected();
   TestAmiriDetected();
   TestScheherazadeDetected();
+  TestNanumGothicDetected();
+  TestNanumMyeongjoDetected();
+  TestNotoSansKRDetected();
+  TestNotoSerifKRDetected();
+  TestUnBatangDetected();
+  TestUnDotumDetected();
+  TestBaekmukDetected();
   TestNonCjkNotDetected();
   TestNullFilename();
   TestEmptyFilename();

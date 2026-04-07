@@ -89,8 +89,16 @@ static const char *kCjkFontPatterns[] = {
     "NotoNaskhArabic",
     "Amiri",
     "Scheherazade",
+    // Korean
+    "NanumGothic",
+    "NanumMyeongjo",
+    "NotoSansKR",
+    "NotoSerifKR",
+    "UnBatang",
+    "UnDotum",
+    "Baekmuk",
 };
-static const int kCjkFontPatternCount = 18;
+static const int kCjkFontPatternCount = 25;
 
 } // namespace paths
 
