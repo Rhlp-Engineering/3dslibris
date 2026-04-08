@@ -178,6 +178,9 @@ int StartupController::RunBootSequence() {
   const int ok = 0;
 
   printf("Loading fonts...\n");
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOG(&app_, "DBG BUILD SIG: idx-font-flow-2026-04-08");
+#endif
   if (app_.ts->Init() != ok) {
     std::vector<std::string> missing;
     CollectMissingRuntimeFiles(&missing);

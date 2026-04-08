@@ -83,6 +83,7 @@ static int grad400w = 0;
 static int g_text_clip_right_budget = 32;
 static int g_text_margin_diag_budget = 12;
 static int g_blit_geometry_diag_budget = 12;
+static int g_blit_page_diag_budget = 64;
 #endif
 
 static void FillSepiaGradient(u16 *dst, int stride, int w, int logical_h) {
@@ -673,7 +674,8 @@ bool TextRenderer::BlitToFramebuffer() {
                       u16 logicalHeight, bool dirty,
                       framebuffer_blit_utils::DirtyRect &dirty_rect,
                       u64 &cache_generation,
-                      framebuffer_blit_utils::PhysicalFramebufferSyncState &sync) {
+                      framebuffer_blit_utils::PhysicalFramebufferSyncState &sync,
+                      const char *tag) {
     if (!fb || !src)
       return;
 
@@ -720,26 +722,44 @@ bool TextRenderer::BlitToFramebuffer() {
 
     const int slot =
         framebuffer_blit_utils::ResolvePhysicalFramebufferSlot(&sync, fb);
-    if (framebuffer_blit_utils::NeedsPhysicalFramebufferCopy(sync, slot,
-                                                             cache_generation)) {
+    const bool needs_copy = framebuffer_blit_utils::NeedsPhysicalFramebufferCopy(
+        sync, slot, cache_generation);
+    if (needs_copy) {
       memcpy(fb, cache.data(), geometry.byte_size);
       framebuffer_blit_utils::MarkPhysicalFramebufferCopied(&sync, slot, fb,
                                                             cache_generation);
       wrote_anything = true;
     }
+#ifdef DSLIBRIS_DEBUG
+    if (parent->app && g_blit_page_diag_budget > 0 &&
+        (dirty || needs_copy || parent->GetScreen() == src)) {
+      const uint16_t px0 = src[0];
+      const uint16_t px1 = src[(size_t)std::min(10, geometry.stride - 1)];
+      DBG_LOGF(parent->app,
+               "BLIT page=%s dirty=%d rect_valid=%d rect=%d,%d..%d,%d gen=%llu slot=%d needs_copy=%d wrote_any=%d fb=%ux%u src0=%04x src1=%04x",
+               tag ? tag : "?", dirty ? 1 : 0, dirty_rect.valid ? 1 : 0,
+               dirty_rect.x0, dirty_rect.y0, dirty_rect.x1, dirty_rect.y1,
+               (unsigned long long)cache_generation, slot, needs_copy ? 1 : 0,
+               wrote_anything ? 1 : 0, (unsigned)fbW, (unsigned)fbH,
+               (unsigned)px0, (unsigned)px1);
+      g_blit_page_diag_budget--;
+    }
+#endif
   };
 
   u8 *fbBottom = gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, &fbW, &fbH);
   blitPage(fbBottom, parent->screenright_fb_cache, parent->screenright,
            framebuffer_blit_utils::LogicalTextScreenHeight(false),
            parent->screenright_dirty, parent->screenright_dirty_rect,
-           parent->screenright_cache_generation, parent->screenright_hw_sync);
+           parent->screenright_cache_generation, parent->screenright_hw_sync,
+           "bottom/right");
 
   u8 *fbTop = gfxGetFramebuffer(GFX_TOP, GFX_LEFT, &fbW, &fbH);
   blitPage(fbTop, parent->screenleft_fb_cache, parent->screenleft,
            framebuffer_blit_utils::LogicalTextScreenHeight(true),
            parent->screenleft_dirty, parent->screenleft_dirty_rect,
-           parent->screenleft_cache_generation, parent->screenleft_hw_sync);
+           parent->screenleft_cache_generation, parent->screenleft_hw_sync,
+           "top/left");
 
   parent->screenright_dirty = false;
   parent->screenleft_dirty = false;

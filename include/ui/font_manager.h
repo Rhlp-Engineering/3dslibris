@@ -64,6 +64,7 @@ public:
 
   // Font fallback for CJK/Hebrew/Arabic scripts.
   bool LoadFallbackFont(const char *path);
+  bool SetFallbackFile(int index, const char *path);
   void UnloadFallbackFonts();
   int GetFallbackCount() const;
   std::string GetFallbackFile(int index) const;

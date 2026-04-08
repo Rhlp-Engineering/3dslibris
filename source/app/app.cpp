@@ -239,10 +239,53 @@ bool App::IsBrowserDirty() const { return nav_.browser.view_dirty; }
 
 void App::PersistPrefs() { prefs->Write(); }
 
-void App::RunFontMenuFrame() {
-  fontmenu->handleInput();
-  if (fontmenu->isDirty())
+void App::RunFontMenuFrame(u32 keys) {
+#ifdef DSLIBRIS_DEBUG
+  static int s_font_frame_budget = 48;
+  if (s_font_frame_budget > 0) {
+    DBG_LOGF(this,
+             "FONT frame keys=0x%08lx dirty=%d screen=%p right=%p left=%p ts_dirty=%d",
+             (unsigned long)keys, fontmenu->isDirty() ? 1 : 0,
+             (void *)ts->GetScreen(), (void *)ts->screenright,
+             (void *)ts->screenleft, ts->HasDirtyScreens() ? 1 : 0);
+    s_font_frame_budget--;
+  }
+#endif
+  // Ensure first entry into font submenu is visible before any new key edge.
+  if (fontmenu->isDirty()) {
+    ts->SetScreen(ts->screenright);
     fontmenu->draw();
+    // Defensive: ensure framebuffer conversion sees this submenu redraw.
+    ts->MarkScreenDirty(ts->screenright);
+#ifdef DSLIBRIS_DEBUG
+    static int s_font_predraw_budget = 16;
+    if (s_font_predraw_budget > 0) {
+      DBG_LOGF(this,
+               "FONT frame pre-draw done ts_dirty=%d screen=%p right=%p left=%p",
+               ts->HasDirtyScreens() ? 1 : 0, (void *)ts->GetScreen(),
+               (void *)ts->screenright, (void *)ts->screenleft);
+      s_font_predraw_budget--;
+    }
+#endif
+  }
+
+  if (keys == 0)
+    return;
+
+  fontmenu->HandleInput(keys);
+  if (fontmenu->isDirty()) {
+    ts->SetScreen(ts->screenright);
+    fontmenu->draw();
+    ts->MarkScreenDirty(ts->screenright);
+#ifdef DSLIBRIS_DEBUG
+    static int s_font_draw_after_input_budget = 24;
+    if (s_font_draw_after_input_budget > 0) {
+      DBG_LOGF(this, "FONT frame draw-after-input ts_dirty=%d",
+               ts->HasDirtyScreens() ? 1 : 0);
+      s_font_draw_after_input_budget--;
+    }
+#endif
+  }
 }
 
 void App::RunBookmarksMenuFrame(u32 keys) {
@@ -266,6 +309,25 @@ void App::RunChaptersMenuFrame(u32 keys) {
     s_chapters_input_budget--;
   }
 #endif
+  // Draw first when invalidated so the index becomes visible even before any
+  // new key edge arrives.
+  if (chaptermenu->IsDirty()) {
+    chaptermenu->Draw();
+    ts->MarkScreenDirty(ts->screenright);
+#ifdef DSLIBRIS_DEBUG
+    static int s_chapters_predraw_budget = 16;
+    if (s_chapters_predraw_budget > 0) {
+      DBG_LOG(this, "INDEX frame pre-draw");
+      s_chapters_predraw_budget--;
+    }
+#endif
+  }
+
+  // Chapters navigation is edge-triggered (`hidKeysDown` in main loop). Avoid
+  // processing idle frames in the menu handler to keep this path deterministic.
+  if (keys == 0)
+    return;
+
   const bool dirty_before = chaptermenu && chaptermenu->IsDirty();
   chaptermenu->HandleInput(keys);
   const bool dirty_after_input = chaptermenu && chaptermenu->IsDirty();
@@ -290,7 +352,21 @@ void App::RunChaptersMenuFrame(u32 keys) {
 }
 
 bool App::PresentIfDirty() {
-  if (ts->BlitToFramebuffer()) {
+  const bool right_dirty = ts->screenright_dirty;
+  const bool left_dirty = ts->screenleft_dirty;
+  const bool had_dirty = ts->HasDirtyScreens();
+  const bool wrote = ts->BlitToFramebuffer();
+#ifdef DSLIBRIS_DEBUG
+  static int s_present_budget = 96;
+  if (s_present_budget > 0 && (had_dirty || IsFontMode(nav_.mode) ||
+                               nav_.mode == AppMode::Chapters)) {
+    DBG_LOGF(this, "PRESENT mode=%d had_dirty=%d wrote=%d right_dirty=%d left_dirty=%d",
+             (int)nav_.mode, had_dirty ? 1 : 0, wrote ? 1 : 0,
+             right_dirty ? 1 : 0, left_dirty ? 1 : 0);
+    s_present_budget--;
+  }
+#endif
+  if (wrote) {
     gfxFlushBuffers();
     gfxSwapBuffers();
     return true;
@@ -542,6 +618,14 @@ void App::DrawBottomGradientBackground() {
 void App::ShowFontView(AppMode app_font_mode) {
   nav_.mode = AppMode::PrefsFont;
   ts->SetScreen(ts->screenright);
+  ts->MarkScreenDirty(ts->screenright);
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(this,
+           "FONT show mode=%d screen=%p right=%p left=%p ts_dirty=%d req=%d",
+           (int)nav_.mode, (void *)ts->GetScreen(), (void *)ts->screenright,
+           (void *)ts->screenleft, ts->HasDirtyScreens() ? 1 : 0,
+           (int)app_font_mode);
+#endif
   fontmenu->Open(app_font_mode);
 }
 
@@ -638,6 +722,12 @@ void App::ShowChaptersView() {
   }
   nav_.mode = AppMode::Chapters;
   ts->SetScreen(ts->screenright);
+  ts->MarkScreenDirty(ts->screenright);
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(this, "INDEX show screen=%p right=%p left=%p ts_dirty=%d",
+           (void *)ts->GetScreen(), (void *)ts->screenright,
+           (void *)ts->screenleft, ts->HasDirtyScreens() ? 1 : 0);
+#endif
   DBG_LOG(this, "INDEX show init menu begin");
   chaptermenu->Init();
   chaptermenu->DisableInitialReleaseWait();

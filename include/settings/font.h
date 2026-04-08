@@ -28,12 +28,9 @@ public:
     void Open(AppMode requested_mode);
     void draw();
     void Draw() override { draw(); } // Override to use the draw method
-    void HandleInput(u32 keys) override {
-        (void)keys;
-        handleInput();
-    }
+    void HandleInput(u32 keys) override { handleInput(keys); }
     inline const std::vector<std::string>& getFiles() const { return files; }
-    void handleInput();
+    void handleInput(u32 keys);
     inline bool isDirty() const { return dirty; }
     inline void setDirty(bool d = true) { dirty = d; }
 private:
@@ -51,6 +48,13 @@ private:
     void handleTargetTouchInput();
     void handleButtonPress();
     void handleFileTouchInput();
+    void nextTargetPage();
+    void previousTargetPage();
+    u8 getTargetPageCount() const;
+    u8 getTargetCurrentPage() const;
+    u8 getTargetPageStart() const;
+    u8 getTargetPageEnd() const;
+    void syncTargetPageToSelection();
     void nextPage();
     void previousPage();
     void selectNext();
@@ -62,4 +66,5 @@ private:
     std::vector<Button *> targetButtons;
     ViewState viewState;
     u8 targetSelected;
+    u8 targetPage;
 };

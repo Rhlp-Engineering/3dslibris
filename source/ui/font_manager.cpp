@@ -486,10 +486,18 @@ bool FontManager::GetFontName(std::string &s) {
 }
 
 void FontManager::SetFontFile(const char *path, u8 style) {
+  if (!path || !*path)
+    return;
   if (!strcmp(filenames[style].c_str(), path))
     return;
+  const std::string previous = filenames[style];
   filenames[style] = std::string(path);
-  CreateFace(style);
+  FT_Error err = CreateFace(style);
+  if (err) {
+    // Keep runtime/prefs consistency: do not leave a filename selected when
+    // the face could not be created.
+    filenames[style] = previous;
+  }
 }
 
 std::string FontManager::GetFontFile(u8 style) { return filenames[style]; }
@@ -524,6 +532,22 @@ bool FontManager::LoadFallbackFont(const char *path) {
     return false;
   }
 
+  int slot = -1;
+  for (int i = 0; i < kMaxFallbackFaces; i++) {
+    if (!fallback_faces_[i]) {
+      slot = i;
+      break;
+    }
+  }
+  if (slot < 0)
+    return false;
+  return SetFallbackFile(slot, path);
+}
+
+bool FontManager::SetFallbackFile(int index, const char *path) {
+  if (index < 0 || index >= kMaxFallbackFaces || !path || !*path)
+    return false;
+
   const std::string resolved = ResolveFontPath(parent ? parent->app : nullptr, path);
   if (!FileReadable(resolved.c_str())) {
     printf("[WARN] Fallback font not found: %s\n", resolved.c_str());
@@ -557,18 +581,30 @@ bool FontManager::LoadFallbackFont(const char *path) {
     return false;
   }
 
-  int idx = fallback_count_;
-  fallback_faces_[idx] = face;
-  fallback_filenames_[idx] = std::string(path);
-  fallback_count_++;
-  textCache[face] = new_cache;
+  FT_Face old_face = fallback_faces_[index];
+  if (old_face) {
+    ClearCache(old_face);
+    std::map<FT_Face, Cache *>::iterator it = textCache.find(old_face);
+    if (it != textCache.end()) {
+      delete it->second;
+      textCache.erase(it);
+    }
+    advanceCache.erase(old_face);
+    FT_Done_Face(old_face);
+  }
 
-  printf("[OK] Fallback font[%d]: %s\n", idx, resolved.c_str());
+  fallback_faces_[index] = face;
+  fallback_filenames_[index] = std::string(path);
+  textCache[face] = new_cache;
+  if (index + 1 > fallback_count_)
+    fallback_count_ = index + 1;
+
+  printf("[OK] Fallback font[%d]: %s\n", index, resolved.c_str());
   return true;
 }
 
 void FontManager::UnloadFallbackFonts() {
-  for (int i = 0; i < fallback_count_; i++) {
+  for (int i = 0; i < kMaxFallbackFaces; i++) {
     FT_Face face = fallback_faces_[i];
     if (!face)
       continue;
@@ -589,13 +625,13 @@ void FontManager::UnloadFallbackFonts() {
 int FontManager::GetFallbackCount() const { return fallback_count_; }
 
 std::string FontManager::GetFallbackFile(int index) const {
-  if (index < 0 || index >= fallback_count_)
+  if (index < 0 || index >= kMaxFallbackFaces)
     return std::string();
   return fallback_filenames_[index];
 }
 
 FT_Face FontManager::FindFallbackFace(u32 ucs) {
-  for (int i = 0; i < fallback_count_; i++) {
+  for (int i = 0; i < kMaxFallbackFaces; i++) {
     if (fallback_faces_[i] && FT_Get_Char_Index(fallback_faces_[i], ucs))
       return fallback_faces_[i];
   }

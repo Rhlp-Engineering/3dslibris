@@ -14,7 +14,7 @@
 #include "app/app.h"
 
 Menu::Menu(App *_app) {
-    app = App::GetInstance();
+    app = _app ? _app : App::GetInstance();
     buttons.clear();
     pagesize = 7;
     selected = 0;

@@ -21,9 +21,11 @@
 #include <vector>
 
 #include "app/app.h"
+#include "debug_log.h"
 #include "ui/button.h"
 #include "font_constants.h"
 #include "settings/prefs.h"
+#include "shared/bugfix_utils.h"
 #include "shared/string_utils.h"
 #include "ui/text.h"
 #include "ui/touch_utils.h"
@@ -43,6 +45,7 @@ enum FontTarget : u8 {
   FONT_TARGET_COUNT = 9
 };
 static const u8 kFallbackTargetStart = FONT_TARGET_FALLBACK_1;
+static const u8 kTargetsPerPage = 5;
 
 static const char *kFontTargetLabels[FONT_TARGET_COUNT] = {
     "regular font", "bold font", "italic font", "bold italic font",
@@ -139,7 +142,8 @@ static void LayoutTargetFooterButtons(App *app) {
 } // namespace
 
 FontMenu::FontMenu(App *_app)
-    : Menu(_app), viewState(VIEW_TARGETS), targetSelected(FONT_TARGET_REGULAR) {
+    : Menu(_app), viewState(VIEW_TARGETS), targetSelected(FONT_TARGET_REGULAR),
+      targetPage(0) {
   dir = app->fontdir;
   findFiles();
 
@@ -161,7 +165,7 @@ FontMenu::FontMenu(App *_app)
     Button *b = new Button(app->ts);
     b->Init();
     b->SetStyle(BUTTON_STYLE_SETTING);
-    b->Move(5, 24 + i * 38);
+    b->Move(5, 24 + (i % kTargetsPerPage) * 38);
     b->Resize(230, 36);
     b->SetLabel1(std::string(kFontTargetLabels[i]));
     targetButtons.push_back(b);
@@ -187,25 +191,43 @@ void FontMenu::Open(AppMode requested_mode) {
 }
 
 void FontMenu::findFiles() {
-  DIR *dp = opendir(dir.c_str());
-  if (!dp)
-    return;
+  std::vector<std::string> search_dirs;
+  GetFallbackFontSearchDirs(dir, paths::kFontDir, &search_dirs);
 
-  struct dirent *ent;
-  while ((ent = readdir(dp))) {
-    // Don't try folders
-    if (ent->d_type == DT_DIR)
+  std::vector<std::string> seen;
+  for (size_t d = 0; d < search_dirs.size(); d++) {
+    DIR *dp = opendir(search_dirs[d].c_str());
+    if (!dp)
       continue;
 
-    char *filename = ent->d_name;
-    char *c;
-    for (c = filename; c != filename + strlen(filename) && *c != '.'; c++)
-      ;
-    if (!strcmp(".ttf", c) || !strcmp(".otf", c) || !strcmp(".ttc", c)) {
+    struct dirent *ent;
+    while ((ent = readdir(dp))) {
+      if (ent->d_type == DT_DIR)
+        continue;
+
+      const char *filename = ent->d_name;
+      const char *c = strrchr(filename, '.');
+      if (!c)
+        continue;
+      if (strcmp(".ttf", c) && strcmp(".otf", c) && strcmp(".ttc", c))
+        continue;
+
+      const std::string lower = ToLowerAscii(std::string(filename));
+      bool duplicate = false;
+      for (size_t i = 0; i < seen.size(); i++) {
+        if (seen[i] == lower) {
+          duplicate = true;
+          break;
+        }
+      }
+      if (duplicate)
+        continue;
+
+      seen.push_back(lower);
       files.push_back(std::string(filename));
     }
+    closedir(dp);
   }
-  closedir(dp);
 }
 
 void FontMenu::refreshTargetButtons() {
@@ -228,6 +250,7 @@ void FontMenu::enterTargetView(u8 requested_target) {
   viewState = VIEW_TARGETS;
   if (requested_target < FONT_TARGET_COUNT)
     targetSelected = requested_target;
+  syncTargetPageToSelection();
   refreshTargetButtons();
   dirty = true;
 }
@@ -258,8 +281,19 @@ void FontMenu::enterFileView() {
   dirty = true;
 }
 
-void FontMenu::handleInput() {
-  u32 keys = hidKeysDown();
+void FontMenu::handleInput(u32 keys) {
+#ifdef DSLIBRIS_DEBUG
+  static int s_font_input_budget = 96;
+  if (app && s_font_input_budget > 0 &&
+      (keys != 0 || hidKeysHeld() != 0)) {
+    DBG_LOGF(app,
+             "FONT input keys=0x%08lx held=0x%08lx view=%d target=%u sel=%u page=%u dirty=%d",
+             (unsigned long)keys, (unsigned long)hidKeysHeld(),
+             (int)viewState, (unsigned)targetSelected, (unsigned)selected,
+             (unsigned)page, dirty ? 1 : 0);
+    s_font_input_budget--;
+  }
+#endif
   if (viewState == VIEW_TARGETS)
     handleTargetInput(keys);
   else
@@ -272,6 +306,10 @@ void FontMenu::handleTargetInput(u32 keys) {
     app->ShowSettingsView(app->IsBookSettingsContext());
   } else if (keys & KEY_A) {
     enterFileView();
+  } else if (keys & (key.r | KEY_R)) {
+    nextTargetPage();
+  } else if (keys & (key.l | KEY_L)) {
+    previousTargetPage();
   } else if (keys & (key.down | KEY_DOWN | key.right | KEY_RIGHT |
                      KEY_CPAD_DOWN | KEY_CPAD_RIGHT)) {
     selectNextTarget();
@@ -309,12 +347,25 @@ void FontMenu::handleTargetTouchInput() {
   TouchCandidates candidates;
   touch::BuildCandidates(app, &candidates);
 
+  if (targetPage + 1 < getTargetPageCount() &&
+      touch::HitsButton(candidates, &app->buttonnext, 4)) {
+    nextTargetPage();
+    return;
+  }
+
+  if (targetPage > 0 && touch::HitsButton(candidates, &app->buttonprev, 4)) {
+    previousTargetPage();
+    return;
+  }
+
   if (touch::HitsButton(candidates, &app->buttonprefs, 4)) {
     app->ShowSettingsView(app->IsBookSettingsContext());
     return;
   }
 
-  for (u8 i = 0; i < targetButtons.size() && i < FONT_TARGET_COUNT; i++) {
+  const u8 start = getTargetPageStart();
+  const u8 end = getTargetPageEnd();
+  for (u8 i = start; i < end; i++) {
     if (touch::HitsButton(candidates, targetButtons[i], 4)) {
       targetSelected = i;
       enterFileView();
@@ -324,6 +375,20 @@ void FontMenu::handleTargetTouchInput() {
 
   int footerX = -1;
   if (touch::FirstXInBottomBand(candidates, 284, &footerX)) {
+    if (footerX < 80) {
+      if (targetPage > 0)
+        previousTargetPage();
+      else
+        app->ShowSettingsView(app->IsBookSettingsContext());
+      return;
+    }
+    if (footerX > 160) {
+      if (targetPage + 1 < getTargetPageCount())
+        nextTargetPage();
+      else
+        app->ShowSettingsView(app->IsBookSettingsContext());
+      return;
+    }
     app->ShowSettingsView(app->IsBookSettingsContext());
     return;
   }
@@ -387,6 +452,20 @@ void FontMenu::handleFileTouchInput() {
 }
 
 void FontMenu::draw() {
+#ifdef DSLIBRIS_DEBUG
+  static int s_font_draw_budget = 24;
+  if (app && s_font_draw_budget > 0) {
+    const u16 before0 = app->ts->screenright[0];
+    const u16 before1 = app->ts->screenright[(size_t)10 * (size_t)app->ts->display.height + 10];
+    DBG_LOGF(app,
+             "FONT draw begin view=%d target=%u sel=%u page=%u dirty=%d app=%p before0=%04x before1=%04x",
+             (int)viewState, (unsigned)targetSelected, (unsigned)selected,
+             (unsigned)page, dirty ? 1 : 0, (void *)app, (unsigned)before0,
+             (unsigned)before1);
+    s_font_draw_budget--;
+  }
+#endif
+  app->ts->SetScreen(app->ts->screenright);
   app->ts->ClearScreen();
   app->DrawBottomGradientBackground();
 
@@ -395,12 +474,37 @@ void FontMenu::draw() {
     app->ts->SetPen(6, 14);
     app->ts->PrintString("font configuration");
 
-    for (u8 i = 0; i < targetButtons.size() && i < FONT_TARGET_COUNT; i++) {
+    const u8 start = getTargetPageStart();
+    const u8 end = getTargetPageEnd();
+    for (u8 i = start; i < end; i++) {
+      targetButtons[i]->Move(5, 24 + (i - start) * 38);
       targetButtons[i]->Draw(i == targetSelected);
     }
 
+    char pageLabel[24];
+    snprintf(pageLabel, sizeof(pageLabel), "Pg %d/%d", getTargetCurrentPage(),
+             getTargetPageCount());
+    app->ts->SetPen(6, 282);
+    app->ts->PrintString(pageLabel);
+
+    if (targetPage > 0)
+      app->buttonprev.Draw();
     app->buttonprefs.Draw();
+    if (targetPage + 1 < getTargetPageCount())
+      app->buttonnext.Draw();
     dirty = false;
+#ifdef DSLIBRIS_DEBUG
+    static int s_font_draw_end_budget = 24;
+    if (app && s_font_draw_end_budget > 0) {
+      const u16 after0 = app->ts->screenright[0];
+      const u16 after1 =
+          app->ts->screenright[(size_t)10 * (size_t)app->ts->display.height + 10];
+      DBG_LOGF(app,
+               "FONT draw end view=targets dirty=%d after0=%04x after1=%04x",
+               dirty ? 1 : 0, (unsigned)after0, (unsigned)after1);
+      s_font_draw_end_budget--;
+    }
+#endif
     return;
   }
 
@@ -428,6 +532,17 @@ void FontMenu::draw() {
   if (page < GetPageCount() - 1)
     app->buttonnext.Draw();
   dirty = false;
+#ifdef DSLIBRIS_DEBUG
+  static int s_font_draw_end_budget2 = 24;
+  if (app && s_font_draw_end_budget2 > 0) {
+    const u16 after0 = app->ts->screenright[0];
+    const u16 after1 =
+        app->ts->screenright[(size_t)10 * (size_t)app->ts->display.height + 10];
+    DBG_LOGF(app, "FONT draw end view=files dirty=%d after0=%04x after1=%04x",
+             dirty ? 1 : 0, (unsigned)after0, (unsigned)after1);
+    s_font_draw_end_budget2--;
+  }
+#endif
 }
 
 void FontMenu::selectNext() {
@@ -473,6 +588,7 @@ void FontMenu::selectPrevious() {
 void FontMenu::selectNextTarget() {
   if (targetSelected + 1 < FONT_TARGET_COUNT) {
     targetSelected++;
+    syncTargetPageToSelection();
     dirty = true;
   }
 }
@@ -480,8 +596,50 @@ void FontMenu::selectNextTarget() {
 void FontMenu::selectPreviousTarget() {
   if (targetSelected > 0) {
     targetSelected--;
+    syncTargetPageToSelection();
     dirty = true;
   }
+}
+
+u8 FontMenu::getTargetPageCount() const {
+  return (FONT_TARGET_COUNT + kTargetsPerPage - 1) / kTargetsPerPage;
+}
+
+u8 FontMenu::getTargetCurrentPage() const { return targetPage + 1; }
+
+u8 FontMenu::getTargetPageStart() const { return targetPage * kTargetsPerPage; }
+
+u8 FontMenu::getTargetPageEnd() const {
+  const u8 start = getTargetPageStart();
+  const u8 end = start + kTargetsPerPage;
+  return (end < FONT_TARGET_COUNT) ? end : FONT_TARGET_COUNT;
+}
+
+void FontMenu::syncTargetPageToSelection() {
+  targetPage = targetSelected / kTargetsPerPage;
+}
+
+void FontMenu::nextTargetPage() {
+  const u8 page_count = getTargetPageCount();
+  if (targetPage + 1 >= page_count)
+    return;
+  targetPage++;
+  const u8 start = getTargetPageStart();
+  const u8 end = getTargetPageEnd();
+  if (targetSelected < start || targetSelected >= end)
+    targetSelected = start;
+  dirty = true;
+}
+
+void FontMenu::previousTargetPage() {
+  if (targetPage == 0)
+    return;
+  targetPage--;
+  const u8 start = getTargetPageStart();
+  const u8 end = getTargetPageEnd();
+  if (targetSelected < start || targetSelected >= end)
+    targetSelected = end - 1;
+  dirty = true;
 }
 
 void FontMenu::handleButtonPress() {
@@ -496,11 +654,16 @@ void FontMenu::handleButtonPress() {
 
   if (IsFallbackTarget(targetSelected)) {
     int fb_idx = FallbackIndexFromTarget(targetSelected);
-    if (app->ts->fm->LoadFallbackFont(filename)) {
+    if (app->ts->fm->SetFallbackFile(fb_idx, filename)) {
       char msg[64];
       snprintf(msg, sizeof(msg), "fallback %d: %s", fb_idx + 1, BasenameOnly(filename).c_str());
       app->PrintStatus(msg);
       app->MarkBookLayoutDirty();
+      const int write_rc = app->prefs->Write();
+#ifdef DSLIBRIS_DEBUG
+      DBG_LOGF(app, "FONT prefs write rc=%d fallback=%d file=%s", write_rc,
+               fb_idx + 1, app->ts->fm->GetFallbackFile(fb_idx).c_str());
+#endif
     } else {
       app->PrintStatus("error loading fallback font");
     }
@@ -508,10 +671,26 @@ void FontMenu::handleButtonPress() {
     const u8 style = StyleFromTarget(targetSelected);
     const std::string previous = app->ts->GetFontFile(style);
     app->ts->SetFontFile(filename, style);
+    const std::string current = app->ts->GetFontFile(style);
+    if (current != std::string(filename)) {
+      app->PrintStatus("error loading font");
+#ifdef DSLIBRIS_DEBUG
+      DBG_LOGF(app,
+               "FONT apply failed style=%u requested=%s current=%s previous=%s",
+               (unsigned)style, filename, current.c_str(), previous.c_str());
+#endif
+      refreshTargetButtons();
+      enterTargetView(targetSelected);
+      return;
+    }
     if (style != TEXT_STYLE_BROWSER && previous != filename)
       app->MarkBookLayoutDirty();
     app->PrefsRefreshButton(PREFS_BUTTON_FONT_CONFIG);
-    app->prefs->Write();
+    const int write_rc = app->prefs->Write();
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF(app, "FONT prefs write rc=%d style=%u file=%s", write_rc,
+             (unsigned)style, current.c_str());
+#endif
   }
   refreshTargetButtons();
   enterTargetView(targetSelected);

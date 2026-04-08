@@ -139,9 +139,6 @@ inline void ConvertLogicalRgb565ToPhysicalBgr888(
   for (int sy = 0; sy < max_sy; sy++) {
     for (int sx = 0; sx < max_sx; sx++) {
       const uint16_t pixel = src[(size_t)sy * (size_t)src_stride + (size_t)sx];
-      if (pixel == 0xFFFF)
-        continue;
-
       const size_t off = PhysicalOffsetBytes(geometry, sx, sy, turned_right);
       dst[off + 0] = (uint8_t)((pixel & 0x1F) << 3);
       dst[off + 1] = (uint8_t)(((pixel >> 5) & 0x3F) << 2);

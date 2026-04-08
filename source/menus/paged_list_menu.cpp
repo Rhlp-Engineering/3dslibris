@@ -120,6 +120,19 @@ void PagedListMenu::Init() {
 }
 
 void PagedListMenu::Draw() {
+#ifdef DSLIBRIS_DEBUG
+  static int s_list_draw_begin_budget = 24;
+  if (app && s_list_draw_begin_budget > 0) {
+    const u16 before0 = app->ts->screenright[0];
+    const u16 before1 =
+        app->ts->screenright[(size_t)10 * (size_t)app->ts->display.height + 10];
+    DBG_LOGF(app,
+             "LIST draw begin title=%s dirty=%d page=%u sel=%u before0=%04x before1=%04x",
+             header_title.c_str(), dirty ? 1 : 0, (unsigned)GetCurrentPage(),
+             (unsigned)selected, (unsigned)before0, (unsigned)before1);
+    s_list_draw_begin_budget--;
+  }
+#endif
   int savedColorMode = app->ts->GetColorMode();
   app->ts->SetScreen(app->ts->screenright);
   app->ts->SetColorMode(0);
@@ -160,6 +173,19 @@ void PagedListMenu::Draw() {
 
   app->ts->SetColorMode(savedColorMode);
   dirty = false;
+#ifdef DSLIBRIS_DEBUG
+  static int s_list_draw_end_budget = 24;
+  if (app && s_list_draw_end_budget > 0) {
+    const u16 after0 = app->ts->screenright[0];
+    const u16 after1 =
+        app->ts->screenright[(size_t)10 * (size_t)app->ts->display.height + 10];
+    DBG_LOGF(app,
+             "LIST draw end title=%s dirty=%d page=%u sel=%u after0=%04x after1=%04x",
+             header_title.c_str(), dirty ? 1 : 0, (unsigned)GetCurrentPage(),
+             (unsigned)selected, (unsigned)after0, (unsigned)after1);
+    s_list_draw_end_budget--;
+  }
+#endif
 }
 
 void PagedListMenu::HandleInput(u32 keys) {

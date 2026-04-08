@@ -69,7 +69,7 @@ int MainLoopController::RunMainLoop() {
     case AppMode::PrefsFontBold:
     case AppMode::PrefsFontItalic:
     case AppMode::PrefsFontBoldItalic:
-      app_.RunFontMenuFrame();
+      app_.RunFontMenuFrame(hidKeysDown());
       break;
 
     case AppMode::Bookmarks:

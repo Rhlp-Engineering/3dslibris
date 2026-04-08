@@ -199,7 +199,7 @@ public:
   void PrefsDraw();
   void PrefsHandleEvent();
   void PersistPrefs();
-  void RunFontMenuFrame();
+  void RunFontMenuFrame(u32 keys);
   void RunBookmarksMenuFrame(u32 keys);
   void RunChaptersMenuFrame(u32 keys);
   bool PresentIfDirty();
