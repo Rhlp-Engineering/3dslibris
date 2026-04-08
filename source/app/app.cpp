@@ -123,6 +123,12 @@ App::App() {
   status_log_write_count_ = 0;
   LightLock_Init(&status_log_lock_);
 
+#ifdef DSLIBRIS_DEBUG
+  // Debug builds should emit actionable logs by default.
+  debug_log::SetLevel(DBG_LEVEL_DEBUG);
+  debug_log::SetCategories(DBG_CAT_ALL);
+#endif
+
   ts = new Text();
   ts->app = this;
 
@@ -357,7 +363,9 @@ bool App::PresentIfDirty() {
   const bool had_dirty = ts->HasDirtyScreens();
   const bool wrote = ts->BlitToFramebuffer();
 #ifdef DSLIBRIS_DEBUG
-  static int s_present_budget = 96;
+  // Present-cycle logs are too chatty while debugging pagination/layout.
+  // Raise this manually if the issue shifts to swap/present behavior.
+  static int s_present_budget = 0;
   if (s_present_budget > 0 && (had_dirty || IsFontMode(nav_.mode) ||
                                nav_.mode == AppMode::Chapters)) {
     DBG_LOGF(this, "PRESENT mode=%d had_dirty=%d wrote=%d right_dirty=%d left_dirty=%d",
