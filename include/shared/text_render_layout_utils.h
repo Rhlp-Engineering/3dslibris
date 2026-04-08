@@ -1,0 +1,57 @@
+#pragma once
+
+#include <algorithm>
+
+namespace text_render_layout_utils {
+
+struct ReadingScreenMetrics {
+  int max_height;
+  int bottom_margin;
+};
+
+inline int ComputeRtlLineStartX(int margin_left, int content_right,
+                                int line_width) {
+  const int x = content_right - std::max(0, line_width);
+  return std::max(margin_left, x);
+}
+
+inline bool ShouldAutoWrapGlyph(bool auto_wrap_enabled, bool is_browser_style,
+                                int pen_x, int margin_left, int glyph_right,
+                                int content_right) {
+  if (!auto_wrap_enabled || is_browser_style)
+    return false;
+  if (pen_x <= margin_left)
+    return false;
+  return glyph_right > content_right;
+}
+
+inline int ResolveClipRight(int screen_width, int content_right,
+                            bool clip_to_content_enabled) {
+  if (!clip_to_content_enabled)
+    return screen_width;
+  return std::max(0, std::min(screen_width, content_right));
+}
+
+inline ReadingScreenMetrics ResolveReadingScreenMetrics(
+    bool on_first_screen, bool first_screen_is_left, int left_bottom_margin,
+    int right_bottom_margin) {
+  const bool current_screen_is_left =
+      on_first_screen ? first_screen_is_left : !first_screen_is_left;
+
+  ReadingScreenMetrics metrics{};
+  metrics.max_height = current_screen_is_left ? 400 : 320;
+  metrics.bottom_margin =
+      current_screen_is_left ? left_bottom_margin : right_bottom_margin;
+  return metrics;
+}
+
+inline ReadingScreenMetrics ResolveReadingScreenMetricsForReadingScreen(
+    bool turned_right, int current_screen, int left_bottom_margin,
+    int right_bottom_margin) {
+  const bool on_first_screen = (current_screen == 0);
+  const bool first_screen_is_left = !turned_right;
+  return ResolveReadingScreenMetrics(on_first_screen, first_screen_is_left,
+                                     left_bottom_margin, right_bottom_margin);
+}
+
+} // namespace text_render_layout_utils
