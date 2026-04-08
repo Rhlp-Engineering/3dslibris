@@ -27,6 +27,7 @@
 #include "shared/text_layout_utils.h"
 #include "shared/text_bidi_utils.h"
 #include "shared/text_unicode_utils.h"
+#include "shared/string_utils.h"
 #include <algorithm>
 #include <stdio.h>
 #include <string.h>
@@ -237,11 +238,99 @@ static void ParseElementStyleFlags(const char **attr, bool *bold_out,
   }
 }
 
+static bool HasClassTokenNoCase(const char *class_name, const char *token) {
+  if (!class_name || !token || !token[0])
+    return false;
+  const std::string class_lc = ToLowerAsciiLocal(class_name);
+  const std::string token_lc = ToLowerAsciiLocal(token);
+  return ContainsToken(class_lc, token_lc);
+}
+
+static void ParseInlineHiddenFlags(const char *style, bool *hidden_out) {
+  if (!style || !hidden_out)
+    return;
+  const std::string style_lc = ToLowerAsciiLocal(style);
+
+  if (ContainsAsciiNoCase(style_lc, "display:none") ||
+      ContainsAsciiNoCase(style_lc, "display: none") ||
+      ContainsAsciiNoCase(style_lc, "visibility:hidden") ||
+      ContainsAsciiNoCase(style_lc, "visibility: hidden") ||
+      ContainsAsciiNoCase(style_lc, "clip:rect(0,0,0,0)") ||
+      ContainsAsciiNoCase(style_lc, "clip: rect(0, 0, 0, 0)") ||
+      ContainsAsciiNoCase(style_lc, "clip-path:inset(50%)") ||
+      ContainsAsciiNoCase(style_lc, "clip-path: inset(50%)")) {
+    *hidden_out = true;
+    return;
+  }
+
+  const bool tiny =
+      (ContainsAsciiNoCase(style_lc, "width:1px") ||
+       ContainsAsciiNoCase(style_lc, "width: 1px")) &&
+      (ContainsAsciiNoCase(style_lc, "height:1px") ||
+       ContainsAsciiNoCase(style_lc, "height: 1px"));
+  const bool offscreen =
+      ContainsAsciiNoCase(style_lc, "position:absolute") ||
+      ContainsAsciiNoCase(style_lc, "position: absolute");
+  const bool hidden_overflow =
+      ContainsAsciiNoCase(style_lc, "overflow:hidden") ||
+      ContainsAsciiNoCase(style_lc, "overflow: hidden");
+  if (tiny && offscreen && hidden_overflow)
+    *hidden_out = true;
+}
+
+static void ParseClassHiddenFlags(const char *class_name, bool *hidden_out) {
+  if (!class_name || !hidden_out)
+    return;
+  if (HasClassTokenNoCase(class_name, "visually-hidden") ||
+      HasClassTokenNoCase(class_name, "visuallyhidden") ||
+      HasClassTokenNoCase(class_name, "sr-only") ||
+      HasClassTokenNoCase(class_name, "screen-reader-text")) {
+    *hidden_out = true;
+  }
+}
+
+static bool AttrTruthyNoCase(const char *value) {
+  if (!value || !value[0])
+    return true;
+  return EqualsAsciiNoCase(value, "1") || EqualsAsciiNoCase(value, "true") ||
+         EqualsAsciiNoCase(value, "yes") ||
+         EqualsAsciiNoCase(value, "hidden");
+}
+
+static void ParseElementHiddenFlags(const char **attr, bool *hidden_out) {
+  if (!hidden_out || !attr)
+    return;
+  for (int i = 0; attr[i]; i += 2) {
+    const char *name = attr[i];
+    const char *value = attr[i + 1];
+    if (AttrNameEquals(name, "hidden")) {
+      *hidden_out = true;
+    } else if (AttrNameEquals(name, "aria-hidden")) {
+      if (AttrTruthyNoCase(value))
+        *hidden_out = true;
+    } else if (value && value[0] && AttrNameEquals(name, "style")) {
+      ParseInlineHiddenFlags(value, hidden_out);
+    } else if (value && value[0] && AttrNameEquals(name, "class")) {
+      ParseClassHiddenFlags(value, hidden_out);
+    }
+  }
+}
+
 static bool HasActiveStackBoldStyle(const parsedata_t *p) {
   if (!p)
     return false;
   for (u8 i = 0; i < p->stacksize; i++) {
     if (p->style_bold_stack[i])
+      return true;
+  }
+  return false;
+}
+
+static bool HasActiveStackHiddenStyle(const parsedata_t *p) {
+  if (!p)
+    return false;
+  for (u8 i = 0; i < p->stacksize; i++) {
+    if (p->style_hidden_stack[i])
       return true;
   }
   return false;
@@ -761,11 +850,14 @@ void start(void *data, const char *el, const char **attr) {
   if (parse_in(p, TAG_BODY) && p->stacksize > 0) {
     bool style_bold = false;
     bool style_italic = false;
+    bool style_hidden = false;
     ParseElementStyleFlags(attr, &style_bold, &style_italic);
+    ParseElementHiddenFlags(attr, &style_hidden);
 
     const u8 current = (u8)(p->stacksize - 1);
     p->style_bold_stack[current] = style_bold;
     p->style_italic_stack[current] = style_italic;
+    p->style_hidden_stack[current] = style_hidden;
 
     bool style_changed = false;
     if (style_bold && !p->bold) {
@@ -818,6 +910,8 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
   if (parse_in(p, TAG_SCRIPT))
     return;
   if (parse_in(p, TAG_STYLE))
+    return;
+  if (HasActiveStackHiddenStyle(p))
     return;
   if ((parse_in(p, TAG_H1) || parse_in(p, TAG_H2) || parse_in(p, TAG_H3)) &&
       p->doc_heading.size() < 160) {

@@ -145,6 +145,7 @@ void parse_init(parsedata_t *data) {
   for (int i = 0; i < 32; i++) {
     data->style_bold_stack[i] = false;
     data->style_italic_stack[i] = false;
+    data->style_hidden_stack[i] = false;
   }
   data->docpath.clear();
   data->doc_title.clear();
@@ -180,6 +181,7 @@ void parse_push(parsedata_t *data, context_t context) {
     data->stack[data->stacksize] = context;
     data->style_bold_stack[data->stacksize] = false;
     data->style_italic_stack[data->stacksize] = false;
+    data->style_hidden_stack[data->stacksize] = false;
     data->stacksize++;
   }
 }
@@ -189,6 +191,7 @@ context_t parse_pop(parsedata_t *data) {
     data->stacksize--;
     data->style_bold_stack[data->stacksize] = false;
     data->style_italic_stack[data->stacksize] = false;
+    data->style_hidden_stack[data->stacksize] = false;
   }
   return data->stack[data->stacksize];
 }
