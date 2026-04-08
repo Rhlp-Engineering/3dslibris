@@ -185,6 +185,10 @@ static std::string BuildPageSearchText(Page *page, size_t max_out = 3072) {
       }
       continue;
     }
+    if (c == TEXT_RTL_LINE_PX) {
+      i += (i + 1 < len) ? 2 : 1;  // skip token + 1 data byte
+      continue;
+    }
     if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||
         c == TEXT_ITALIC_OFF || c == TEXT_UNDERLINE_ON ||
         c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
@@ -273,6 +277,10 @@ static std::vector<std::string> BuildPageHeadingLines(Page *page,
       i += (i + 1 < len) ? 1 : 0;
       if (!cur.empty() && cur.back() != ' ')
         cur.push_back(' ');
+      continue;
+    }
+    if (c == TEXT_RTL_LINE_PX) {
+      i += (i + 1 < len) ? 1 : 0;  // skip data byte (loop i++ skips token)
       continue;
     }
     if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||

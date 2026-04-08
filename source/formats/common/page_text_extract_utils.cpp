@@ -63,6 +63,13 @@ std::vector<std::string> ExtractTextLinesFromPage(Page *page) {
         i++;
       continue;
     }
+    if (c == TEXT_RTL_LINE_PX) {
+      if (i + 1 < len)
+        i += 2;  // skip token + data byte
+      else
+        i++;
+      continue;
+    }
     if (c < 0x80) {
       line.push_back((char)c);
     } else {
