@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
 
 namespace {
@@ -45,6 +46,10 @@ void Button::Init(Text *typesetter) {
   text.style = TEXT_STYLE_BROWSER;
   text1.clear();
   text2.clear();
+  display1.clear();
+  display2.clear();
+  text1_rtl = false;
+  text2_rtl = false;
   icon = UI_BUTTON_ICON_NONE;
   iconExplicit = false;
   enabled = true;
@@ -52,14 +57,34 @@ void Button::Init(Text *typesetter) {
   UiButtonSkin_Init();
 }
 
+static void PrepareButtonLabel(const std::string &raw, std::string *display,
+                               bool *is_rtl) {
+  if (raw.empty()) {
+    display->clear();
+    *is_rtl = false;
+    return;
+  }
+  bool rtl = false;
+  text_layout_utils::PrepareDisplayUtf8(raw.c_str(), raw.size(), display, &rtl);
+  if (display->empty())
+    *display = raw;
+  *is_rtl = rtl;
+}
+
 void Button::Label(const char *s) {
   std::string str = s;
   SetLabel(str);
 }
 
-void Button::SetLabel1(std::string s) { text1 = s; }
+void Button::SetLabel1(std::string s) {
+  text1 = s;
+  PrepareButtonLabel(text1, &display1, &text1_rtl);
+}
 
-void Button::SetLabel2(std::string s) { text2 = s; }
+void Button::SetLabel2(std::string s) {
+  text2 = s;
+  PrepareButtonLabel(text2, &display2, &text2_rtl);
+}
 
 void Button::Move(u16 x, u16 y) {
   origin.x = x;
@@ -139,28 +164,62 @@ void Button::Draw(u16 *screen, bool highlight) {
     if (top + block_h > by + bh - 1)
       top = (by + bh - 1) - block_h;
 
+    // For RTL labels use the display-ready (shaped + reordered) string.
+    const char *src1 = text1_rtl ? display1.c_str() : text1.c_str();
     char line1[256];
-    u8 len1 = ts->GetCharCountInsideWidth(text1.c_str(), text.style, text_width);
-    size_t bytes1 = Utf8BytesForCharCount(ts, text1.c_str(), len1);
+    u8 len1 = ts->GetCharCountInsideWidth(src1, text.style, (u8)text_width);
+    size_t bytes1 = Utf8BytesForCharCount(ts, src1, len1);
     if (bytes1 > sizeof(line1) - 1)
       bytes1 = sizeof(line1) - 1;
-    memcpy(line1, text1.c_str(), bytes1);
+    memcpy(line1, src1, bytes1);
     line1[bytes1] = '\0';
 
-    ts->SetPen(text_x, top + line_height);
+    int pen1_x = text_x;
+    if (text1_rtl) {
+      // Right-align: measure the truncated display string then anchor to right.
+      int w = 0;
+      const char *p = line1;
+      while (*p) {
+        u32 cp = 0;
+        u8 nb = ts->GetCharCode(p, &cp);
+        if (!nb) break;
+        w += ts->GetAdvance((u16)cp);
+        p += nb;
+      }
+      int rx = bx + bw - right_pad - 2 - w;
+      if (rx < text_x) rx = text_x;
+      pen1_x = rx;
+    }
+    ts->SetPen((u16)pen1_x, (u16)(top + line_height));
     ts->PrintString(line1, text.style);
 
     if (!text2.empty()) {
+      const char *src2 = text2_rtl ? display2.c_str() : text2.c_str();
       char line2[256];
       u8 len2 =
-          ts->GetCharCountInsideWidth(text2.c_str(), text.style, text_width);
-      size_t bytes2 = Utf8BytesForCharCount(ts, text2.c_str(), len2);
+          ts->GetCharCountInsideWidth(src2, text.style, (u8)text_width);
+      size_t bytes2 = Utf8BytesForCharCount(ts, src2, len2);
       if (bytes2 > sizeof(line2) - 1)
         bytes2 = sizeof(line2) - 1;
-      memcpy(line2, text2.c_str(), bytes2);
+      memcpy(line2, src2, bytes2);
       line2[bytes2] = '\0';
 
-      ts->SetPen(text_x, top + line_height * 2);
+      int pen2_x = text_x;
+      if (text2_rtl) {
+        int w = 0;
+        const char *p = line2;
+        while (*p) {
+          u32 cp = 0;
+          u8 nb = ts->GetCharCode(p, &cp);
+          if (!nb) break;
+          w += ts->GetAdvance((u16)cp);
+          p += nb;
+        }
+        int rx = bx + bw - right_pad - 2 - w;
+        if (rx < text_x) rx = text_x;
+        pen2_x = rx;
+      }
+      ts->SetPen((u16)pen2_x, (u16)(top + line_height * 2));
       ts->PrintString(line2, text.style);
     }
   }

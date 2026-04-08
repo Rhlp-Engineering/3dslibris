@@ -40,6 +40,11 @@ private:
   int style;
   std::string text1;
   std::string text2;
+  // Display-ready strings: Arabic shaped + BIDI reordered.
+  std::string display1;
+  std::string display2;
+  bool text1_rtl;
+  bool text2_rtl;
   UiButtonIconId icon;
   bool enabled;
   bool iconExplicit;
