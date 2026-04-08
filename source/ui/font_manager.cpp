@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "app/app.h"
+#include "shared/bugfix_utils.h"
 #include "font_constants.h"
 #include "path_utils.h"
 #include "screen_constants.h"
@@ -611,19 +612,17 @@ static bool FilenameMatchesCjkPattern(const char *filename) {
   return false;
 }
 
-void FontManager::AutoLoadCjkFallbackFonts() {
-  const std::string font_dir =
-      (parent && parent->app && !parent->app->fontdir.empty())
-          ? parent->app->fontdir
-          : std::string(paths::kFontDir);
+static void AutoLoadFallbackFontsFromDir(FontManager *fm, const std::string &font_dir,
+                                         int *loaded) {
+  if (!fm || !loaded || font_dir.empty())
+    return;
 
   DIR *dp = opendir(font_dir.c_str());
   if (!dp)
     return;
 
   struct dirent *ent;
-  int loaded = 0;
-  while ((ent = readdir(dp)) && loaded < kMaxFallbackFaces) {
+  while ((ent = readdir(dp)) && *loaded < FontManager::kMaxFallbackFaces) {
     if (ent->d_type == DT_DIR)
       continue;
     const char *name = ent->d_name;
@@ -634,10 +633,23 @@ void FontManager::AutoLoadCjkFallbackFonts() {
       continue;
 
     std::string full_path = font_dir + "/" + name;
-    if (LoadFallbackFont(full_path.c_str()))
-      loaded++;
+    if (fm->LoadFallbackFont(full_path.c_str()))
+      (*loaded)++;
   }
+
   closedir(dp);
+}
+
+void FontManager::AutoLoadCjkFallbackFonts() {
+  const std::string font_dir =
+      (parent && parent->app && !parent->app->fontdir.empty())
+          ? parent->app->fontdir
+          : std::string();
+  std::vector<std::string> search_dirs;
+  GetFallbackFontSearchDirs(font_dir, paths::kFontDir, &search_dirs);
+  int loaded = 0;
+  for (size_t i = 0; i < search_dirs.size() && loaded < kMaxFallbackFaces; i++)
+    AutoLoadFallbackFontsFromDir(this, search_dirs[i], &loaded);
 
   if (loaded > 0)
     printf("[OK] Auto-loaded %d CJK fallback font(s)\n", loaded);

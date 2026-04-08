@@ -2,6 +2,7 @@
 
 #include <map>
 #include <string>
+#include <vector>
 #include <unordered_map>
 
 #include <3ds.h>
@@ -10,6 +11,7 @@
 #include FT_FREETYPE_H
 #include FT_CACHE_H
 
+#include "path_utils.h"
 #include "ui/glyph_cache_lru.h"
 
 class Text;

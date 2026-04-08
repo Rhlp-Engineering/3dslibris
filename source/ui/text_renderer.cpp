@@ -7,6 +7,7 @@
 #include "3ds.h"
 #include "app/app.h"
 #include "color_utils.h"
+#include "shared/bugfix_utils.h"
 #include "path_utils.h"
 #include "stb_image.h"
 #include "string.h"
@@ -324,14 +325,18 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
                        : kSepiaTextColor;
   RGB565ToU8(fg_color, &fg_r, &fg_g, &fg_b);
 
+  const int screenWidth = (int)parent->display.width;
+  
   for (u16 gy = 0; gy < height; gy++) {
     for (u16 gx = 0; gx < width; gx++) {
       u8 a = buffer[gy * width + gx];
       if (!a)
         continue;
-      u16 sx = (pen.x + gx + bx);
-      u16 sy = (pen.y + gy - by);
-      if (sy >= (u16)maxY || sx >= parent->display.width)
+      int sx = (int)pen.x + (int)gx + bx;
+      int sy = (int)pen.y + (int)gy - by;
+      if (sy < 0 || sy >= maxY || sx < 0 || sx >= screenWidth)
+        continue;
+      if (!GlyphWithinContentRight(sx, screenWidth - (int)parent->margin.right))
         continue;
       const size_t dst_index =
           (size_t)sy * (size_t)parent->display.height + (size_t)sx;
