@@ -195,6 +195,44 @@ static void ParseInlineStyleFlags(const char *style, bool *bold_out,
   }
 }
 
+static int ParseMarginTopPx(const char *style) {
+  if (!style || !style[0])
+    return 0;
+  const std::string lc = ToLowerAsciiLocal(style);
+  const char *needle = "margin-top:";
+  size_t pos = lc.find(needle);
+  if (pos == std::string::npos) {
+    needle = "margin-top: ";
+    pos = lc.find(needle);
+  }
+  if (pos == std::string::npos)
+    return 0;
+  pos += strlen(needle);
+  while (pos < lc.size() && lc[pos] == ' ')
+    pos++;
+  bool negative = false;
+  if (pos < lc.size() && lc[pos] == '-') {
+    negative = true;
+    pos++;
+  }
+  int value = 0;
+  bool has_digit = false;
+  while (pos < lc.size() && lc[pos] >= '0' && lc[pos] <= '9') {
+    value = value * 10 + (lc[pos] - '0');
+    has_digit = true;
+    pos++;
+  }
+  if (!has_digit)
+    return 0;
+  while (pos < lc.size() && lc[pos] == ' ')
+    pos++;
+  if (pos + 1 >= lc.size() || lc[pos] != 'p' || lc[pos + 1] != 'x')
+    return 0;
+  if (negative || value <= 0)
+    return 0;
+  return value;
+}
+
 static void ParseClassStyleFlags(const char *class_name, bool *bold_out,
                                  bool *italic_out, bool *underline_out,
                                  bool *strikethrough_out,
@@ -249,6 +287,18 @@ static void ParseClassStyleFlags(const char *class_name, bool *bold_out,
       *subscript_out = true;
     }
   }
+}
+
+static int ParseElementMarginTopPx(const char **attr) {
+  if (!attr)
+    return 0;
+  for (int i = 0; attr[i]; i += 2) {
+    if (!attr[i + 1] || !attr[i + 1][0])
+      continue;
+    if (AttrNameEquals(attr[i], "style"))
+      return ParseMarginTopPx(attr[i + 1]);
+  }
+  return 0;
 }
 
 static void ParseElementStyleFlags(const char **attr, bool *bold_out,
@@ -735,8 +785,16 @@ void start(void *data, const char *el, const char **attr) {
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
-    if (lf)
+    if (lf) {
       linefeed(p);
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "h2")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
@@ -756,8 +814,16 @@ void start(void *data, const char *el, const char **attr) {
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
-    if (lf)
+    if (lf) {
       linefeed(p);
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "h3")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
@@ -774,18 +840,54 @@ void start(void *data, const char *el, const char **attr) {
       AdvanceParsedScreen(p);
     parse_push(p, TAG_H3);
     linefeed(p);
+    {
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "h4")) {
     parse_push(p, TAG_H4);
-    if (!blankline(p))
-      linefeed(p);
+    {
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      if (!blankline(p))
+        linefeed(p);
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "h5")) {
     parse_push(p, TAG_H5);
-    if (!blankline(p))
-      linefeed(p);
+    {
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      if (!blankline(p))
+        linefeed(p);
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "h6")) {
     parse_push(p, TAG_H6);
-    if (!blankline(p))
-      linefeed(p);
+    {
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      if (!blankline(p))
+        linefeed(p);
+      for (int i = 1; i < extra_lf; i++)
+        linefeed(p);
+    }
   } else if (!strcmp(el, "head"))
     parse_push(p, TAG_HEAD);
   else if (!strcmp(el, "ol"))
@@ -795,7 +897,14 @@ void start(void *data, const char *el, const char **attr) {
     p->in_paragraph = true;
     p->paragraph_has_content = false;
     if (!blankline(p)) {
-      for (int i = 0; i < p->book->GetParagraphSpacing(); i++) {
+      const int margin_px = ParseElementMarginTopPx(attr);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const int extra_lf = (margin_px > 0 && line_h > 0)
+                               ? std::min(margin_px / line_h, 4)
+                               : 0;
+      const int base_lf =
+          std::max(p->book->GetParagraphSpacing(), extra_lf > 0 ? extra_lf : 0);
+      for (int i = 0; i < base_lf; i++) {
         linefeed(p);
       }
       for (int i = 0; i < p->book->GetParagraphIndent(); i++) {
@@ -803,6 +912,11 @@ void start(void *data, const char *el, const char **attr) {
         p->pen.x += ts->GetAdvance(' ');
       }
     }
+  } else if (!strcmp(el, "hr")) {
+    parse_push(p, TAG_UNKNOWN);
+    if (!blankline(p))
+      linefeed(p);
+    AppendParsedByte(p, TEXT_HR);
   } else if (!strcmp(el, "pre")) {
     parse_push(p, TAG_PRE);
     p->preformatted_wrap_enabled = true;

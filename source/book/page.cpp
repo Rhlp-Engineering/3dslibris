@@ -291,6 +291,23 @@ void Page::Draw(Text *ts) {
     } else if (c == TEXT_MONO_OFF) {
       i++;
       mono = false;
+    } else if (c == TEXT_HR) {
+      i++;
+      const int x0 = ts->margin.left;
+      const int x1 = ts->display.width - ts->margin.right;
+      const int y = ts->GetPenY() + ts->GetHeight() / 2;
+      ts->FillRect(x0, y, x1, y + 1, ts->GetFgColor());
+      if (!ts->PrintNewLine()) {
+        stopped_on_render_break = true;
+        render_break_reason = "hr-newline-failed";
+        render_break_index = (int)i;
+        break;
+      }
+      if (on_first_screen)
+        newline_count_first++;
+      else
+        newline_count_second++;
+      ts->linebegan = false;
     } else if (c == TEXT_IMAGE_CONTEXT_DEFAULT) {
       i++;
       next_image_context = INLINE_IMAGE_CONTEXT_DEFAULT;

@@ -24,6 +24,7 @@
 #define TEXT_SUBSCRIPT_OFF 25
 #define TEXT_MONO_ON 26
 #define TEXT_MONO_OFF 27
+#define TEXT_HR 28
 
 #define TEXT_STYLE_REGULAR (u8)0
 #define TEXT_STYLE_BOLD (u8)1

@@ -55,7 +55,8 @@ static std::string BuildPageSearchText(Page *page, size_t max_out = 2048) {
         c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
         c == TEXT_STRIKETHROUGH_OFF || c == TEXT_SUPERSCRIPT_ON ||
         c == TEXT_SUPERSCRIPT_OFF || c == TEXT_SUBSCRIPT_ON ||
-        c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF) {
+        c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF ||
+        c == TEXT_HR) {
       i++;
       continue;
     }
@@ -152,7 +153,8 @@ BuildPageHeadingLines(Page *page, size_t max_lines = 12,
         c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
         c == TEXT_STRIKETHROUGH_OFF || c == TEXT_SUPERSCRIPT_ON ||
         c == TEXT_SUPERSCRIPT_OFF || c == TEXT_SUBSCRIPT_ON ||
-        c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF) {
+        c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF ||
+        c == TEXT_HR) {
       continue;
     }
     if (c == '\r')
