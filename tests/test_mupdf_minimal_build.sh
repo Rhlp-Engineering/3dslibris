@@ -7,6 +7,16 @@ OUTDIR="$ROOT/build-tests/mupdf"
 PDFDIR="$OUTDIR/pdf"
 mkdir -p "$OUTDIR" "$PDFDIR"
 
+ARM_GCC="/opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc"
+if [ ! -x "$ARM_GCC" ]; then
+  if command -v arm-none-eabi-gcc >/dev/null 2>&1; then
+    ARM_GCC="$(command -v arm-none-eabi-gcc)"
+  else
+    echo "SKIP test_mupdf_minimal_build: missing arm-none-eabi-gcc"
+    exit 0
+  fi
+fi
+
 cat >"$OUTDIR/test_mupdf_link.c" <<'EOF'
 #include <mupdf/fitz.h>
 #include <mupdf/pdf.h>
@@ -52,7 +62,7 @@ EOF
 
 sh "$ROOT/scripts/build_mupdf_minimal.sh"
 
-/opt/devkitpro/devkitARM/bin/arm-none-eabi-gcc \
+"$ARM_GCC" \
   -D__3DS__ -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft \
   -I"$ROOT/third_party/mupdf/include" \
   "$OUTDIR/test_mupdf_link.c" \

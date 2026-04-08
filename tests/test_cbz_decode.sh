@@ -49,6 +49,13 @@ with open(sys.argv[1], "wb") as f:
     f.write(png)
 PY
 
-sips -s format jpeg "$PNG_PATH" --out "$JPG_PATH" >/dev/null
+if command -v sips >/dev/null 2>&1; then
+  sips -s format jpeg "$PNG_PATH" --out "$JPG_PATH" >/dev/null
+elif command -v convert >/dev/null 2>&1; then
+  convert "$PNG_PATH" "$JPG_PATH"
+else
+  echo "SKIP test_cbz_decode: requires 'sips' (macOS) or 'convert' (ImageMagick)"
+  exit 0
+fi
 
 "$OUTDIR/test_cbz_decode" "$PNG_PATH" "$JPG_PATH"
