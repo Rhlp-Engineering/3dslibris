@@ -14,6 +14,7 @@
 #include "book/book.h"
 
 #include "book/book_context.h"
+#include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
 #include "book/heading_layout.h"
 #include "formats/epub/epub.h"
@@ -21,10 +22,12 @@
 #include "main.h"
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
+#include "debug_log.h"
 #include "parse.h"
 #include "book/reflow_cache_save_utils.h"
 #include "screen_constants.h"
 #include "shared/text_layout_utils.h"
+#include "shared/text_render_layout_utils.h"
 #include "shared/text_bidi_utils.h"
 #include "shared/text_unicode_utils.h"
 #include "shared/string_utils.h"
@@ -62,61 +65,8 @@ static std::string ToLowerAsciiLocal(const std::string &s) {
   return out;
 }
 
-static bool ParsedBufferEndsWithWhitespace(const parsedata_t *p) {
-  if (!p || p->buflen == 0)
-    return false;
-  const u32 c = p->buf[p->buflen - 1];
-  return c == ' ' || c == '\n' || c == '\t';
-}
-
 static void AppendParsedByte(parsedata_t *p, u32 c) {
   parse_append_page_byte(p, c);
-}
-
-static void AppendParsedCodepoints(parsedata_t *p, const char *utf8,
-                                   size_t utf8_len) {
-  size_t offset = 0;
-  while (offset < utf8_len) {
-    uint32_t cp = 0;
-    size_t consumed = text_unicode_utils::DecodeNextDisplayCodepoint(
-        utf8 + offset, utf8_len - offset, &cp);
-    if (consumed == 0) {
-      offset++;
-      continue;
-    }
-    parse_append_page_byte(p, (u32)cp);
-    offset += consumed;
-  }
-}
-
-static void EmitBidiSegment(
-    parsedata_t *p,
-    const std::vector<text_layout_utils::ShapedGlyph> &run,
-    size_t seg_start, size_t seg_end,
-    const std::vector<text_bidi_utils::BidiRun> &runs) {
-  if (seg_start >= seg_end)
-    return;
-  std::vector<uint32_t> cps;
-  cps.reserve(seg_end - seg_start);
-  for (size_t i = seg_start; i < seg_end; i++)
-    cps.push_back(run[i].text.codepoint);
-  text_bidi_utils::ReorderLineForDisplay(cps, 0, cps.size(), runs);
-  for (size_t i = 0; i < cps.size(); i++)
-    parse_append_page_byte(p, (u32)cps[i]);
-}
-
-static bool DetectParagraphRTL(
-    const std::vector<text_layout_utils::ShapedGlyph> &run) {
-  for (size_t i = 0; i < run.size(); i++) {
-    uint32_t cp = run[i].text.codepoint;
-    if ((cp >= 0x0041 && cp <= 0x005A) || (cp >= 0x0061 && cp <= 0x007A))
-      return false;
-    if ((cp >= 0x0590 && cp <= 0x05FF) || (cp >= 0x0600 && cp <= 0x06FF) ||
-        (cp >= 0x08A0 && cp <= 0x08FF) || (cp >= 0xFB50 && cp <= 0xFDFF) ||
-        (cp >= 0xFE70 && cp <= 0xFEFF))
-      return true;
-  }
-  return false;
 }
 
 static void RestoreParsedStyleMarkers(parsedata_t *p) {
@@ -476,9 +426,14 @@ static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
     return;
 
   Text *ts = p->ts;
-  int maxHeight = (p->screen == 1) ? 320 : 400;
-  int bottomMargin =
-      (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+  const int leftBottomMargin = ts->margin.bottom;
+  const int rightBottomMargin = MIN(ts->margin.bottom, 16);
+  const text_render_layout_utils::ReadingScreenMetrics metrics =
+      text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+          p->book->GetOrientation() != 0, p->screen, leftBottomMargin,
+          rightBottomMargin);
+  int maxHeight = metrics.max_height;
+  int bottomMargin = metrics.bottom_margin;
   if ((p->pen.y + lineheight) <= (maxHeight - bottomMargin))
     return;
 
@@ -505,6 +460,12 @@ static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
 static int MeasureParsedTextAdvance(uint32_t codepoint, void *ctx) {
   Text *ts = (Text *)ctx;
   return ts ? ts->GetAdvance(codepoint) : 0;
+}
+
+static void AdvanceParsedPageOnOverflowThunk(parsedata_t *p, int lineheight,
+                                             void *ctx) {
+  (void)ctx;
+  AdvanceParsedPageOnOverflow(p, lineheight);
 }
 
 struct ChardataPerfScope {
@@ -748,9 +709,12 @@ void start(void *data, const char *el, const char **attr) {
   else if (!strcmp(el, "h1")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
-    req.screen_height = (p->screen == 1) ? 320 : 400;
-    req.bottom_margin =
-        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    const text_render_layout_utils::ReadingScreenMetrics metrics =
+        text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+            p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+            MIN(ts->margin.bottom, 16));
+    req.screen_height = metrics.max_height;
+    req.bottom_margin = metrics.bottom_margin;
     req.line_height = ts->GetHeight();
     req.linespacing = ts->linespacing;
     req.heading_level = 1;
@@ -766,9 +730,12 @@ void start(void *data, const char *el, const char **attr) {
   } else if (!strcmp(el, "h2")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
-    req.screen_height = (p->screen == 1) ? 320 : 400;
-    req.bottom_margin =
-        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    const text_render_layout_utils::ReadingScreenMetrics metrics =
+        text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+            p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+            MIN(ts->margin.bottom, 16));
+    req.screen_height = metrics.max_height;
+    req.bottom_margin = metrics.bottom_margin;
     req.line_height = ts->GetHeight();
     req.linespacing = ts->linespacing;
     req.heading_level = 2;
@@ -784,9 +751,12 @@ void start(void *data, const char *el, const char **attr) {
   } else if (!strcmp(el, "h3")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
-    req.screen_height = (p->screen == 1) ? 320 : 400;
-    req.bottom_margin =
-        (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+    const text_render_layout_utils::ReadingScreenMetrics metrics =
+        text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+            p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+            MIN(ts->margin.bottom, 16));
+    req.screen_height = metrics.max_height;
+    req.bottom_margin = metrics.bottom_margin;
     req.line_height = ts->GetHeight();
     req.linespacing = ts->linespacing;
     req.heading_level = 3;
@@ -1177,7 +1147,8 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
 
         AdvanceParsedPageOnOverflow(p, lineheight);
 
-        AppendParsedCodepoints(p, txt + i, (size_t)(j - i));
+        book_xml_text_emit::AppendParsedCodepoints(p, txt + i,
+                                                   (size_t)(j - i));
         p->linebegan = true;
         i = j;
         p->pen.x += advance;
@@ -1201,7 +1172,7 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
         pre_cps.push_back(pre_run[ci].text.codepoint);
       text_bidi_utils::AnalyzeBidiRuns(pre_cps.data(), pre_cps.size(),
                                        &pre_bidi_runs);
-      if (DetectParagraphRTL(pre_run))
+      if (book_xml_text_emit::DetectParagraphRTL(pre_run))
         AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
       else
         AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
@@ -1249,12 +1220,15 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
         AdvanceParsedPageOnOverflow(p, lineheight);
       }
 
-      if (pre_has_rtl)
-        EmitBidiSegment(p, pre_run, unit_index, segment_end_index,
-                        pre_bidi_runs);
+      if (pre_has_rtl) {
+        AppendParsedByte(p, TEXT_RTL_LINE_PX);
+        AppendParsedByte(p, (u32)advance);
+        book_xml_text_emit::EmitBidiSegment(p, pre_run, unit_index,
+                                            segment_end_index, pre_bidi_runs);
+      }
       else
-        AppendParsedCodepoints(p, txt + segment_start,
-                               segment_end - segment_start);
+        book_xml_text_emit::AppendParsedCodepoints(p, txt + segment_start,
+                                                   segment_end - segment_start);
       p->pen.x += advance;
       p->linebegan = true;
       unit_index = segment_end_index;
@@ -1286,74 +1260,38 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
       run_cps.push_back(run[ci].text.codepoint);
     text_bidi_utils::AnalyzeBidiRuns(run_cps.data(), run_cps.size(),
                                      &bidi_runs);
-    if (DetectParagraphRTL(run))
-      AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
-    else
-      AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
-  }
-
-  const int maxLineWidth = ts->display.width - ts->margin.right - ts->margin.left;
-  size_t unit_index = 0;
-  while (unit_index < run.size()) {
-    const text_layout_utils::ShapedGlyph &unit = run[unit_index];
-    if (unit.text.codepoint == '\r') {
-      unit_index++;
-      continue;
-    }
-
-    if (unit.text.whitespace) {
-      if (unit.text.breakable_space && p->linebegan &&
-          !ParsedBufferEndsWithWhitespace(p)) {
-        AppendParsedByte(p, ' ');
-        p->pen.x += spaceadvance;
-      } else if (!unit.text.breakable_space) {
-        u16 unit_advance = (u16)unit.advance;
-        if ((p->pen.x + unit_advance) > (ts->display.width - ts->margin.right)) {
-          AppendParsedByte(p, '\n');
-          p->pen.x = ts->margin.left;
-          p->pen.y += (lineheight + linespacing);
-          p->linebegan = false;
-        }
-        AdvanceParsedPageOnOverflow(p, lineheight);
-        AppendParsedCodepoints(p, txt + unit.text.byte_offset, unit.text.byte_length);
-        p->pen.x += unit_advance;
-        p->linebegan = true;
+#ifdef DSLIBRIS_DEBUG
+    static int s_bidi_run_budget = 64;
+    if (p && p->reporter && s_bidi_run_budget > 0) {
+      int max_level = 0;
+      int min_level = 127;
+      for (size_t ri = 0; ri < bidi_runs.size(); ri++) {
+        if (bidi_runs[ri].bidi_level > max_level)
+          max_level = bidi_runs[ri].bidi_level;
+        if (bidi_runs[ri].bidi_level < min_level)
+          min_level = bidi_runs[ri].bidi_level;
       }
-      unit_index++;
-      continue;
+      if (bidi_runs.empty())
+        min_level = 0;
+      DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_BIDI,
+                   "paragraph cps=%u runs=%u min_level=%d max_level=%d rtl=%d",
+                   (unsigned)run_cps.size(), (unsigned)bidi_runs.size(),
+                   min_level, max_level,
+                   book_xml_text_emit::DetectParagraphRTL(run) ? 1 : 0);
+      s_bidi_run_budget--;
     }
-
-    if (p->in_paragraph)
-      p->paragraph_has_content = true;
-
-    size_t segment_start = unit.text.byte_offset;
-    text_layout_utils::LineBreakMeasureResult segment =
-        text_layout_utils::FindLineBreakAndMeasure(run, unit_index,
-                                                   maxLineWidth);
-    size_t segment_end_index = segment.end_index;
-    if (segment_end_index <= unit_index)
-      segment_end_index = unit_index + 1;
-    u16 advance = (u16)segment.width;
-    size_t segment_end = run[segment_end_index - 1].text.byte_offset +
-                         run[segment_end_index - 1].text.byte_length;
-
-    if ((p->pen.x + advance) > (ts->display.width - ts->margin.right)) {
-      AppendParsedByte(p, '\n');
-      p->pen.x = ts->margin.left;
-      p->pen.y += (lineheight + linespacing);
-      p->linebegan = false;
-    }
-
-    AdvanceParsedPageOnOverflow(p, lineheight);
-    if (has_rtl)
-      EmitBidiSegment(p, run, unit_index, segment_end_index, bidi_runs);
-    else
-      AppendParsedCodepoints(p, txt + segment_start,
-                             segment_end - segment_start);
-    p->linebegan = true;
-    p->pen.x += advance;
-    unit_index = segment_end_index;
+#endif
   }
+  book_xml_text_emit::FlowEmitMetrics emit_metrics{};
+  emit_metrics.display_width = ts->display.width;
+  emit_metrics.margin_left = ts->margin.left;
+  emit_metrics.margin_right = ts->margin.right;
+  emit_metrics.lineheight = lineheight;
+  emit_metrics.linespacing = linespacing;
+  emit_metrics.spaceadvance = spaceadvance;
+  book_xml_text_emit::EmitFlowedShapedText(
+      p, txt, run, has_rtl, bidi_runs, emit_metrics,
+      AdvanceParsedPageOnOverflowThunk, NULL);
 }
 
 void end(void *data, const char *el) {
@@ -1513,9 +1451,12 @@ void end(void *data, const char *el) {
   if (style_changed)
     SyncParsedTextStyle(ts, p->bold, p->italic);
 
-  int maxHeight = (p->screen == 1) ? 320 : 400;
-  int bottomMargin =
-      (p->screen == 1) ? MIN(ts->margin.bottom, 16) : ts->margin.bottom;
+  const text_render_layout_utils::ReadingScreenMetrics metrics =
+      text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+          p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+          MIN(ts->margin.bottom, 16));
+  int maxHeight = metrics.max_height;
+  int bottomMargin = metrics.bottom_margin;
   int lineheight = ts->GetHeight();
   if ((p->pen.y + lineheight) > (maxHeight - bottomMargin)) {
     if (p->screen == 1) {
