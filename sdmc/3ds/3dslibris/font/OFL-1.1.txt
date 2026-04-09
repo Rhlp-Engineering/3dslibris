@@ -1,7 +1,10 @@
 Digitized data copyright (c) 2010 Google Corporation
-	with Reserved Font Arimo, Tinos and Cousine.
+	with Reserved Font Name Arimo, Tinos and Cousine.
 Copyright (c) 2012 Red Hat, Inc.
 	with Reserved Font Name Liberation.
+Copyright (c) 2014-2021 Google LLC
+	with Reserved Font Name Noto.
+	Covers: Noto Naskh Arabic, Noto Sans Hebrew.
 
 This Font Software is licensed under the SIL Open Font License,
 Version 1.1.

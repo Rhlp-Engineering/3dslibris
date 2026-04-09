@@ -142,13 +142,17 @@ Bundled runtime files:
 - `sdmc/3ds/3dslibris/resources/ui/icons/png/*.png`
 - `sdmc/3ds/3dslibris/book/README.md`
 - `sdmc/3ds/3dslibris/font/README.md`
-- `sdmc/3ds/3dslibris/font/Liberation*.ttf`
+- `sdmc/3ds/3dslibris/font/Liberation*.ttf` (Latin; SIL OFL 1.1)
+- `sdmc/3ds/3dslibris/font/NotoNaskhArabic-VariableFont_wght.ttf` (Arabic; SIL OFL 1.1)
+- `sdmc/3ds/3dslibris/font/NotoSansHebrew-VariableFont_wdth,wght.ttf` (Hebrew; SIL OFL 1.1)
+- `sdmc/3ds/3dslibris/font/DroidSansFallbackFull.ttf` (CJK fallback; Apache 2.0)
 - `sdmc/3ds/3dslibris/font/OFL-1.1.txt`
+- `sdmc/3ds/3dslibris/font/Apache-2.0.txt`
 
 Notes:
 - Homebrew Launcher path: keep the app at `sdmc:/3ds/3dslibris/3dslibris.3dsx`
 - Debug build path: keep `3dslibris-debug.3dsx` in the same `sdmc:/3ds/3dslibris/` folder if you want verbose logs
-- Default Liberation fonts are bundled in the SD package for `.3dsx`, and inside `RomFS` for `.cia`
+- Default fonts are bundled in the SD package for `.3dsx`, and inside `RomFS` for `.cia`
 - You can replace them with other `.ttf`, `.otf`, or `.ttc` fonts if you want to customize the reading/UI typefaces
 - Runtime files such as `3dslibris.xml`, `3dslibris.log`, and `cache/*` are created by the app on first run
 

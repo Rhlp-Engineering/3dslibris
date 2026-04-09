@@ -1,9 +1,13 @@
 # Bundled Fonts
 
-This directory ships with a bundled set of Liberation fonts used as the default
-runtime fonts for `3dslibris`.
+This directory ships with the default runtime fonts for `3dslibris`.
 
-Included by default:
+## SIL Open Font License 1.1 — `OFL-1.1.txt`
+
+### Liberation (Red Hat / Google)
+
+Latin serif, sans-serif, and monospace families used as the primary reading
+and UI typefaces.
 
 - `LiberationSerif-Regular.ttf`
 - `LiberationSerif-Bold.ttf`
@@ -18,7 +22,29 @@ Included by default:
 - `LiberationMono-Italic.ttf`
 - `LiberationMono-BoldItalic.ttf`
 
-The bundled license text is in `OFL-1.1.txt`.
+### Noto Naskh Arabic (Google)
+
+Variable-weight Arabic typeface for right-to-left Arabic script rendering.
+
+- `NotoNaskhArabic-VariableFont_wght.ttf`
+
+### Noto Sans Hebrew (Google)
+
+Variable-weight/width Hebrew typeface for right-to-left Hebrew script
+rendering.
+
+- `NotoSansHebrew-VariableFont_wdth,wght.ttf`
+
+## Apache License 2.0 — `Apache-2.0.txt`
+
+### Droid Sans Fallback (Android Open Source Project)
+
+Comprehensive CJK fallback font covering Japanese, Korean, and Chinese
+(Simplified and Traditional) scripts.
+
+- `DroidSansFallbackFull.ttf`
+
+---
 
 You can customize fonts by replacing these files or adding other compatible
 `.ttf`, `.otf`, or `.ttc` files in this directory. The app's font menu will

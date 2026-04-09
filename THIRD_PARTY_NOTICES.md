@@ -66,3 +66,23 @@ MuPDF vendors additional third-party assets and notices, including:
 - `third_party/mupdf/thirdparty/lcms2/plugins/threaded/COPYING.GPL3`
 
 If you redistribute a source bundle, keep those files intact.
+
+### Bundled runtime fonts
+
+The default font set distributed with `3dslibris` (inside `font/` on SD and in
+RomFS for `.cia` builds) includes:
+
+**SIL Open Font License 1.1** — `font/OFL-1.1.txt`
+
+- **Liberation** (Red Hat, Inc. / Google Corporation): Latin serif, sans-serif,
+  and monospace families (`Liberation*.ttf`).
+- **Noto Naskh Arabic** (Google LLC): Arabic variable font
+  (`NotoNaskhArabic-VariableFont_wght.ttf`).
+- **Noto Sans Hebrew** (Google LLC): Hebrew variable font
+  (`NotoSansHebrew-VariableFont_wdth,wght.ttf`).
+
+**Apache License 2.0** — `font/Apache-2.0.txt`
+
+- **Droid Sans Fallback** (Android Open Source Project): CJK fallback font
+  covering Japanese, Korean, and Chinese scripts
+  (`DroidSansFallbackFull.ttf`).
