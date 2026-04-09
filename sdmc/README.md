@@ -22,6 +22,15 @@ Recommended flow:
 
 The recommended drop folder for ebooks is `sdmc:/3ds/3dslibris/book/`.
 The app binary itself belongs at `sdmc:/3ds/3dslibris/3dslibris.3dsx`.
+If users ask where to put books, the short answer is:
+
+```text
+sdmc:/3ds/3dslibris/book/
+```
+
+They can copy supported `.epub`, `.fb2`, `.txt`, `.rtf`, `.odt`, `.mobi`,
+`.pdf`, `.xps`, `.oxps`, or `.cbz` files into that folder before or after the
+first launch.
 
 The bundled Liberation fonts are the default runtime fonts. Users can replace
 them with other `.ttf`, `.otf`, or `.ttc` files if they want different reading

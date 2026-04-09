@@ -20,7 +20,7 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 </table>
 
 ## Project status
-- Current app version: `2.0.4`
+- Current app version: `2.1.0`
 - Focus: stable daily reading on 3DS hardware and Azahar
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
@@ -49,17 +49,27 @@ Important:
 - `3dslibris-debug.3dsx` uses the same SD layout and writes verbose diagnostics to `sdmc:/3ds/3dslibris/3dslibris.log`.
 - The `.cia` build uses the Universal-Updater-style packaging flow and now also validates the bundled `RomFS` path in GitHub Actions.
 
+Adding books:
+- Copy supported ebook files into `sdmc:/3ds/3dslibris/book/`.
+- You can do this either before first launch or after the app has already created its folders.
+- On `.cia`, the app can also read bundled books from `romfs:/3ds/3dslibris/book/`, but the normal user drop folder is still the SD path above.
+- The included `sdmc:/3ds/3dslibris/book/QuickStart.txt` also explains the expected folder layout and controls.
+
 Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
 - `make source-release` creates `dist/3dslibris-source.tar.gz`
-- GitHub Releases: pushing a tag like `v2.0.4` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
+- GitHub Releases: pushing a tag like `v2.1.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Supported formats
 
 ### Strong support
-- `EPUB` (EPUB2 + EPUB3 NAV/NCX parsing with robust fallbacks)
+- `EPUB`
+  - EPUB2 + EPUB3 NAV/NCX parsing with robust fallbacks
+  - configurable monospace rendering for `pre` / `code`
+  - inline and block formatting for lists, captions, blockquotes, asides, definition lists, and basic table linearization
+  - ignores common hidden-text patterns such as `visually-hidden` / `aria-hidden`
 
 ### Good support (text-oriented)
 - `FB2`

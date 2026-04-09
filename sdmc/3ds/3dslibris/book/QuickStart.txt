@@ -4,6 +4,34 @@ Welcome. This document gives you a practical overview of controls,
 navigation, and format-specific features.
 
 ------------------------------------------------------------
+0) Add your books
+------------------------------------------------------------
+
+The normal user book folder is:
+
+  sdmc:/3ds/3dslibris/book/
+
+Copy supported ebook files there before or after first launch.
+
+Supported extensions:
+- .epub
+- .fb2
+- .txt
+- .rtf
+- .odt
+- .mobi
+- .pdf
+- .xps
+- .oxps
+- .cbz
+
+Notes:
+- `.3dsx` installs read books from the SD path above.
+- `.cia` installs also support bundled books in
+  `romfs:/3ds/3dslibris/book`, but your own books should normally still go in
+  the SD folder.
+
+------------------------------------------------------------
 1) Library controls
 ------------------------------------------------------------
 
