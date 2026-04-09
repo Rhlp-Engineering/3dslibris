@@ -14,6 +14,7 @@
 #include "book/book.h"
 
 #include "book/book_context.h"
+#include "book/book_xml_parser_style_utils.h"
 #include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
 #include "book/heading_layout.h"
@@ -69,34 +70,34 @@ static void AppendParsedByte(parsedata_t *p, u32 c) {
   parse_append_page_byte(p, c);
 }
 
-static void RestoreParsedStyleMarkers(parsedata_t *p) {
-  if (!p)
-    return;
-  if (p->superscript)
-    AppendParsedByte(p, TEXT_SUPERSCRIPT_ON);
-  if (p->subscript)
-    AppendParsedByte(p, TEXT_SUBSCRIPT_ON);
-  if (p->strikethrough)
-    AppendParsedByte(p, TEXT_STRIKETHROUGH_ON);
-  if (p->underline)
-    AppendParsedByte(p, TEXT_UNDERLINE_ON);
-  if (p->italic)
-    AppendParsedByte(p, TEXT_ITALIC_ON);
-  if (p->bold)
-    AppendParsedByte(p, TEXT_BOLD_ON);
-}
+struct ParsedTextMeasureContext {
+  Text *text;
+  u8 style;
+};
 
-static void SyncParsedTextStyle(Text *ts, bool bold, bool italic) {
+static void SyncParsedTextStyle(Text *ts, bool bold, bool italic, bool mono) {
   if (!ts)
     return;
-  if (bold && italic)
-    ts->SetStyle(TEXT_STYLE_BOLDITALIC);
-  else if (bold)
-    ts->SetStyle(TEXT_STYLE_BOLD);
-  else if (italic)
-    ts->SetStyle(TEXT_STYLE_ITALIC);
-  else
-    ts->SetStyle(TEXT_STYLE_REGULAR);
+  ts->SetStyle(
+      book_xml_parser_style_utils::ResolveParsedTextStyle(bold, italic, mono));
+}
+
+static ParsedTextMeasureContext MakeParsedTextMeasureContext(Text *text,
+                                                             bool bold,
+                                                             bool italic,
+                                                             bool mono) {
+  ParsedTextMeasureContext ctx{};
+  ctx.text = text;
+  ctx.style =
+      book_xml_parser_style_utils::ResolveParsedTextStyle(bold, italic, mono);
+  return ctx;
+}
+
+static int MeasureParsedTextAdvance(uint32_t codepoint, void *ctx) {
+  ParsedTextMeasureContext *measure = (ParsedTextMeasureContext *)ctx;
+  if (!measure || !measure->text)
+    return 0;
+  return measure->text->GetAdvance(codepoint, measure->style);
 }
 
 static bool ContainsAsciiNoCase(const std::string &haystack,
@@ -507,7 +508,7 @@ static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
     p->pagecount++;
 
     parse_reset_page_buffer(p);
-    RestoreParsedStyleMarkers(p);
+    book_xml_parser_style_utils::RestoreParsedStyleMarkers(p);
     p->screen = 0;
   } else {
     p->screen = 1;
@@ -515,11 +516,6 @@ static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
 
   p->pen.x = ts->margin.left;
   p->pen.y = ts->margin.top + lineheight;
-}
-
-static int MeasureParsedTextAdvance(uint32_t codepoint, void *ctx) {
-  Text *ts = (Text *)ctx;
-  return ts ? ts->GetAdvance(codepoint) : 0;
 }
 
 static void AdvanceParsedPageOnOverflowThunk(parsedata_t *p, int lineheight,
@@ -668,7 +664,7 @@ static void AdvanceParsedScreen(parsedata_t *p) {
     Page *page = p->book->AppendPage();
     page->SetBuffer(p->buf, p->buflen);
     parse_reset_page_buffer(p);
-    RestoreParsedStyleMarkers(p);
+    book_xml_parser_style_utils::RestoreParsedStyleMarkers(p);
     p->screen = 0;
   } else {
     p->screen = 1;
@@ -923,6 +919,7 @@ void start(void *data, const char *el, const char **attr) {
     if (!p->mono) {
       AppendParsedByte(p, TEXT_MONO_ON);
       p->mono = true;
+      SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
     }
   }
   else if (!strcmp(el, "li")) {
@@ -952,12 +949,12 @@ void start(void *data, const char *el, const char **attr) {
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
-    SyncParsedTextStyle(ts, p->bold, p->italic);
+    SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
   } else if (!strcmp(el, "em") || !strcmp(el, "i")) {
     parse_push(p, TAG_EM);
     AppendParsedByte(p, TEXT_ITALIC_ON);
     p->italic = true;
-    SyncParsedTextStyle(ts, p->bold, p->italic);
+    SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
   } else if (!strcmp(el, "u") || !strcmp(el, "ins")) {
     parse_push(p, TAG_UNDERLINE);
     if (!p->underline) {
@@ -989,6 +986,7 @@ void start(void *data, const char *el, const char **attr) {
     if (!p->mono) {
       AppendParsedByte(p, TEXT_MONO_ON);
       p->mono = true;
+      SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
     }
   } else if (XmlNameEquals(el, "img") || XmlNameEquals(el, "image")) {
     parse_push(p, TAG_UNKNOWN);
@@ -1157,7 +1155,7 @@ void start(void *data, const char *el, const char **attr) {
       style_changed = true;
     }
     if (style_changed)
-      SyncParsedTextStyle(ts, p->bold, p->italic);
+      SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
   }
 }
 
@@ -1220,9 +1218,16 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
     }
   }
 
+  SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
+  const u8 parse_text_style =
+      book_xml_parser_style_utils::ResolveParsedTextStyle(p->bold, p->italic,
+                                                          p->mono);
+  const ParsedTextMeasureContext measure_ctx =
+      MakeParsedTextMeasureContext(ts, p->bold, p->italic, p->mono);
+
   int lineheight = ts->GetHeight();
   int linespacing = ts->linespacing;
-  int spaceadvance = ts->GetAdvance((u16)' ');
+  int spaceadvance = ts->GetAdvance((u16)' ', parse_text_style);
 
   if (p->buflen == 0) {
     /** starting a new page. **/
@@ -1266,7 +1271,7 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
             bytes =
                 ts->GetCharCode((char *)&(txt[j]), (size_t)(txtlen - j), &code);
 
-          advance += ts->GetAdvance(code);
+          advance += ts->GetAdvance(code, parse_text_style);
           if (advance >
               ts->display.width - ts->margin.right - ts->margin.left) {
             break;
@@ -1293,9 +1298,10 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
 
     std::vector<text_layout_utils::ShapedGlyph> pre_run;
     bool pre_has_rtl = false;
-    if (!text_layout_utils::ShapeTextRunBidi(txt, (size_t)txtlen, NULL,
-                                             MeasureParsedTextAdvance, ts,
-                                             &pre_run, &pre_has_rtl)) {
+    if (!text_layout_utils::ShapeTextRunBidi(
+            txt, (size_t)txtlen, NULL,
+            MeasureParsedTextAdvance, (void *)&measure_ctx, &pre_run,
+            &pre_has_rtl)) {
       return;
     }
 
@@ -1382,9 +1388,9 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
 
   std::vector<text_layout_utils::ShapedGlyph> run;
   bool has_rtl = false;
-  if (!text_layout_utils::ShapeTextRunBidi(txt, (size_t)txtlen, NULL,
-                                           MeasureParsedTextAdvance, ts,
-                                           &run, &has_rtl))
+  if (!text_layout_utils::ShapeTextRunBidi(
+          txt, (size_t)txtlen, NULL,
+          MeasureParsedTextAdvance, (void *)&measure_ctx, &run, &has_rtl))
     return;
 
   std::vector<text_bidi_utils::BidiRun> bidi_runs;
@@ -1492,7 +1498,7 @@ void end(void *data, const char *el) {
     page->SetBuffer(p->buf, p->buflen);
     parse_reset_page_buffer(p);
     // Retain styles across the page.
-    RestoreParsedStyleMarkers(p);
+    book_xml_parser_style_utils::RestoreParsedStyleMarkers(p);
     parse_pop(p);
     return;
   }
@@ -1595,7 +1601,7 @@ void end(void *data, const char *el) {
     style_changed = true;
   }
   if (style_changed)
-    SyncParsedTextStyle(ts, p->bold, p->italic);
+    SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
 
   const text_render_layout_utils::ReadingScreenMetrics metrics =
       text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
@@ -1611,7 +1617,7 @@ void end(void *data, const char *el) {
       Page *page = p->book->AppendPage();
       page->SetBuffer(p->buf, p->buflen);
       parse_reset_page_buffer(p);
-      RestoreParsedStyleMarkers(p);
+      book_xml_parser_style_utils::RestoreParsedStyleMarkers(p);
       p->screen = 0;
     } else
       // End of left screen; same page, next screen.

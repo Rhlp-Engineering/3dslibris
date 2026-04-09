@@ -19,6 +19,7 @@
 #include "book/book_xml.h"
 #include "formats/common/xml_parse_utils.h"
 #include "path_utils.h"
+#include "settings/font_config_utils.h"
 #include "sys/stat.h"
 #include "sys/time.h"
 #include "ui/text_limits.h"
@@ -77,32 +78,26 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
     if (has_fallback_attrs)
       app->ts->ClearFallbackFonts();
 
-    for (i = 0; attr[i]; i += 2) {
-      if (!strcmp(attr[i], "size"))
-        app->ts->SetPixelSize((u8)ClampTextPixelSize(atoi(attr[i + 1])));
-      else if (!strcmp(attr[i], "normal"))
-        app->ts->SetFontFile((char *)attr[i + 1], TEXT_STYLE_REGULAR);
-      else if (!strcmp(attr[i], "bold"))
-        app->ts->SetFontFile((char *)attr[i + 1], TEXT_STYLE_BOLD);
-      else if (!strcmp(attr[i], "italic"))
-        app->ts->SetFontFile((char *)attr[i + 1], TEXT_STYLE_ITALIC);
-      else if (!strcmp(attr[i], "bolditalic"))
-        app->ts->SetFontFile((char *)attr[i + 1], TEXT_STYLE_BOLDITALIC);
-      else if (!strcmp(attr[i], "browser"))
-        app->ts->SetFontFile((char *)attr[i + 1], TEXT_STYLE_BROWSER);
-      else if (!strcmp(attr[i], "fallback1") && strlen(attr[i + 1]))
-        app->ts->SetFallbackFontFile(0, attr[i + 1]);
+	    for (i = 0; attr[i]; i += 2) {
+	      if (!strcmp(attr[i], "size"))
+	        app->ts->SetPixelSize((u8)ClampTextPixelSize(atoi(attr[i + 1])));
+	      else if (!strcmp(attr[i], "fallback1") && strlen(attr[i + 1]))
+	        app->ts->SetFallbackFontFile(0, attr[i + 1]);
       else if (!strcmp(attr[i], "fallback2") && strlen(attr[i + 1]))
         app->ts->SetFallbackFontFile(1, attr[i + 1]);
       else if (!strcmp(attr[i], "fallback3") && strlen(attr[i + 1]))
         app->ts->SetFallbackFontFile(2, attr[i + 1]);
       else if (!strcmp(attr[i], "fallback4") && strlen(attr[i + 1]))
         app->ts->SetFallbackFontFile(3, attr[i + 1]);
-      else if (!strcmp(attr[i], "path")) {
-        if (strlen(attr[i + 1]))
-          app->fontdir = std::string(attr[i + 1]);
-      }
-    }
+	      else if (!strcmp(attr[i], "path")) {
+	        if (strlen(attr[i + 1]))
+	          app->fontdir = std::string(attr[i + 1]);
+	      } else {
+	        u8 style = 0;
+	        if (font_config_utils::StyleFromFontPrefAttr(attr[i], &style))
+	          app->ts->SetFontFile((char *)attr[i + 1], style);
+	      }
+	    }
   } else if (!strcmp(name, "books")) {
     for (i = 0; attr[i]; i += 2) {
       if (!strcmp(attr[i], "reopen"))
@@ -321,6 +316,8 @@ int Prefs::Write() {
       XmlEscapeAttr(app->ts->GetFontFile(TEXT_STYLE_BOLDITALIC).c_str());
   const std::string font_browser =
       XmlEscapeAttr(app->ts->GetFontFile(TEXT_STYLE_BROWSER).c_str());
+  const std::string font_mono =
+      XmlEscapeAttr(app->ts->GetFontFile(TEXT_STYLE_MONO).c_str());
   const std::string fallback1 =
       XmlEscapeAttr(app->ts->GetFallbackFontFile(0).c_str());
   const std::string fallback2 =
@@ -331,13 +328,23 @@ int Prefs::Write() {
       XmlEscapeAttr(app->ts->GetFallbackFontFile(3).c_str());
 
   fprintf(fp,
-          "\t<font size=\"%d\" normal=\"%s\" bold=\"%s\" italic=\"%s\" "
-          "bolditalic=\"%s\" browser=\"%s\" fallback1=\"%s\" "
+          "\t<font size=\"%d\" %s=\"%s\" %s=\"%s\" %s=\"%s\" "
+          "%s=\"%s\" %s=\"%s\" %s=\"%s\" fallback1=\"%s\" "
           "fallback2=\"%s\" fallback3=\"%s\" fallback4=\"%s\" />\n",
-          app->ts->GetPixelSize(), font_regular.c_str(), font_bold.c_str(),
-          font_italic.c_str(), font_bolditalic.c_str(), font_browser.c_str(),
-          fallback1.c_str(), fallback2.c_str(), fallback3.c_str(),
-          fallback4.c_str());
+          app->ts->GetPixelSize(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_REGULAR),
+          font_regular.c_str(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_BOLD),
+          font_bold.c_str(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_ITALIC),
+          font_italic.c_str(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_BOLDITALIC),
+          font_bolditalic.c_str(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_BROWSER),
+          font_browser.c_str(),
+          font_config_utils::FontPrefAttrForStyle(TEXT_STYLE_MONO),
+          font_mono.c_str(), fallback1.c_str(), fallback2.c_str(),
+          fallback3.c_str(), fallback4.c_str());
   fprintf(fp, "\t<paragraph indent=\"%d\" spacing=\"%d\" />\n", app->paraindent,
           app->paraspacing);
   fprintf(fp, "\t<books reopen=\"%d\">\n", app->reopen);

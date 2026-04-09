@@ -24,6 +24,7 @@
 #include "debug_log.h"
 #include "ui/button.h"
 #include "font_constants.h"
+#include "settings/font_config_utils.h"
 #include "settings/prefs.h"
 #include "shared/bugfix_utils.h"
 #include "shared/string_utils.h"
@@ -32,25 +33,7 @@
 
 namespace {
 
-enum FontTarget : u8 {
-  FONT_TARGET_REGULAR = 0,
-  FONT_TARGET_BOLD = 1,
-  FONT_TARGET_ITALIC = 2,
-  FONT_TARGET_BOLDITALIC = 3,
-  FONT_TARGET_BROWSER = 4,
-  FONT_TARGET_FALLBACK_1 = 5,
-  FONT_TARGET_FALLBACK_2 = 6,
-  FONT_TARGET_FALLBACK_3 = 7,
-  FONT_TARGET_FALLBACK_4 = 8,
-  FONT_TARGET_COUNT = 9
-};
-static const u8 kFallbackTargetStart = FONT_TARGET_FALLBACK_1;
 static const u8 kTargetsPerPage = 5;
-
-static const char *kFontTargetLabels[FONT_TARGET_COUNT] = {
-    "regular font", "bold font", "italic font", "bold italic font",
-    "mono/ui font", "fallback font 1", "fallback font 2",
-    "fallback font 3", "fallback font 4"};
 
 static std::string BasenameOnly(const std::string &path) {
   size_t slash = path.find_last_of("/\\");
@@ -63,59 +46,17 @@ static bool FontNameEquals(const std::string &a, const std::string &b) {
   return ToLowerAscii(BasenameOnly(a)) == ToLowerAscii(BasenameOnly(b));
 }
 
-static u8 StyleFromTarget(u8 target) {
-  switch (target) {
-  case FONT_TARGET_BOLD:
-    return TEXT_STYLE_BOLD;
-  case FONT_TARGET_ITALIC:
-    return TEXT_STYLE_ITALIC;
-  case FONT_TARGET_BOLDITALIC:
-    return TEXT_STYLE_BOLDITALIC;
-  case FONT_TARGET_BROWSER:
-    return TEXT_STYLE_BROWSER;
-  case FONT_TARGET_REGULAR:
-  default:
-    return TEXT_STYLE_REGULAR;
-  }
-}
-
-static bool IsFallbackTarget(u8 target) {
-  return target >= kFallbackTargetStart && target < FONT_TARGET_COUNT;
-}
-
-static int FallbackIndexFromTarget(u8 target) {
-  if (!IsFallbackTarget(target))
-    return -1;
-  return (int)(target - kFallbackTargetStart);
-}
-
-static const char *DefaultFontForStyle(u8 style) {
-  switch (style) {
-  case TEXT_STYLE_BOLD:
-    return FONTBOLDFILE;
-  case TEXT_STYLE_ITALIC:
-    return FONTITALICFILE;
-  case TEXT_STYLE_BOLDITALIC:
-    return FONTBOLDITALICFILE;
-  case TEXT_STYLE_BROWSER:
-    return FONTBROWSERFILE;
-  case TEXT_STYLE_REGULAR:
-  default:
-    return FONTREGULARFILE;
-  }
-}
-
 static u8 TargetFromMode(AppMode mode) {
   switch (mode) {
   case AppMode::PrefsFontBold:
-    return FONT_TARGET_BOLD;
+    return font_config_utils::FONT_TARGET_BOLD;
   case AppMode::PrefsFontItalic:
-    return FONT_TARGET_ITALIC;
+    return font_config_utils::FONT_TARGET_ITALIC;
   case AppMode::PrefsFontBoldItalic:
-    return FONT_TARGET_BOLDITALIC;
+    return font_config_utils::FONT_TARGET_BOLDITALIC;
   case AppMode::PrefsFont:
   default:
-    return FONT_TARGET_REGULAR;
+    return font_config_utils::FONT_TARGET_REGULAR;
   }
 }
 
@@ -142,7 +83,8 @@ static void LayoutTargetFooterButtons(App *app) {
 } // namespace
 
 FontMenu::FontMenu(App *_app)
-    : Menu(_app), viewState(VIEW_TARGETS), targetSelected(FONT_TARGET_REGULAR),
+    : Menu(_app), viewState(VIEW_TARGETS),
+      targetSelected(font_config_utils::FONT_TARGET_REGULAR),
       targetPage(0) {
   dir = app->fontdir;
   findFiles();
@@ -161,13 +103,13 @@ FontMenu::FontMenu(App *_app)
     buttons.push_back(b);
   }
 
-  for (u8 i = 0; i < FONT_TARGET_COUNT; i++) {
+  for (u8 i = 0; i < font_config_utils::FONT_TARGET_COUNT; i++) {
     Button *b = new Button(app->ts);
     b->Init();
     b->SetStyle(BUTTON_STYLE_SETTING);
     b->Move(5, 24 + (i % kTargetsPerPage) * 38);
     b->Resize(230, 36);
-    b->SetLabel1(std::string(kFontTargetLabels[i]));
+    b->SetLabel1(std::string(font_config_utils::GetFontTargetLabel(i)));
     targetButtons.push_back(b);
   }
 
@@ -231,16 +173,18 @@ void FontMenu::findFiles() {
 }
 
 void FontMenu::refreshTargetButtons() {
-  for (u8 i = 0; i < targetButtons.size() && i < FONT_TARGET_COUNT; i++) {
-    if (IsFallbackTarget(i)) {
-      int fb_idx = FallbackIndexFromTarget(i);
+  for (u8 i = 0; i < targetButtons.size() &&
+                  i < font_config_utils::FONT_TARGET_COUNT;
+       i++) {
+    if (font_config_utils::IsFallbackTarget(i)) {
+      int fb_idx = font_config_utils::FallbackIndexFromTarget(i);
       std::string fb_file = app->ts->fm->GetFallbackFile(fb_idx);
       targetButtons[i]->SetLabel2(fb_file.empty() ? "(none)" : BasenameOnly(fb_file));
     } else {
-      u8 style = StyleFromTarget(i);
+      u8 style = font_config_utils::StyleFromTarget(i);
       std::string current = app->ts->GetFontFile(style);
       if (current.empty())
-        current = DefaultFontForStyle(style);
+        current = font_config_utils::DefaultFontForStyle(style);
       targetButtons[i]->SetLabel2(BasenameOnly(current));
     }
   }
@@ -248,7 +192,7 @@ void FontMenu::refreshTargetButtons() {
 
 void FontMenu::enterTargetView(u8 requested_target) {
   viewState = VIEW_TARGETS;
-  if (requested_target < FONT_TARGET_COUNT)
+  if (requested_target < font_config_utils::FONT_TARGET_COUNT)
     targetSelected = requested_target;
   syncTargetPageToSelection();
   refreshTargetButtons();
@@ -265,10 +209,10 @@ void FontMenu::enterFileView() {
     return;
   }
 
-  u8 style = StyleFromTarget(targetSelected);
+  u8 style = font_config_utils::StyleFromTarget(targetSelected);
   std::string current = app->ts->GetFontFile(style);
   if (current.empty())
-    current = DefaultFontForStyle(style);
+    current = font_config_utils::DefaultFontForStyle(style);
 
   for (size_t i = 0; i < files.size(); i++) {
     if (FontNameEquals(files[i], current)) {
@@ -512,7 +456,7 @@ void FontMenu::draw() {
   app->ts->SetPen(6, 14);
   char header[72];
   snprintf(header, sizeof(header), "select %s",
-           kFontTargetLabels[targetSelected]);
+           font_config_utils::GetFontTargetLabel(targetSelected));
   app->ts->PrintString(header);
 
   for (u8 i = page * pagesize;
@@ -586,7 +530,7 @@ void FontMenu::selectPrevious() {
 }
 
 void FontMenu::selectNextTarget() {
-  if (targetSelected + 1 < FONT_TARGET_COUNT) {
+  if (targetSelected + 1 < font_config_utils::FONT_TARGET_COUNT) {
     targetSelected++;
     syncTargetPageToSelection();
     dirty = true;
@@ -602,7 +546,8 @@ void FontMenu::selectPreviousTarget() {
 }
 
 u8 FontMenu::getTargetPageCount() const {
-  return (FONT_TARGET_COUNT + kTargetsPerPage - 1) / kTargetsPerPage;
+  return (font_config_utils::FONT_TARGET_COUNT + kTargetsPerPage - 1) /
+         kTargetsPerPage;
 }
 
 u8 FontMenu::getTargetCurrentPage() const { return targetPage + 1; }
@@ -612,7 +557,9 @@ u8 FontMenu::getTargetPageStart() const { return targetPage * kTargetsPerPage; }
 u8 FontMenu::getTargetPageEnd() const {
   const u8 start = getTargetPageStart();
   const u8 end = start + kTargetsPerPage;
-  return (end < FONT_TARGET_COUNT) ? end : FONT_TARGET_COUNT;
+  return (end < font_config_utils::FONT_TARGET_COUNT)
+             ? end
+             : font_config_utils::FONT_TARGET_COUNT;
 }
 
 void FontMenu::syncTargetPageToSelection() {
@@ -652,8 +599,8 @@ void FontMenu::handleButtonPress() {
     return;
   }
 
-  if (IsFallbackTarget(targetSelected)) {
-    int fb_idx = FallbackIndexFromTarget(targetSelected);
+  if (font_config_utils::IsFallbackTarget(targetSelected)) {
+    int fb_idx = font_config_utils::FallbackIndexFromTarget(targetSelected);
     if (app->ts->fm->SetFallbackFile(fb_idx, filename)) {
       char msg[64];
       snprintf(msg, sizeof(msg), "fallback %d: %s", fb_idx + 1, BasenameOnly(filename).c_str());
@@ -668,7 +615,7 @@ void FontMenu::handleButtonPress() {
       app->PrintStatus("error loading fallback font");
     }
   } else {
-    const u8 style = StyleFromTarget(targetSelected);
+    const u8 style = font_config_utils::StyleFromTarget(targetSelected);
     const std::string previous = app->ts->GetFontFile(style);
     app->ts->SetFontFile(filename, style);
     const std::string current = app->ts->GetFontFile(style);

@@ -58,10 +58,14 @@ int main() {
     test::ExpectStrContains("splash path suffix", paths::kSplashPaths[i], "splash.");
   }
 
-  test::ExpectEq("default font count", paths::kDefaultFontCount, 5);
+  test::ExpectEq("default font count", paths::kDefaultFontCount, 6);
+  bool hasMonoFont = false;
   for (int i = 0; i < paths::kDefaultFontCount; ++i) {
     ExpectFontEntry("default font entry", paths::kDefaultFonts[i][0], paths::kDefaultFonts[i][1]);
+    if (std::strcmp(paths::kDefaultFonts[i][0], "LiberationMono-Regular.ttf") == 0)
+      hasMonoFont = true;
   }
+  test::ExpectTrue("default mono font entry", hasMonoFont);
 
   {
     std::string decoded = UrlDecode("chapter%2Etxt");
