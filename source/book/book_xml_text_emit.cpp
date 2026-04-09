@@ -9,6 +9,22 @@ namespace book_xml_text_emit {
 
 namespace {
 
+bool IsClosingAttachedPunctuation(uint32_t cp) {
+  return cp == '!' || cp == '?';
+}
+
+bool SegmentIsOnlyClosingAttachedPunctuation(
+    const std::vector<text_layout_utils::ShapedGlyph> &run, size_t start,
+    size_t end) {
+  if (start >= end || end > run.size())
+    return false;
+  for (size_t i = start; i < end; i++) {
+    if (!IsClosingAttachedPunctuation(run[i].text.codepoint))
+      return false;
+  }
+  return true;
+}
+
 void AdvancePageIfNeeded(parsedata_t *p, int lineheight,
                          AdvancePageOnOverflowFn advance_page_on_overflow,
                          void *advance_ctx) {
@@ -246,7 +262,11 @@ void EmitFlowedShapedText(
     size_t segment_end = run[segment_end_index - 1].text.byte_offset +
                          run[segment_end_index - 1].text.byte_length;
 
-    if ((p->pen.x + advance) > (metrics.display_width - metrics.margin_right)) {
+    const bool attached_closing_punctuation =
+        SegmentIsOnlyClosingAttachedPunctuation(run, unit_index,
+                                                segment_end_index);
+    if ((p->pen.x + advance) > (metrics.display_width - metrics.margin_right) &&
+        !(p->linebegan && attached_closing_punctuation)) {
       parse_append_page_byte(p, '\n');
       p->pen.x = metrics.margin_left;
       p->pen.y += (metrics.lineheight + metrics.linespacing);

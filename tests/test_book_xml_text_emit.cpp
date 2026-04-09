@@ -113,10 +113,34 @@ void TestEmitFlowedRtlAddsParagraphAndWidthTokens() {
   ExpectEq("pen x equals rtl line width", p.pen.x, 9);
 }
 
+void TestEmitKeepsClosingPunctuationOnCurrentLine() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 6;
+  p.pen.y = 10;
+  p.linebegan = true;
+
+  const char *text = "!";
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = false;
+  ExpectTrue("shape punctuation",
+             text_layout_utils::ShapeTextRunBidi(text, 1, NULL, MeasureMono,
+                                                 NULL, &run, &has_rtl));
+
+  book_xml_text_emit::EmitFlowedShapedText(
+      &p, text, run, has_rtl, std::vector<text_bidi_utils::BidiRun>(),
+      BaseMetrics(), NULL, NULL);
+
+  ExpectEq("punctuation emitted without forced newline", p.buflen, 1);
+  ExpectEq("punctuation token", (int)p.buf[0], '!');
+  ExpectEq("pen advances on same line", p.pen.x, 7);
+}
+
 } // namespace
 
 int main() {
   TestEmitFlowedLtrWrapsIntoPageBuffer();
   TestEmitFlowedRtlAddsParagraphAndWidthTokens();
+  TestEmitKeepsClosingPunctuationOnCurrentLine();
   return 0;
 }

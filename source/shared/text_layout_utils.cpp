@@ -16,6 +16,14 @@ namespace {
 
 PerfStats g_perf_stats;
 
+static bool IsOpeningWordAttachedPunctuation(uint32_t cp) {
+  return cp == 0x00A1 || cp == 0x00BF; // ¡ ¿
+}
+
+static bool IsClosingWordAttachedPunctuation(uint32_t cp) {
+  return cp == '!' || cp == '?';
+}
+
 static uint64_t PerfNowMs() {
 #ifdef __3DS__
   return (uint64_t)osGetTime();
@@ -53,7 +61,9 @@ static LineBreakMeasureResult FindLineBreakImpl(
         width_at_last_break = width;
         have_break = true;
       } else if (glyph.text.allow_break_after &&
-                 i + 1 < run.size() && !run[i + 1].text.whitespace) {
+                 i + 1 < run.size() && !run[i + 1].text.whitespace &&
+                 !IsOpeningWordAttachedPunctuation(glyph.text.codepoint) &&
+                 !IsClosingWordAttachedPunctuation(run[i + 1].text.codepoint)) {
         last_break = i + 1;
         width_at_last_break = width;
         have_break = true;
@@ -63,6 +73,11 @@ static LineBreakMeasureResult FindLineBreakImpl(
     if (width > max_width) {
       if (!preformatted && have_break && last_break > start)
         return LineBreakMeasureResult(last_break, width_at_last_break);
+      if (!preformatted && IsClosingWordAttachedPunctuation(glyph.text.codepoint) &&
+          i > start + 1) {
+        return LineBreakMeasureResult(i - 1,
+                                      width - glyph.advance - run[i - 1].advance);
+      }
       if (i > start)
         return LineBreakMeasureResult(i, width - glyph.advance);
       return LineBreakMeasureResult(i + 1, width);

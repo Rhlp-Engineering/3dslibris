@@ -98,6 +98,34 @@ void TestMeasureCombinedBreaks() {
   ExpectEq("combined preformatted width", pre.width, 5);
 }
 
+void TestKeepsOpeningPunctuationWithFollowingWord() {
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  const std::string text = "\xC2\xA1Hola!";
+  ExpectTrue("shape opening punctuation",
+             text_layout_utils::ShapeTextRunUtf8(text.c_str(), text.size(), NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("opening punctuation does not break alone",
+           text_layout_utils::FindLineBreak(run, 0, 2), (size_t)2);
+}
+
+void TestKeepsClosingPunctuationWithPreviousWord() {
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  ExpectTrue("shape closing punctuation",
+             text_layout_utils::ShapeTextRunUtf8("Hola!", 5, NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("closing punctuation stays with previous letter",
+           text_layout_utils::FindLineBreak(run, 0, 4), (size_t)3);
+}
+
+void TestKeepsQuestionMarkWithPreviousWord() {
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  ExpectTrue("shape question punctuation",
+             text_layout_utils::ShapeTextRunUtf8("estas?", 6, NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("question mark stays with previous letter",
+           text_layout_utils::FindLineBreak(run, 0, 5), (size_t)4);
+}
+
 void TestPrepareDisplayUtf8_RtlDetection() {
   const char *arabic = "\xD9\x85\xD8\xB1\xD8\xAD\xD8\xA8\xD8\xA7"; // "مرحبا"
   std::string display;
@@ -125,6 +153,9 @@ int main() {
   TestFindLineBreaks();
   TestFindPreformattedBreaks();
   TestMeasureCombinedBreaks();
+  TestKeepsOpeningPunctuationWithFollowingWord();
+  TestKeepsClosingPunctuationWithPreviousWord();
+  TestKeepsQuestionMarkWithPreviousWord();
   TestPrepareDisplayUtf8_RtlDetection();
   return 0;
 }
