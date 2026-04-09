@@ -40,12 +40,20 @@ std::vector<std::string> ExtractTextLinesFromPage(Page *page) {
     }
     if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||
         c == TEXT_ITALIC_OFF || c == TEXT_UNDERLINE_ON ||
-        c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
+        c == TEXT_UNDERLINE_OFF || c == TEXT_OVERLINE_ON ||
+        c == TEXT_OVERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
         c == TEXT_STRIKETHROUGH_OFF || c == TEXT_SUPERSCRIPT_ON ||
         c == TEXT_SUPERSCRIPT_OFF || c == TEXT_SUBSCRIPT_ON ||
         c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF ||
         c == TEXT_HR) {
       i++;
+      continue;
+    }
+    if (c == TEXT_UNDERLINE_STYLE) {
+      if (i + 1 < len)
+        i += 2;
+      else
+        i++;
       continue;
     }
     if (mobi_heading_markers::HeadingLevelFromMarker(c) > 0) {

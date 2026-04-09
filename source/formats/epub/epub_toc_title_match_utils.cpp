@@ -52,12 +52,17 @@ static std::string BuildPageSearchText(Page *page, size_t max_out = 2048) {
     }
     if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||
         c == TEXT_ITALIC_OFF || c == TEXT_UNDERLINE_ON ||
-        c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
+        c == TEXT_UNDERLINE_OFF || c == TEXT_OVERLINE_ON ||
+        c == TEXT_OVERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
         c == TEXT_STRIKETHROUGH_OFF || c == TEXT_SUPERSCRIPT_ON ||
         c == TEXT_SUPERSCRIPT_OFF || c == TEXT_SUBSCRIPT_ON ||
         c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF ||
         c == TEXT_HR) {
       i++;
+      continue;
+    }
+    if (c == TEXT_UNDERLINE_STYLE) {
+      i += (i + 1 < len) ? 2 : 1;
       continue;
     }
     if (c < 0x20) {
@@ -150,11 +155,16 @@ BuildPageHeadingLines(Page *page, size_t max_lines = 12,
     }
     if (c == TEXT_BOLD_ON || c == TEXT_BOLD_OFF || c == TEXT_ITALIC_ON ||
         c == TEXT_ITALIC_OFF || c == TEXT_UNDERLINE_ON ||
-        c == TEXT_UNDERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
+        c == TEXT_UNDERLINE_OFF || c == TEXT_OVERLINE_ON ||
+        c == TEXT_OVERLINE_OFF || c == TEXT_STRIKETHROUGH_ON ||
         c == TEXT_STRIKETHROUGH_OFF || c == TEXT_SUPERSCRIPT_ON ||
         c == TEXT_SUPERSCRIPT_OFF || c == TEXT_SUBSCRIPT_ON ||
         c == TEXT_SUBSCRIPT_OFF || c == TEXT_MONO_ON || c == TEXT_MONO_OFF ||
         c == TEXT_HR) {
+      continue;
+    }
+    if (c == TEXT_UNDERLINE_STYLE) {
+      i += (i + 1 < len) ? 1 : 0;
       continue;
     }
     if (c == '\r')

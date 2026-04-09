@@ -32,6 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdio.h>
 #include <string.h>
 
+#include "shared/text_token_constants.h"
+
 bool iswhitespace(u32 c) {
   switch (c) {
   case ' ':
@@ -143,6 +145,8 @@ void parse_init(parsedata_t *data) {
   data->bold = false;
   data->italic = false;
   data->underline = false;
+  data->underline_style = UNDERLINE_STYLE_SOLID;
+  data->overline = false;
   data->strikethrough = false;
   data->superscript = false;
   data->subscript = false;
@@ -151,6 +155,8 @@ void parse_init(parsedata_t *data) {
     data->style_bold_stack[i] = false;
     data->style_italic_stack[i] = false;
     data->style_underline_stack[i] = false;
+    data->style_underline_style_stack[i] = UNDERLINE_STYLE_SOLID;
+    data->style_overline_stack[i] = false;
     data->style_strikethrough_stack[i] = false;
     data->style_superscript_stack[i] = false;
     data->style_subscript_stack[i] = false;
@@ -161,9 +167,20 @@ void parse_init(parsedata_t *data) {
     data->ordered_list_ordinal_stack[i] = 0;
     data->ordered_list_style_stack[i] = 0;
   }
+  data->deferred_style_sync = false;
+  data->deferred_target_bold = false;
+  data->deferred_target_italic = false;
+  data->deferred_target_underline = false;
+  data->deferred_target_underline_style = UNDERLINE_STYLE_SOLID;
+  data->deferred_target_overline = false;
+  data->deferred_target_strikethrough = false;
+  data->deferred_target_superscript = false;
+  data->deferred_target_subscript = false;
+  data->deferred_target_mono = false;
   data->docpath.clear();
   data->doc_title.clear();
   data->doc_heading.clear();
+  data->doc_heading_complete = false;
   data->collecting_fb2_binary = false;
   data->fb2_binary_too_large = false;
   data->fb2_binary_id.clear();
@@ -196,6 +213,8 @@ void parse_push(parsedata_t *data, context_t context) {
     data->style_bold_stack[data->stacksize] = false;
     data->style_italic_stack[data->stacksize] = false;
     data->style_underline_stack[data->stacksize] = false;
+    data->style_underline_style_stack[data->stacksize] = UNDERLINE_STYLE_SOLID;
+    data->style_overline_stack[data->stacksize] = false;
     data->style_strikethrough_stack[data->stacksize] = false;
     data->style_superscript_stack[data->stacksize] = false;
     data->style_subscript_stack[data->stacksize] = false;
@@ -215,6 +234,7 @@ context_t parse_pop(parsedata_t *data) {
     data->style_bold_stack[data->stacksize] = false;
     data->style_italic_stack[data->stacksize] = false;
     data->style_underline_stack[data->stacksize] = false;
+    data->style_underline_style_stack[data->stacksize] = UNDERLINE_STYLE_SOLID;
     data->style_strikethrough_stack[data->stacksize] = false;
     data->style_superscript_stack[data->stacksize] = false;
     data->style_subscript_stack[data->stacksize] = false;

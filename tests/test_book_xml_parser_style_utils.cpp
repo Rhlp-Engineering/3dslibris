@@ -42,14 +42,22 @@ void TestRestoreParsedStyleMarkersReinjectsMono() {
   parse_init(&p);
   p.italic = true;
   p.bold = true;
+  p.overline = true;
+  p.underline = true;
+  p.underline_style = UNDERLINE_STYLE_WAVY;
   p.mono = true;
 
   book_xml_parser_style_utils::RestoreParsedStyleMarkers(&p);
 
-  test::ExpectEq("marker count", p.buflen, 3);
-  test::ExpectEq("italic marker", (int)p.buf[0], TEXT_ITALIC_ON);
-  test::ExpectEq("bold marker", (int)p.buf[1], TEXT_BOLD_ON);
-  test::ExpectEq("mono marker", (int)p.buf[2], TEXT_MONO_ON);
+  test::ExpectEq("marker count", p.buflen, 7);
+  test::ExpectEq("overline marker", (int)p.buf[0], TEXT_OVERLINE_ON);
+  test::ExpectEq("underline marker", (int)p.buf[1], TEXT_UNDERLINE_ON);
+  test::ExpectEq("underline style token", (int)p.buf[2], TEXT_UNDERLINE_STYLE);
+  test::ExpectEq("underline style value", (int)p.buf[3],
+                 UNDERLINE_STYLE_WAVY);
+  test::ExpectEq("italic marker", (int)p.buf[4], TEXT_ITALIC_ON);
+  test::ExpectEq("bold marker", (int)p.buf[5], TEXT_BOLD_ON);
+  test::ExpectEq("mono marker", (int)p.buf[6], TEXT_MONO_ON);
 }
 
 } // namespace

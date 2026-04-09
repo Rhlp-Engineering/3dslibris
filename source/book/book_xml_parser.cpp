@@ -15,6 +15,7 @@
 
 #include "book/book_xml_block_utils.h"
 #include "book/book_context.h"
+#include "book/book_xml_css_style_utils.h"
 #include "book/book_xml_list_utils.h"
 #include "book/book_xml_parser_style_utils.h"
 #include "book/book_xml_text_emit.h"
@@ -131,6 +132,94 @@ static bool ParseInAnyEasyParagraphTightBlock(const parsedata_t *p) {
   return false;
 }
 
+static void ApplyDeferredStyleSync(parsedata_t *p, Text *ts) {
+  if (!p || !p->deferred_style_sync)
+    return;
+
+  bool style_changed = false;
+  if (p->bold != p->deferred_target_bold) {
+    AppendParsedByte(p, p->deferred_target_bold ? TEXT_BOLD_ON : TEXT_BOLD_OFF);
+    if (p->deferred_target_bold)
+      p->pos++;
+    p->bold = p->deferred_target_bold;
+    style_changed = true;
+  }
+  if (p->italic != p->deferred_target_italic) {
+    AppendParsedByte(p, p->deferred_target_italic ? TEXT_ITALIC_ON
+                                                  : TEXT_ITALIC_OFF);
+    p->italic = p->deferred_target_italic;
+    style_changed = true;
+  }
+  if (p->underline != p->deferred_target_underline) {
+    AppendParsedByte(p, p->deferred_target_underline ? TEXT_UNDERLINE_ON
+                                                     : TEXT_UNDERLINE_OFF);
+    p->underline = p->deferred_target_underline;
+    if (!p->underline)
+      p->underline_style = UNDERLINE_STYLE_SOLID;
+    style_changed = true;
+  }
+  if (p->underline &&
+      p->underline_style != p->deferred_target_underline_style) {
+    p->underline_style = p->deferred_target_underline_style;
+    book_xml_parser_style_utils::EmitUnderlineStyleMarker(
+        p, p->underline_style);
+  }
+  if (p->overline != p->deferred_target_overline) {
+    AppendParsedByte(p, p->deferred_target_overline ? TEXT_OVERLINE_ON
+                                                    : TEXT_OVERLINE_OFF);
+    p->overline = p->deferred_target_overline;
+    style_changed = true;
+  }
+  if (p->strikethrough != p->deferred_target_strikethrough) {
+    AppendParsedByte(p, p->deferred_target_strikethrough ? TEXT_STRIKETHROUGH_ON
+                                                         : TEXT_STRIKETHROUGH_OFF);
+    p->strikethrough = p->deferred_target_strikethrough;
+    style_changed = true;
+  }
+  if (p->superscript != p->deferred_target_superscript) {
+    AppendParsedByte(p, p->deferred_target_superscript ? TEXT_SUPERSCRIPT_ON
+                                                       : TEXT_SUPERSCRIPT_OFF);
+    p->superscript = p->deferred_target_superscript;
+    style_changed = true;
+  }
+  if (p->subscript != p->deferred_target_subscript) {
+    AppendParsedByte(p, p->deferred_target_subscript ? TEXT_SUBSCRIPT_ON
+                                                     : TEXT_SUBSCRIPT_OFF);
+    p->subscript = p->deferred_target_subscript;
+    style_changed = true;
+  }
+  if (p->mono != p->deferred_target_mono) {
+    AppendParsedByte(p, p->deferred_target_mono ? TEXT_MONO_ON : TEXT_MONO_OFF);
+    p->mono = p->deferred_target_mono;
+    style_changed = true;
+  }
+
+  p->deferred_style_sync = false;
+  if (style_changed)
+    SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
+}
+
+static void QueueDeferredStyleSync(parsedata_t *p, bool want_bold,
+                                   bool want_italic, bool want_underline,
+                                   u8 want_underline_style,
+                                   bool want_overline,
+                                   bool want_strikethrough,
+                                   bool want_superscript, bool want_subscript,
+                                   bool want_mono) {
+  if (!p)
+    return;
+  p->deferred_style_sync = true;
+  p->deferred_target_bold = want_bold;
+  p->deferred_target_italic = want_italic;
+  p->deferred_target_underline = want_underline;
+  p->deferred_target_underline_style = want_underline_style;
+  p->deferred_target_overline = want_overline;
+  p->deferred_target_strikethrough = want_strikethrough;
+  p->deferred_target_superscript = want_superscript;
+  p->deferred_target_subscript = want_subscript;
+  p->deferred_target_mono = want_mono;
+}
+
 static bool ContainsAsciiNoCase(const std::string &haystack,
                                 const char *needle) {
   if (!needle || !needle[0])
@@ -148,83 +237,6 @@ static bool AttrNameEquals(const char *name, const char *needle) {
   const char *colon = strrchr(name, ':');
   return (colon && (strcmp(colon + 1, needle) == 0 ||
                     EqualsAsciiNoCase(colon + 1, needle)));
-}
-
-static void ParseInlineStyleFlags(const char *style, bool *bold_out,
-                                  bool *italic_out, bool *underline_out,
-                                  bool *strikethrough_out,
-                                  bool *superscript_out,
-                                  bool *subscript_out) {
-  if (!style ||
-      (!bold_out && !italic_out && !underline_out && !strikethrough_out &&
-       !superscript_out && !subscript_out))
-    return;
-  const std::string value(style);
-  const std::string style_lc = ToLowerAsciiLocal(value);
-
-  if (italic_out) {
-    if (ContainsAsciiNoCase(style_lc, "font-style:italic") ||
-        ContainsAsciiNoCase(style_lc, "font-style: italic") ||
-        ContainsAsciiNoCase(style_lc, "font-style:oblique") ||
-        ContainsAsciiNoCase(style_lc, "font-style: oblique") ||
-        ContainsAsciiNoCase(style_lc, "font:italic") ||
-        ContainsAsciiNoCase(style_lc, "font: italic") ||
-        ContainsAsciiNoCase(style_lc, "font:oblique") ||
-        ContainsAsciiNoCase(style_lc, "font: oblique")) {
-      *italic_out = true;
-    }
-  }
-
-  if (bold_out) {
-    if (ContainsAsciiNoCase(style_lc, "font-weight:bold") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: bold") ||
-        ContainsAsciiNoCase(style_lc, "font-weight:bolder") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: bolder") ||
-        ContainsAsciiNoCase(style_lc, "font-weight:600") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: 600") ||
-        ContainsAsciiNoCase(style_lc, "font-weight:700") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: 700") ||
-        ContainsAsciiNoCase(style_lc, "font-weight:800") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: 800") ||
-        ContainsAsciiNoCase(style_lc, "font-weight:900") ||
-        ContainsAsciiNoCase(style_lc, "font-weight: 900") ||
-        ContainsAsciiNoCase(style_lc, "font:bold") ||
-        ContainsAsciiNoCase(style_lc, "font: bold")) {
-      *bold_out = true;
-    }
-  }
-
-  if (underline_out) {
-    if (ContainsAsciiNoCase(style_lc, "text-decoration:underline") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration: underline") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration-line:underline") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration-line: underline")) {
-      *underline_out = true;
-    }
-  }
-
-  if (strikethrough_out) {
-    if (ContainsAsciiNoCase(style_lc, "text-decoration:line-through") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration: line-through") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration-line:line-through") ||
-        ContainsAsciiNoCase(style_lc, "text-decoration-line: line-through")) {
-      *strikethrough_out = true;
-    }
-  }
-
-  if (superscript_out) {
-    if (ContainsAsciiNoCase(style_lc, "vertical-align:super") ||
-        ContainsAsciiNoCase(style_lc, "vertical-align: super")) {
-      *superscript_out = true;
-    }
-  }
-
-  if (subscript_out) {
-    if (ContainsAsciiNoCase(style_lc, "vertical-align:sub") ||
-        ContainsAsciiNoCase(style_lc, "vertical-align: sub")) {
-      *subscript_out = true;
-    }
-  }
 }
 
 static int ParseMarginTopPx(const char *style) {
@@ -267,11 +279,13 @@ static int ParseMarginTopPx(const char *style) {
 
 static void ParseClassStyleFlags(const char *class_name, bool *bold_out,
                                  bool *italic_out, bool *underline_out,
-                                 bool *strikethrough_out,
+                                 u8 *underline_style_out,
+                                 bool *overline_out, bool *strikethrough_out,
                                  bool *superscript_out,
                                  bool *subscript_out) {
   if (!class_name ||
-      (!bold_out && !italic_out && !underline_out && !strikethrough_out &&
+      (!bold_out && !italic_out && !underline_out && !overline_out &&
+       !strikethrough_out &&
        !superscript_out && !subscript_out))
     return;
   const std::string class_lc = ToLowerAsciiLocal(class_name);
@@ -296,6 +310,21 @@ static void ParseClassStyleFlags(const char *class_name, bool *bold_out,
     if (ContainsAsciiNoCase(class_lc, "underline") ||
         ContainsAsciiNoCase(class_lc, "underlined")) {
       *underline_out = true;
+      if (underline_style_out) {
+        if (ContainsAsciiNoCase(class_lc, "wavy"))
+          *underline_style_out = UNDERLINE_STYLE_WAVY;
+        else if (ContainsAsciiNoCase(class_lc, "dashed"))
+          *underline_style_out = UNDERLINE_STYLE_DASHED;
+        else if (ContainsAsciiNoCase(class_lc, "dotted"))
+          *underline_style_out = UNDERLINE_STYLE_DOTTED;
+      }
+    }
+  }
+
+  if (overline_out) {
+    if (ContainsAsciiNoCase(class_lc, "overline") ||
+        ContainsAsciiNoCase(class_lc, "overlined")) {
+      *overline_out = true;
     }
   }
 
@@ -335,10 +364,12 @@ static int ParseElementMarginTopPx(const char **attr) {
 
 static void ParseElementStyleFlags(const char **attr, bool *bold_out,
                                    bool *italic_out, bool *underline_out,
-                                   bool *strikethrough_out,
+                                   u8 *underline_style_out,
+                                   bool *overline_out, bool *strikethrough_out,
                                    bool *superscript_out,
                                    bool *subscript_out) {
-  if ((!bold_out && !italic_out && !underline_out && !strikethrough_out &&
+  if ((!bold_out && !italic_out && !underline_out && !overline_out &&
+       !strikethrough_out &&
        !superscript_out && !subscript_out) ||
       !attr)
     return;
@@ -346,10 +377,27 @@ static void ParseElementStyleFlags(const char **attr, bool *bold_out,
     if (!attr[i + 1] || !attr[i + 1][0])
       continue;
     if (AttrNameEquals(attr[i], "style")) {
-      ParseInlineStyleFlags(attr[i + 1], bold_out, italic_out, underline_out,
-                            strikethrough_out, superscript_out, subscript_out);
+      book_xml_css_style_utils::InlineStyleFlags flags{};
+      book_xml_css_style_utils::ParseInlineStyleFlags(attr[i + 1], &flags);
+      if (bold_out && flags.bold)
+        *bold_out = true;
+      if (italic_out && flags.italic)
+        *italic_out = true;
+      if (underline_out && flags.underline)
+        *underline_out = true;
+      if (underline_style_out && flags.underline)
+        *underline_style_out = flags.underline_style;
+      if (overline_out && flags.overline)
+        *overline_out = true;
+      if (strikethrough_out && flags.strikethrough)
+        *strikethrough_out = true;
+      if (superscript_out && flags.superscript)
+        *superscript_out = true;
+      if (subscript_out && flags.subscript)
+        *subscript_out = true;
     } else if (AttrNameEquals(attr[i], "class")) {
       ParseClassStyleFlags(attr[i + 1], bold_out, italic_out, underline_out,
+                           underline_style_out, overline_out,
                            strikethrough_out, superscript_out, subscript_out);
     }
   }
@@ -473,6 +521,30 @@ static bool HasActiveStackUnderlineStyle(const parsedata_t *p) {
   return false;
 }
 
+static u8 ResolveActiveUnderlineStyle(const parsedata_t *p) {
+  if (!p)
+    return UNDERLINE_STYLE_SOLID;
+  for (int i = (int)p->stacksize - 1; i >= 0; i--) {
+    if (p->style_underline_stack[i])
+      return p->style_underline_style_stack[i];
+  }
+  for (int i = (int)p->stacksize - 1; i >= 0; i--) {
+    if (p->stack[i] == TAG_UNDERLINE)
+      return UNDERLINE_STYLE_SOLID;
+  }
+  return UNDERLINE_STYLE_SOLID;
+}
+
+static bool HasActiveStackOverlineStyle(const parsedata_t *p) {
+  if (!p)
+    return false;
+  for (u8 i = 0; i < p->stacksize; i++) {
+    if (p->style_overline_stack[i])
+      return true;
+  }
+  return false;
+}
+
 static bool HasActiveStackStrikethroughStyle(const parsedata_t *p) {
   if (!p)
     return false;
@@ -569,6 +641,210 @@ struct ChardataPerfScope {
     parsedata->perf_chardata_ms += (u64)(osGetTime() - t_begin);
   }
 };
+
+static void EmitFlowedFragmentRaw(parsedata_t *p, const XML_Char *txt,
+                                  int txtlen) {
+  if (!p || !txt || txtlen <= 0)
+    return;
+
+  Text *ts = p->ts;
+  SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
+  const u8 parse_text_style =
+      book_xml_parser_style_utils::ResolveParsedTextStyle(p->bold, p->italic,
+                                                          p->mono);
+  const ParsedTextMeasureContext measure_ctx =
+      MakeParsedTextMeasureContext(ts, p->bold, p->italic, p->mono);
+
+  int lineheight = ts->GetHeight();
+  int linespacing = ts->linespacing;
+  int spaceadvance = ts->GetAdvance((u16)' ', parse_text_style);
+
+  if (p->buflen == 0) {
+    p->pen.x = ts->margin.left;
+    p->pen.y = ts->margin.top + lineheight;
+    p->linebegan = false;
+  }
+
+  if (parse_in(p, TAG_PRE)) {
+    if (!p->preformatted_wrap_enabled) {
+      int i = 0;
+      while (i < txtlen) {
+        if (txt[i] == '\r') {
+          i++;
+          continue;
+        }
+
+        if (iswhitespace((u32)(u8)txt[i])) {
+          if (txt[i] == '\n') {
+            AppendParsedByte(p, '\n');
+            p->pen.x = ts->margin.left;
+            p->pen.y += (lineheight + linespacing);
+            p->linebegan = false;
+            AdvanceParsedPageOnOverflow(p, lineheight);
+          } else if (p->linebegan && p->buflen &&
+                     !iswhitespace(p->buf[p->buflen - 1])) {
+            AppendParsedByte(p, ' ');
+            p->pen.x += spaceadvance;
+          }
+          i++;
+          continue;
+        }
+
+        int j = i;
+        int advance = 0;
+        u8 bytes = 1;
+        for (j = i; (j < txtlen) && (!iswhitespace((u32)(u8)txt[j])); j += bytes) {
+          u32 code = (u8)txt[j];
+          bytes = 1;
+          if (code >> 7)
+            bytes =
+                ts->GetCharCode((char *)&(txt[j]), (size_t)(txtlen - j), &code);
+
+          advance += ts->GetAdvance(code, parse_text_style);
+          if (advance >
+              ts->display.width - ts->margin.right - ts->margin.left) {
+            break;
+          }
+        }
+
+        if ((p->pen.x + advance) > (ts->display.width - ts->margin.right)) {
+          AppendParsedByte(p, '\n');
+          p->pen.x = ts->margin.left;
+          p->pen.y += (lineheight + linespacing);
+          p->linebegan = false;
+        }
+
+        AdvanceParsedPageOnOverflow(p, lineheight);
+
+        book_xml_text_emit::AppendParsedCodepoints(p, txt + i,
+                                                   (size_t)(j - i));
+        p->linebegan = true;
+        i = j;
+        p->pen.x += advance;
+      }
+      return;
+    }
+
+    std::vector<text_layout_utils::ShapedGlyph> pre_run;
+    bool pre_has_rtl = false;
+    if (!text_layout_utils::ShapeTextRunBidi(
+            txt, (size_t)txtlen, NULL, MeasureParsedTextAdvance,
+            (void *)&measure_ctx, &pre_run, &pre_has_rtl)) {
+      return;
+    }
+
+    std::vector<text_bidi_utils::BidiRun> pre_bidi_runs;
+    if (pre_has_rtl) {
+      std::vector<uint32_t> pre_cps;
+      pre_cps.reserve(pre_run.size());
+      for (size_t ci = 0; ci < pre_run.size(); ci++)
+        pre_cps.push_back(pre_run[ci].text.codepoint);
+      text_bidi_utils::AnalyzeBidiRuns(pre_cps.data(), pre_cps.size(),
+                                       &pre_bidi_runs);
+      if (book_xml_text_emit::DetectParagraphRTL(pre_run))
+        AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
+      else
+        AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
+    }
+
+    const int maxPreLineWidth =
+        ts->display.width - ts->margin.right - ts->margin.left;
+    size_t unit_index = 0;
+    while (unit_index < pre_run.size()) {
+      const text_layout_utils::ShapedGlyph &unit = pre_run[unit_index];
+      if (unit.text.codepoint == '\r') {
+        unit_index++;
+        continue;
+      }
+
+      if (unit.text.codepoint == '\n') {
+        AppendParsedByte(p, '\n');
+        p->pen.x = ts->margin.left;
+        p->pen.y += (lineheight + linespacing);
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+        unit_index++;
+        continue;
+      }
+
+      text_layout_utils::LineBreakMeasureResult segment =
+          text_layout_utils::FindPreformattedLineBreakAndMeasure(
+              pre_run, unit_index, maxPreLineWidth);
+      size_t segment_end_index = segment.end_index;
+      if (segment_end_index <= unit_index)
+        segment_end_index = unit_index + 1;
+
+      size_t segment_start = pre_run[unit_index].text.byte_offset;
+      size_t segment_end =
+          pre_run[segment_end_index - 1].text.byte_offset +
+          pre_run[segment_end_index - 1].text.byte_length;
+      const int advance = segment.width;
+
+      if ((p->pen.x + advance) > (ts->display.width - ts->margin.right) &&
+          p->pen.x > ts->margin.left) {
+        AppendParsedByte(p, '\n');
+        p->pen.x = ts->margin.left;
+        p->pen.y += (lineheight + linespacing);
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+      }
+
+      if (pre_has_rtl) {
+        AppendParsedByte(p, TEXT_RTL_LINE_PX);
+        AppendParsedByte(p, (u32)advance);
+        book_xml_text_emit::EmitBidiSegment(p, pre_run, unit_index,
+                                            segment_end_index, pre_bidi_runs);
+      } else {
+        book_xml_text_emit::AppendParsedCodepoints(
+            p, txt + segment_start, segment_end - segment_start);
+      }
+      p->pen.x += advance;
+      p->linebegan = true;
+      unit_index = segment_end_index;
+
+      if (unit_index < pre_run.size() &&
+          pre_run[unit_index].text.codepoint != '\n') {
+        AppendParsedByte(p, '\n');
+        p->pen.x = ts->margin.left;
+        p->pen.y += (lineheight + linespacing);
+        p->linebegan = false;
+        AdvanceParsedPageOnOverflow(p, lineheight);
+      }
+    }
+    return;
+  }
+
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = false;
+  if (!text_layout_utils::ShapeTextRunBidi(
+          txt, (size_t)txtlen, NULL, MeasureParsedTextAdvance,
+          (void *)&measure_ctx, &run, &has_rtl))
+    return;
+
+  std::vector<text_bidi_utils::BidiRun> bidi_runs;
+  if (has_rtl) {
+    std::vector<uint32_t> run_cps;
+    run_cps.reserve(run.size());
+    for (size_t ci = 0; ci < run.size(); ci++)
+      run_cps.push_back(run[ci].text.codepoint);
+    text_bidi_utils::AnalyzeBidiRuns(run_cps.data(), run_cps.size(),
+                                     &bidi_runs);
+  }
+  book_xml_text_emit::FlowEmitMetrics emit_metrics{};
+  emit_metrics.display_width = ts->display.width;
+  emit_metrics.margin_left = ts->margin.left;
+  emit_metrics.margin_right = ts->margin.right;
+  emit_metrics.lineheight = lineheight;
+  emit_metrics.linespacing = linespacing;
+  emit_metrics.spaceadvance = spaceadvance;
+  book_xml_text_emit::EmitFlowedShapedText(
+      p, txt, run, has_rtl, bidi_runs, emit_metrics,
+      AdvanceParsedPageOnOverflowThunk, NULL);
+}
+
+static void FlushInlineTailAndDeferredStyle(parsedata_t *p, Text *ts) {
+  ApplyDeferredStyleSync(p, ts);
+}
 
 static std::string NormalizeDocPath(const std::string &path) {
   std::string in = path;
@@ -1018,8 +1294,6 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_STYLE);
   else if (XmlNameEquals(el, "title"))
     parse_push(p, TAG_TITLE);
-  else if (!strcmp(el, "td"))
-    parse_push(p, TAG_TD);
   else if (!strcmp(el, "ul"))
     parse_push(p, TAG_UL);
   else if (!strcmp(el, "strong") || !strcmp(el, "b")) {
@@ -1038,6 +1312,9 @@ void start(void *data, const char *el, const char **attr) {
     if (!p->underline) {
       AppendParsedByte(p, TEXT_UNDERLINE_ON);
       p->underline = true;
+      p->underline_style = UNDERLINE_STYLE_SOLID;
+      book_xml_parser_style_utils::EmitUnderlineStyleMarker(
+          p, p->underline_style);
     }
   } else if (!strcmp(el, "strike") || !strcmp(el, "s") ||
              !strcmp(el, "del")) {
@@ -1182,12 +1459,16 @@ void start(void *data, const char *el, const char **attr) {
     bool style_bold = false;
     bool style_italic = false;
     bool style_underline = false;
+    u8 style_underline_style = UNDERLINE_STYLE_SOLID;
+    bool style_overline = false;
     bool style_strikethrough = false;
     bool style_superscript = false;
     bool style_subscript = false;
     bool style_hidden = false;
     ParseElementStyleFlags(attr, &style_bold, &style_italic, &style_underline,
-                           &style_strikethrough, &style_superscript,
+                           &style_underline_style, &style_overline,
+                           &style_strikethrough,
+                           &style_superscript,
                            &style_subscript);
     ParseElementHiddenFlags(attr, &style_hidden);
 
@@ -1196,6 +1477,8 @@ void start(void *data, const char *el, const char **attr) {
     p->style_bold_stack[current] = style_bold;
     p->style_italic_stack[current] = style_italic;
     p->style_underline_stack[current] = style_underline;
+    p->style_underline_style_stack[current] = style_underline_style;
+    p->style_overline_stack[current] = style_overline;
     p->style_strikethrough_stack[current] = style_strikethrough;
     p->style_superscript_stack[current] = style_superscript;
     p->style_subscript_stack[current] = style_subscript;
@@ -1216,6 +1499,19 @@ void start(void *data, const char *el, const char **attr) {
     if (style_underline && !p->underline) {
       AppendParsedByte(p, TEXT_UNDERLINE_ON);
       p->underline = true;
+      p->underline_style = style_underline_style;
+      book_xml_parser_style_utils::EmitUnderlineStyleMarker(
+          p, p->underline_style);
+      style_changed = true;
+    } else if (style_underline && p->underline &&
+               p->underline_style != style_underline_style) {
+      p->underline_style = style_underline_style;
+      book_xml_parser_style_utils::EmitUnderlineStyleMarker(
+          p, p->underline_style);
+    }
+    if (style_overline && !p->overline) {
+      AppendParsedByte(p, TEXT_OVERLINE_ON);
+      p->overline = true;
       style_changed = true;
     }
     if (style_strikethrough && !p->strikethrough) {
@@ -1275,7 +1571,8 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
     return;
   if (HasActiveStackHiddenStyle(p))
     return;
-  if ((parse_in(p, TAG_H1) || parse_in(p, TAG_H2) || parse_in(p, TAG_H3)) &&
+  if (!p->doc_heading_complete &&
+      (parse_in(p, TAG_H1) || parse_in(p, TAG_H2) || parse_in(p, TAG_H3)) &&
       p->doc_heading.size() < 160) {
     p->doc_heading.append((const char *)txt, txtlen);
   }
@@ -1301,222 +1598,7 @@ void chardata(void *data, const XML_Char *txt, int txtlen) {
       HasVisibleTextContentUtf8(txt, txtlen)) {
     book_xml_list_utils::ConsumePendingListItemContent(p);
   }
-
-  SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
-  const u8 parse_text_style =
-      book_xml_parser_style_utils::ResolveParsedTextStyle(p->bold, p->italic,
-                                                          p->mono);
-  const ParsedTextMeasureContext measure_ctx =
-      MakeParsedTextMeasureContext(ts, p->bold, p->italic, p->mono);
-
-  int lineheight = ts->GetHeight();
-  int linespacing = ts->linespacing;
-  int spaceadvance = ts->GetAdvance((u16)' ', parse_text_style);
-
-  if (p->buflen == 0) {
-    /** starting a new page. **/
-    p->pen.x = ts->margin.left;
-    p->pen.y = ts->margin.top + lineheight;
-    p->linebegan = false;
-  }
-
-  if (parse_in(p, TAG_PRE)) {
-    if (!p->preformatted_wrap_enabled) {
-      int i = 0;
-      while (i < txtlen) {
-        if (txt[i] == '\r') {
-          i++;
-          continue;
-        }
-
-        if (iswhitespace((u32)(u8)txt[i])) {
-          if (txt[i] == '\n') {
-            AppendParsedByte(p, '\n');
-            p->pen.x = ts->margin.left;
-            p->pen.y += (lineheight + linespacing);
-            p->linebegan = false;
-            AdvanceParsedPageOnOverflow(p, lineheight);
-          } else if (p->linebegan && p->buflen &&
-                     !iswhitespace(p->buf[p->buflen - 1])) {
-            AppendParsedByte(p, ' ');
-            p->pen.x += spaceadvance;
-          }
-          i++;
-          continue;
-        }
-
-        int j = i;
-        int advance = 0;
-        u8 bytes = 1;
-        for (j = i; (j < txtlen) && (!iswhitespace((u32)(u8)txt[j])); j += bytes) {
-          u32 code = (u8)txt[j];
-          bytes = 1;
-          if (code >> 7)
-            bytes =
-                ts->GetCharCode((char *)&(txt[j]), (size_t)(txtlen - j), &code);
-
-          advance += ts->GetAdvance(code, parse_text_style);
-          if (advance >
-              ts->display.width - ts->margin.right - ts->margin.left) {
-            break;
-          }
-        }
-
-        if ((p->pen.x + advance) > (ts->display.width - ts->margin.right)) {
-          AppendParsedByte(p, '\n');
-          p->pen.x = ts->margin.left;
-          p->pen.y += (lineheight + linespacing);
-          p->linebegan = false;
-        }
-
-        AdvanceParsedPageOnOverflow(p, lineheight);
-
-        book_xml_text_emit::AppendParsedCodepoints(p, txt + i,
-                                                   (size_t)(j - i));
-        p->linebegan = true;
-        i = j;
-        p->pen.x += advance;
-      }
-      return;
-    }
-
-    std::vector<text_layout_utils::ShapedGlyph> pre_run;
-    bool pre_has_rtl = false;
-    if (!text_layout_utils::ShapeTextRunBidi(
-            txt, (size_t)txtlen, NULL,
-            MeasureParsedTextAdvance, (void *)&measure_ctx, &pre_run,
-            &pre_has_rtl)) {
-      return;
-    }
-
-    std::vector<text_bidi_utils::BidiRun> pre_bidi_runs;
-    if (pre_has_rtl) {
-      std::vector<uint32_t> pre_cps;
-      pre_cps.reserve(pre_run.size());
-      for (size_t ci = 0; ci < pre_run.size(); ci++)
-        pre_cps.push_back(pre_run[ci].text.codepoint);
-      text_bidi_utils::AnalyzeBidiRuns(pre_cps.data(), pre_cps.size(),
-                                       &pre_bidi_runs);
-      if (book_xml_text_emit::DetectParagraphRTL(pre_run))
-        AppendParsedByte(p, TEXT_PARAGRAPH_RTL);
-      else
-        AppendParsedByte(p, TEXT_PARAGRAPH_LTR);
-    }
-
-    const int maxPreLineWidth =
-        ts->display.width - ts->margin.right - ts->margin.left;
-    size_t unit_index = 0;
-    while (unit_index < pre_run.size()) {
-      const text_layout_utils::ShapedGlyph &unit = pre_run[unit_index];
-      if (unit.text.codepoint == '\r') {
-        unit_index++;
-        continue;
-      }
-
-      if (unit.text.codepoint == '\n') {
-        AppendParsedByte(p, '\n');
-        p->pen.x = ts->margin.left;
-        p->pen.y += (lineheight + linespacing);
-        p->linebegan = false;
-        AdvanceParsedPageOnOverflow(p, lineheight);
-        unit_index++;
-        continue;
-      }
-
-      text_layout_utils::LineBreakMeasureResult segment =
-          text_layout_utils::FindPreformattedLineBreakAndMeasure(
-              pre_run, unit_index, maxPreLineWidth);
-      size_t segment_end_index = segment.end_index;
-      if (segment_end_index <= unit_index)
-        segment_end_index = unit_index + 1;
-
-      size_t segment_start = pre_run[unit_index].text.byte_offset;
-      size_t segment_end =
-          pre_run[segment_end_index - 1].text.byte_offset +
-          pre_run[segment_end_index - 1].text.byte_length;
-      const int advance = segment.width;
-
-      if ((p->pen.x + advance) > (ts->display.width - ts->margin.right) &&
-          p->pen.x > ts->margin.left) {
-        AppendParsedByte(p, '\n');
-        p->pen.x = ts->margin.left;
-        p->pen.y += (lineheight + linespacing);
-        p->linebegan = false;
-        AdvanceParsedPageOnOverflow(p, lineheight);
-      }
-
-      if (pre_has_rtl) {
-        AppendParsedByte(p, TEXT_RTL_LINE_PX);
-        AppendParsedByte(p, (u32)advance);
-        book_xml_text_emit::EmitBidiSegment(p, pre_run, unit_index,
-                                            segment_end_index, pre_bidi_runs);
-      }
-      else
-        book_xml_text_emit::AppendParsedCodepoints(p, txt + segment_start,
-                                                   segment_end - segment_start);
-      p->pen.x += advance;
-      p->linebegan = true;
-      unit_index = segment_end_index;
-
-      if (unit_index < pre_run.size() &&
-          pre_run[unit_index].text.codepoint != '\n') {
-        AppendParsedByte(p, '\n');
-        p->pen.x = ts->margin.left;
-        p->pen.y += (lineheight + linespacing);
-        p->linebegan = false;
-        AdvanceParsedPageOnOverflow(p, lineheight);
-      }
-    }
-    return;
-  }
-
-  std::vector<text_layout_utils::ShapedGlyph> run;
-  bool has_rtl = false;
-  if (!text_layout_utils::ShapeTextRunBidi(
-          txt, (size_t)txtlen, NULL,
-          MeasureParsedTextAdvance, (void *)&measure_ctx, &run, &has_rtl))
-    return;
-
-  std::vector<text_bidi_utils::BidiRun> bidi_runs;
-  if (has_rtl) {
-    std::vector<uint32_t> run_cps;
-    run_cps.reserve(run.size());
-    for (size_t ci = 0; ci < run.size(); ci++)
-      run_cps.push_back(run[ci].text.codepoint);
-    text_bidi_utils::AnalyzeBidiRuns(run_cps.data(), run_cps.size(),
-                                     &bidi_runs);
-#ifdef DSLIBRIS_DEBUG
-    static int s_bidi_run_budget = 64;
-    if (p && p->reporter && s_bidi_run_budget > 0) {
-      int max_level = 0;
-      int min_level = 127;
-      for (size_t ri = 0; ri < bidi_runs.size(); ri++) {
-        if (bidi_runs[ri].bidi_level > max_level)
-          max_level = bidi_runs[ri].bidi_level;
-        if (bidi_runs[ri].bidi_level < min_level)
-          min_level = bidi_runs[ri].bidi_level;
-      }
-      if (bidi_runs.empty())
-        min_level = 0;
-      DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_BIDI,
-                   "paragraph cps=%u runs=%u min_level=%d max_level=%d rtl=%d",
-                   (unsigned)run_cps.size(), (unsigned)bidi_runs.size(),
-                   min_level, max_level,
-                   book_xml_text_emit::DetectParagraphRTL(run) ? 1 : 0);
-      s_bidi_run_budget--;
-    }
-#endif
-  }
-  book_xml_text_emit::FlowEmitMetrics emit_metrics{};
-  emit_metrics.display_width = ts->display.width;
-  emit_metrics.margin_left = ts->margin.left;
-  emit_metrics.margin_right = ts->margin.right;
-  emit_metrics.lineheight = lineheight;
-  emit_metrics.linespacing = linespacing;
-  emit_metrics.spaceadvance = spaceadvance;
-  book_xml_text_emit::EmitFlowedShapedText(
-      p, txt, run, has_rtl, bidi_runs, emit_metrics,
-      AdvanceParsedPageOnOverflowThunk, NULL);
+  EmitFlowedFragmentRaw(p, txt, txtlen);
 }
 
 void end(void *data, const char *el) {
@@ -1577,6 +1659,7 @@ void end(void *data, const char *el) {
   }
 
   if (!strcmp(el, "body")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     // Save off our last page.
     Page *page = p->book->AppendPage();
     page->SetBuffer(p->buf, p->buflen);
@@ -1588,6 +1671,7 @@ void end(void *data, const char *el) {
   }
 
   if (!strcmp(el, "br")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
   } else if (!strcmp(el, "a")) {
     // Many EPUB TOC/Nav documents are built as dense anchor lists with little
@@ -1597,12 +1681,15 @@ void end(void *data, const char *el) {
       linefeed(p);
     }
   } else if (!strcmp(el, "aside")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
     linefeed(p);
   } else if (!strcmp(el, "blockquote") || !strcmp(el, "caption") ||
              !strcmp(el, "dd") || !strcmp(el, "figure")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
   } else if (!strcmp(el, "p")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     if (p->paragraph_has_content &&
         !book_xml_list_utils::IsInsideListItem(p) &&
         !ParseInAnyEasyParagraphTightBlock(p)) {
@@ -1613,21 +1700,32 @@ void end(void *data, const char *el) {
     p->paragraph_has_content = false;
   } else if (!strcmp(el, "div")) {
   } else if (!strcmp(el, "h1")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
     linefeed(p);
+    if (!Trim(p->doc_heading).empty())
+      p->doc_heading_complete = true;
   } else if (!strcmp(el, "h2")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
+    if (!Trim(p->doc_heading).empty())
+      p->doc_heading_complete = true;
   } else if (!strcmp(el, "h3") || !strcmp(el, "h4") || !strcmp(el, "h5") ||
              !strcmp(el, "h6") || !strcmp(el, "hr")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     linefeed(p);
     linefeed(p);
+    if ((!strcmp(el, "h3")) && !Trim(p->doc_heading).empty())
+      p->doc_heading_complete = true;
   } else if (!strcmp(el, "pre")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     p->preformatted_wrap_enabled = false;
     linefeed(p);
     linefeed(p);
   } else if (!strcmp(el, "code") || !strcmp(el, "tt") ||
              !strcmp(el, "kbd") || !strcmp(el, "samp")) {
   } else if (!strcmp(el, "li") || !strcmp(el, "ul") || !strcmp(el, "ol")) {
+    FlushInlineTailAndDeferredStyle(p, ts);
     if (!strcmp(el, "li"))
       p->strip_leading_list_marker = false;
     linefeed(p);
@@ -1641,6 +1739,9 @@ void end(void *data, const char *el) {
       parse_in(p, TAG_EM) || HasActiveStackItalicStyle(p);
   const bool want_underline =
       parse_in(p, TAG_UNDERLINE) || HasActiveStackUnderlineStyle(p);
+  const u8 want_underline_style =
+      want_underline ? ResolveActiveUnderlineStyle(p) : UNDERLINE_STYLE_SOLID;
+  const bool want_overline = HasActiveStackOverlineStyle(p);
   const bool want_strikethrough = parse_in(p, TAG_STRIKETHROUGH) ||
                                   HasActiveStackStrikethroughStyle(p);
   const bool want_superscript = parse_in(p, TAG_SUPERSCRIPT) ||
@@ -1650,50 +1751,22 @@ void end(void *data, const char *el) {
   const bool want_mono = parse_in(p, TAG_CODE) || parse_in(p, TAG_PRE) ||
                          HasActiveStackMonoStyle(p);
 
-  bool style_changed = false;
-  if (p->bold != want_bold) {
-    AppendParsedByte(p, want_bold ? TEXT_BOLD_ON : TEXT_BOLD_OFF);
-    if (want_bold)
-      p->pos++;
-    p->bold = want_bold;
-    style_changed = true;
+  const bool needs_style_sync =
+      p->bold != want_bold || p->italic != want_italic ||
+      p->underline != want_underline ||
+      (want_underline && p->underline_style != want_underline_style) ||
+      p->overline != want_overline ||
+      p->strikethrough != want_strikethrough ||
+      p->superscript != want_superscript || p->subscript != want_subscript ||
+      p->mono != want_mono;
+
+  if (needs_style_sync) {
+    QueueDeferredStyleSync(p, want_bold, want_italic, want_underline,
+                           want_underline_style,
+                           want_overline, want_strikethrough,
+                           want_superscript, want_subscript, want_mono);
+    ApplyDeferredStyleSync(p, ts);
   }
-  if (p->italic != want_italic) {
-    AppendParsedByte(p, want_italic ? TEXT_ITALIC_ON : TEXT_ITALIC_OFF);
-    p->italic = want_italic;
-    style_changed = true;
-  }
-  if (p->underline != want_underline) {
-    AppendParsedByte(p, want_underline ? TEXT_UNDERLINE_ON
-                                       : TEXT_UNDERLINE_OFF);
-    p->underline = want_underline;
-    style_changed = true;
-  }
-  if (p->strikethrough != want_strikethrough) {
-    AppendParsedByte(p, want_strikethrough ? TEXT_STRIKETHROUGH_ON
-                                           : TEXT_STRIKETHROUGH_OFF);
-    p->strikethrough = want_strikethrough;
-    style_changed = true;
-  }
-  if (p->superscript != want_superscript) {
-    AppendParsedByte(p, want_superscript ? TEXT_SUPERSCRIPT_ON
-                                         : TEXT_SUPERSCRIPT_OFF);
-    p->superscript = want_superscript;
-    style_changed = true;
-  }
-  if (p->subscript != want_subscript) {
-    AppendParsedByte(p, want_subscript ? TEXT_SUBSCRIPT_ON
-                                       : TEXT_SUBSCRIPT_OFF);
-    p->subscript = want_subscript;
-    style_changed = true;
-  }
-  if (p->mono != want_mono) {
-    AppendParsedByte(p, want_mono ? TEXT_MONO_ON : TEXT_MONO_OFF);
-    p->mono = want_mono;
-    style_changed = true;
-  }
-  if (style_changed)
-    SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
 
   const text_render_layout_utils::ReadingScreenMetrics metrics =
       text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(

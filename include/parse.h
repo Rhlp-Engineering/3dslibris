@@ -80,6 +80,8 @@ struct parsedata_t {
 	bool bold;
 	bool italic;
 	bool underline;
+	u8 underline_style;
+	bool overline;
 	bool strikethrough;
 	bool superscript;
 	bool subscript;
@@ -87,6 +89,8 @@ struct parsedata_t {
 	bool style_bold_stack[32];
 	bool style_italic_stack[32];
 	bool style_underline_stack[32];
+	u8 style_underline_style_stack[32];
+	bool style_overline_stack[32];
 	bool style_strikethrough_stack[32];
 	bool style_superscript_stack[32];
 	bool style_subscript_stack[32];
@@ -96,9 +100,20 @@ struct parsedata_t {
 	bool list_item_pending_stack[32];
 	unsigned int ordered_list_ordinal_stack[32];
 	u8 ordered_list_style_stack[32];
+	bool deferred_style_sync;
+	bool deferred_target_bold;
+	bool deferred_target_italic;
+	bool deferred_target_underline;
+	u8 deferred_target_underline_style;
+	bool deferred_target_overline;
+	bool deferred_target_strikethrough;
+	bool deferred_target_superscript;
+	bool deferred_target_subscript;
+	bool deferred_target_mono;
 	std::string docpath; //! Current XHTML document path inside EPUB.
 	std::string doc_title;   //! Current XHTML <title> text (best chapter label).
 	std::string doc_heading; //! Fallback heading text from h1/h2/h3.
+	bool doc_heading_complete;
 	bool collecting_fb2_binary;
 	bool fb2_binary_too_large;
 	std::string fb2_binary_id;

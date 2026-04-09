@@ -37,6 +37,45 @@
 #include <string.h>
 #include <time.h>
 
+namespace {
+
+void DrawSolidDecoration(Text *ts, int x0, int x1, int y, u16 color) {
+  if (!ts || x1 <= x0 || y < 0)
+    return;
+  ts->FillRect((u16)x0, (u16)y, (u16)x1, (u16)(y + 1), color);
+}
+
+void DrawPatternedUnderline(Text *ts, int x0, int x1, int y, u16 color,
+                            u8 underline_style) {
+  if (!ts || x1 <= x0 || y < 0)
+    return;
+  switch (underline_style) {
+  case UNDERLINE_STYLE_DOTTED:
+    for (int x = x0; x < x1; x += 2)
+      ts->FillRect((u16)x, (u16)y, (u16)std::min(x + 1, x1), (u16)(y + 1),
+                   color);
+    break;
+  case UNDERLINE_STYLE_DASHED:
+    for (int x = x0; x < x1; x += 5)
+      ts->FillRect((u16)x, (u16)y, (u16)std::min(x + 3, x1), (u16)(y + 1),
+                   color);
+    break;
+  case UNDERLINE_STYLE_WAVY:
+    for (int x = x0; x < x1; x++) {
+      const int y_offset = ((x - x0) % 4 < 2) ? 0 : 1;
+      ts->FillRect((u16)x, (u16)(y + y_offset), (u16)(x + 1),
+                   (u16)(y + y_offset + 1), color);
+    }
+    break;
+  case UNDERLINE_STYLE_SOLID:
+  default:
+    DrawSolidDecoration(ts, x0, x1, y, color);
+    break;
+  }
+}
+
+} // namespace
+
 Page::Page(Book *b) {
   book = b;
   buf = NULL;
@@ -113,6 +152,8 @@ void Page::Draw(Text *ts) {
   ts->italic = false;
   ts->bold = false;
   bool underline = false;
+  u8 underline_style = UNDERLINE_STYLE_SOLID;
+  bool overline = false;
   bool strikethrough = false;
   bool superscript = false;
   bool subscript = false;
@@ -262,9 +303,21 @@ void Page::Draw(Text *ts) {
     } else if (c == TEXT_UNDERLINE_ON) {
       i++;
       underline = true;
+      underline_style = UNDERLINE_STYLE_SOLID;
     } else if (c == TEXT_UNDERLINE_OFF) {
       i++;
       underline = false;
+      underline_style = UNDERLINE_STYLE_SOLID;
+    } else if (c == TEXT_UNDERLINE_STYLE) {
+      if (i + 1 < length)
+        underline_style = (u8)buf[i + 1];
+      i += (i + 1 < length) ? 2 : 1;
+    } else if (c == TEXT_OVERLINE_ON) {
+      i++;
+      overline = true;
+    } else if (c == TEXT_OVERLINE_OFF) {
+      i++;
+      overline = false;
     } else if (c == TEXT_STRIKETHROUGH_ON) {
       i++;
       strikethrough = true;
@@ -461,11 +514,14 @@ void Page::Draw(Text *ts) {
       const int baseline_y = (int)ts->GetPenY();
       const u16 deco_color = ts->GetFgColor();
       if (glyph_x1 > glyph_x0) {
+        if (overline) {
+          const int y = baseline_y - ts->GetHeight() + 2;
+          DrawSolidDecoration(ts, glyph_x0, glyph_x1, y, deco_color);
+        }
         if (underline) {
           const int y = baseline_y + 1;
-          if (y >= 0)
-            ts->FillRect((u16)glyph_x0, (u16)y, (u16)glyph_x1, (u16)(y + 1),
-                         deco_color);
+          DrawPatternedUnderline(ts, glyph_x0, glyph_x1, y, deco_color,
+                                 underline_style);
         }
         if (strikethrough) {
           const int y = baseline_y - std::max(2, ts->GetHeight() / 3);
