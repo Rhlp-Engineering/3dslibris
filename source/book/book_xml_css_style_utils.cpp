@@ -96,4 +96,55 @@ void ParseInlineStyleFlags(const char *style, InlineStyleFlags *out) {
   }
 }
 
+MarginTopResult ParseMarginTop(const char *style) {
+  MarginTopResult result;
+  if (!style || !style[0])
+    return result;
+
+  const std::string lc = ToLowerAscii(std::string(style));
+
+  const char *needle = "margin-top:";
+  size_t pos = lc.find(needle);
+  if (pos == std::string::npos) {
+    needle = "margin-top: ";
+    pos = lc.find(needle);
+  }
+  if (pos == std::string::npos)
+    return result;
+
+  pos += strlen(needle);
+  while (pos < lc.size() && lc[pos] == ' ')
+    pos++;
+
+  if (pos < lc.size() && lc[pos] == '-') {
+    result.negative = true;
+    pos++;
+  }
+
+  int value = 0;
+  bool has_digit = false;
+  while (pos < lc.size() && lc[pos] >= '0' && lc[pos] <= '9') {
+    value = value * 10 + (lc[pos] - '0');
+    has_digit = true;
+    pos++;
+  }
+  if (!has_digit)
+    return result;
+
+  while (pos < lc.size() && lc[pos] == ' ')
+    pos++;
+
+  if (pos < lc.size() && lc[pos] == '%') {
+    result.value = value;
+    result.unit = MarginTopResult::Unit::Percent;
+    return result;
+  }
+  if (pos + 1 < lc.size() && lc[pos] == 'p' && lc[pos + 1] == 'x') {
+    result.value = value;
+    result.unit = MarginTopResult::Unit::Px;
+    return result;
+  }
+  return result;
+}
+
 } // namespace book_xml_css_style_utils

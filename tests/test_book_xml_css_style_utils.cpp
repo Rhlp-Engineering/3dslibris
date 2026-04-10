@@ -52,6 +52,61 @@ void TestDetectsBoldItalicAndVerticalAlign() {
   test::ExpectFalse("subscript not implied", flags.subscript);
 }
 
+void TestParseMarginTopPositivePx() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 20px;");
+  test::ExpectEq("px unit",  (int)r.unit, (int)R::Unit::Px);
+  test::ExpectEq("px value", r.value,     20);
+  test::ExpectFalse("not negative", r.negative);
+}
+
+void TestParseMarginTopNegativePx() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: -10px;");
+  test::ExpectEq("px unit",    (int)r.unit, (int)R::Unit::Px);
+  test::ExpectEq("px value",   r.value,     10);
+  test::ExpectTrue("negative flag", r.negative);
+}
+
+void TestParseMarginTopPercent() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 5%;");
+  test::ExpectEq("percent unit",  (int)r.unit, (int)R::Unit::Percent);
+  test::ExpectEq("percent value", r.value,     5);
+  test::ExpectFalse("not negative", r.negative);
+}
+
+void TestParseMarginTopZeroUnitless() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 0;");
+  test::ExpectEq("zero unitless -> None", (int)r.unit, (int)R::Unit::None);
+}
+
+void TestParseMarginTopZeroPx() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 0px;");
+  test::ExpectEq("zero px unit",  (int)r.unit, (int)R::Unit::Px);
+  test::ExpectEq("zero px value", r.value,     0);
+}
+
+void TestParseMarginTopMissingProperty() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("font-weight: bold;");
+  test::ExpectEq("missing -> None", (int)r.unit, (int)R::Unit::None);
+}
+
+void TestParseMarginTopNull() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop(nullptr);
+  test::ExpectEq("null -> None", (int)r.unit, (int)R::Unit::None);
+}
+
+void TestParseMarginTopEmUnit() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 2em;");
+  test::ExpectEq("em -> None", (int)r.unit, (int)R::Unit::None);
+}
+
 } // namespace
 
 int main() {
@@ -59,5 +114,13 @@ int main() {
   TestDetectsUnderlineRegardlessOfDecorationOrder();
   TestDetectsDashedAndDottedUnderlineStyles();
   TestDetectsBoldItalicAndVerticalAlign();
+  TestParseMarginTopPositivePx();
+  TestParseMarginTopNegativePx();
+  TestParseMarginTopPercent();
+  TestParseMarginTopZeroUnitless();
+  TestParseMarginTopZeroPx();
+  TestParseMarginTopMissingProperty();
+  TestParseMarginTopNull();
+  TestParseMarginTopEmUnit();
   return 0;
 }
