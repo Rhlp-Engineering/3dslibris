@@ -150,5 +150,32 @@ array([3, 6, 4, 2, 6, 2, 0, 1, 6, 3, 8, 7, 7, 4, 4, 9], dtype=int32)</pre>
   </table>
 
   <hr/>
+
+  <h3>margin-top Variants</h3>
+
+  <p>Párrafo de referencia sin margin-top. El siguiente párrafo tiene <code>margin-top: 24px</code> (positivo px), que debería añadir espacio extra antes de él.</p>
+
+  <p class="mt-positive-px">Este párrafo tiene <code>margin-top: 24px</code>. Debe haber espacio extra visible encima.</p>
+
+  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: -8px</code> (negativo), que debería suprimir el espacio de párrafo habitual.</p>
+
+  <p class="mt-negative-px">Este párrafo tiene <code>margin-top: -8px</code>. No debe haber separación extra del párrafo anterior.</p>
+
+  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 10%</code> (porcentaje), que se convierte desde PAGE_WIDTH=240.</p>
+
+  <p class="mt-percent">Este párrafo tiene <code>margin-top: 10%</code>. Equivale a 24px (10% de 240), similar al caso de 24px.</p>
+
+  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 0</code> (cero sin unidad), que no debería tener efecto.</p>
+
+  <p class="mt-zero-no-unit">Este párrafo tiene <code>margin-top: 0</code>. Espaciado normal.</p>
+
+  <h2 class="mt-heading-positive">Heading con margin-top: 32px</h2>
+
+  <p>Este heading de nivel 2 tiene <code>margin-top: 32px</code> aplicado. Debe haber espacio extra antes del heading.</p>
+
+  <h3 class="mt-heading-negative">Heading con margin-top: -4px</h3>
+
+  <p>Este heading de nivel 3 tiene <code>margin-top: -4px</code>. El linefeed base del heading debe quedar suprimido.</p>
+
 </body>
 </html>

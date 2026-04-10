@@ -71,3 +71,27 @@ pre {
   white-space: nowrap;
   border: 0;
 }
+
+.mt-positive-px {
+  margin-top: 24px;
+}
+
+.mt-negative-px {
+  margin-top: -8px;
+}
+
+.mt-percent {
+  margin-top: 10%;
+}
+
+.mt-zero-no-unit {
+  margin-top: 0;
+}
+
+.mt-heading-positive {
+  margin-top: 32px;
+}
+
+.mt-heading-negative {
+  margin-top: -4px;
+}
