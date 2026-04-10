@@ -310,12 +310,32 @@ FT_GlyphSlot FontManager::GetGlyph(u32 ucs, int flags, FT_Face face) {
   if (ftc)
     halt(parent, "error: GetGlyph() called with ftc enabled");
 
+  // Fast path: if glyph is already cached for the primary face, return it
+  // immediately without any FreeType calls. This must happen before the ghost
+  // check below, which would otherwise call FT_Load_Char on every glyph even
+  // when the result is already in the cache.
+  if (face && fallback_count_ > 0) {
+    Cache *primary_cache = text_cache_utils::FindFaceCache(textCache, face);
+    if (primary_cache) {
+      auto fast_iter = primary_cache->cacheMap.find(ucs);
+      if (fast_iter != primary_cache->cacheMap.end()) {
+        if (parent->tr)
+          parent->tr->SetHit(true);
+        primary_cache->lru.Touch(ucs);
+        return fast_iter->second;
+      }
+    }
+  }
+
   // Try fallback if primary face lacks this glyph, or has a "ghost glyph"
   // (cmap entry exists but no ink — common in Unicode fonts for Arabic
   // Presentation Forms U+FE70-U+FEFF).
+  // Ghost check is restricted to the Arabic Presentation Forms block where
+  // ghost glyphs are actually observed, to avoid FT_Load_Char on every
+  // Latin/Cyrillic/etc. codepoint.
   if (face && fallback_count_ > 0) {
     bool needs_fallback = !FT_Get_Char_Index(face, ucs);
-    if (!needs_fallback) {
+    if (!needs_fallback && ucs >= 0xFE70u && ucs <= 0xFEFFu) {
       FT_Error load_err = FT_Load_Char(face, ucs, FT_LOAD_DEFAULT);
       if (!load_err && face->glyph->advance.x != 0 &&
           face->glyph->format == FT_GLYPH_FORMAT_OUTLINE &&
