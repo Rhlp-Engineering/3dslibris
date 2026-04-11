@@ -607,7 +607,10 @@ static std::string BuildBrowserDisplayName(Book *book) {
   if (book->HasBrowserDisplayNameCache())
     return book->GetBrowserDisplayNameCache();
 
-  std::string raw = book->GetFileName() ? book->GetFileName() : "";
+  const char *source =
+      BrowserDisplayNameSource(book->GetTitle(), book->GetFileName());
+  bool source_is_filename = (source == book->GetFileName());
+  std::string raw = source ? source : "";
   LogUtf8StageOnce(book, "filename_raw", raw);
 
   bool repaired_fullwidth = false;
@@ -623,9 +626,11 @@ static std::string BuildBrowserDisplayName(Book *book) {
     LogUtf8StageOnce(book, "filename_compose", normalized);
   LogUtf8StageOnce(book, "filename_norm", normalized);
 
-  size_t dot = normalized.find_last_of('.');
-  if (dot != std::string::npos)
-    normalized = normalized.substr(0, dot);
+  if (source_is_filename) {
+    size_t dot = normalized.find_last_of('.');
+    if (dot != std::string::npos)
+      normalized = normalized.substr(0, dot);
+  }
 
   normalized = TrimSpaces(normalized);
   LogUtf8StageOnce(book, "filename_final", normalized);
