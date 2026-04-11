@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <ctype.h>
+#include <memory>
 #include <string.h>
 #include <sys/param.h>
 
@@ -579,7 +580,11 @@ u8 ParseBuffer(Book *book, const std::string &text_utf8,
   book->ClearChapters();
   book->ClearTocConfidence();
 
-  State state;
+  // Allocate State on the heap: parsedata_t contains a 16 KB u32 buf[4096]
+  // which, combined with the rest of State, would overflow the 3DS stack (~32 KB)
+  // when reached from a deep call chain (e.g. chapter menu → FindApproxTitlePage).
+  std::unique_ptr<State> state_heap(new State());
+  State &state = *state_heap;
   if (!InitState(book, text_utf8, deps, detect_heuristic_headings, &state))
     return 1;
   plain_text_perf_utils::PlainTextStreamPerf perf;

@@ -380,6 +380,10 @@ static bool FindApproxTitlePage(Book *book, const std::string &title,
                                 u16 hint_page, u16 *page_out) {
   if (!book || !page_out)
     return false;
+  // Fixed-layout formats (PDF/CBZ) have no text Page objects; GetPage() would
+  // access an empty vector and return garbage. Nothing to search here.
+  if (book->IsFixedLayout())
+    return false;
   u16 page_count = book->GetPageCount();
   if (page_count == 0)
     return false;
