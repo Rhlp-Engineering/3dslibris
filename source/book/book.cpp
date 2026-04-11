@@ -281,6 +281,7 @@ void Book::SetFileName(const char *name) {
 void Book::SetTitle(const char *name) {
   title.clear();
   title = name;
+  ClearBrowserDisplayNameCache();
 }
 
 void Book::SetAuthor(std::string &name) {
