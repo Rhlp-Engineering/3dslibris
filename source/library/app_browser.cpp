@@ -714,6 +714,36 @@ static void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
   }
 }
 
+// --- marquee scroll state ---
+static Book *scroll_book      = nullptr;
+static int   scroll_offset_px = 0;
+static int   scroll_timer     = 0;
+
+static int ComputeSkipChars(Text *ts, const char *s, int target_px, u8 style) {
+  if (!s || target_px <= 0) return 0;
+  int accumulated = 0;
+  int skip = 0;
+  const char *p = s;
+  while (*p) {
+    unsigned char c = (unsigned char)*p;
+    int char_bytes = 1;
+    if      (c >= 0xF0) char_bytes = 4;
+    else if (c >= 0xE0) char_bytes = 3;
+    else if (c >= 0xC0) char_bytes = 2;
+    char ch_str[5] = {};
+    if (char_bytes <= 4) {
+      memcpy(ch_str, p, char_bytes);
+      ch_str[char_bytes] = '\0';
+    }
+    int w = ts->GetStringWidth(ch_str, style);
+    if (accumulated + w > target_px) break;
+    accumulated += w;
+    skip++;
+    p += char_bytes;
+  }
+  return skip;
+}
+
 } // namespace
 
 bool LibraryController::HasQueuedJob(app_job_type_t type, Book *book) const {
@@ -1118,6 +1148,9 @@ void LibraryController::browser_handleevent() {
     if (app_.GetBrowserPageStart() != old_page_start)
       LoadVisibleBrowserCoverCaches();
     if (app_.GetSelectedBook() != old_selected) {
+      scroll_book      = nullptr;
+      scroll_offset_px = 0;
+      scroll_timer     = 0;
       PrioritizeSelectedBookJobs(app_.GetSelectedBook());
       app_.SetBrowserLastInteractionMs(osGetTime());
     }
@@ -1191,6 +1224,9 @@ void LibraryController::browser_handleevent() {
                 app_.OpenBook();
               } else {
                 app_.SetSelectedBook(app_.books[book_idx]);
+                scroll_book      = nullptr;
+                scroll_offset_px = 0;
+                scroll_timer     = 0;
                 PrioritizeSelectedBookJobs(app_.GetSelectedBook());
                 app_.SetBrowserLastInteractionMs(osGetTime());
                 app_.SetBrowserDirty(true);
@@ -1211,6 +1247,9 @@ void LibraryController::browser_handleevent() {
             app_.OpenBook();
           } else {
             app_.SetSelectedBook(app_.books[i]);
+            scroll_book      = nullptr;
+            scroll_offset_px = 0;
+            scroll_timer     = 0;
             PrioritizeSelectedBookJobs(app_.GetSelectedBook());
             app_.SetBrowserLastInteractionMs(osGetTime());
             app_.SetBrowserDirty(true);
@@ -1269,6 +1308,9 @@ void LibraryController::browser_nextpage() {
     app_.SetBrowserPageStart(app_.GetBrowserPageStart() +
                              APP_BROWSER_BUTTON_COUNT);
     app_.SetSelectedBook(app_.books[app_.GetBrowserPageStart()]);
+    scroll_book      = nullptr;
+    scroll_offset_px = 0;
+    scroll_timer     = 0;
     PrioritizeSelectedBookJobs(app_.GetSelectedBook());
     app_.SetBrowserLastInteractionMs(osGetTime());
     LoadVisibleBrowserCoverCaches();
@@ -1282,6 +1324,9 @@ void LibraryController::browser_prevpage() {
                              APP_BROWSER_BUTTON_COUNT);
     app_.SetSelectedBook(
         app_.books[app_.GetBrowserPageStart() + APP_BROWSER_BUTTON_COUNT - 1]);
+    scroll_book      = nullptr;
+    scroll_offset_px = 0;
+    scroll_timer     = 0;
     PrioritizeSelectedBookJobs(app_.GetSelectedBook());
     app_.SetBrowserLastInteractionMs(osGetTime());
     LoadVisibleBrowserCoverCaches();
@@ -1366,16 +1411,51 @@ void LibraryController::browser_draw(void) {
     LogUtf8StageOnce(app_.books[i], "draw_label", display_name);
     if (app_.books[i]->coverPixels) {
       if (!display_name.empty()) {
-        char truncTitle[20];
-        size_t bytes = Utf8BytesForCharCount(display_name.c_str(), 19);
-        if (bytes > 19)
-          bytes = 19;
-        memcpy(truncTitle, display_name.c_str(), bytes);
-        truncTitle[bytes] = '\0';
-        truncTitle[19] = '\0';
-        LogUtf8StageOnce(app_.books[i], "draw_label_cut", std::string(truncTitle));
+        LogUtf8StageOnce(app_.books[i], "draw_label_cut", display_name);
+        const char *dname = display_name.c_str();
+        u8 cur_style = (u8)app_.ts->GetStyle();
+        int full_w = (int)app_.ts->GetStringWidth(dname, cur_style);
+        Book *book_i = app_.books[i];
+        Book *sel = app_.GetSelectedBook();
         app_.ts->SetPen(btnX, btnY + kBrowserTitleOffsetY);
-        app_.ts->PrintString(truncTitle);
+        if (book_i != sel || full_w <= kBrowserCellW) {
+          char truncTitle[20];
+          size_t bytes = Utf8BytesForCharCount(dname, 19);
+          if (bytes > 19)
+            bytes = 19;
+          memcpy(truncTitle, dname, bytes);
+          truncTitle[bytes] = '\0';
+          truncTitle[19] = '\0';
+          app_.ts->PrintString(truncTitle);
+        } else {
+          if (scroll_book != book_i) {
+            scroll_book      = book_i;
+            scroll_offset_px = 0;
+            scroll_timer     = 0;
+          }
+          if (scroll_timer < 60) {
+            scroll_timer++;
+          } else {
+            scroll_offset_px++;
+            if (scroll_offset_px > full_w) {
+              scroll_offset_px = 0;
+              scroll_timer     = 0;
+            }
+          }
+          int skip = ComputeSkipChars(app_.ts, dname, scroll_offset_px, cur_style);
+          const char *scrolled = dname;
+          for (int ci = 0; ci < skip && *scrolled; ) {
+            unsigned char c2 = (unsigned char)*scrolled;
+            int cb = 1;
+            if      (c2 >= 0xF0) cb = 4;
+            else if (c2 >= 0xE0) cb = 3;
+            else if (c2 >= 0xC0) cb = 2;
+            scrolled += cb;
+            ci++;
+          }
+          app_.ts->PrintString(scrolled);
+          app_.SetBrowserDirty(true);
+        }
       }
     } else {
       LogUtf8StageOnce(app_.books[i], "draw_label_wrap", display_name);
