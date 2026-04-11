@@ -607,9 +607,10 @@ static std::string BuildBrowserDisplayName(Book *book) {
   if (book->HasBrowserDisplayNameCache())
     return book->GetBrowserDisplayNameCache();
 
+  const char *filename_ptr = book->GetFileName();
   const char *source =
-      BrowserDisplayNameSource(book->GetTitle(), book->GetFileName());
-  bool source_is_filename = (source == book->GetFileName());
+      BrowserDisplayNameSource(book->GetTitle(), filename_ptr);
+  bool source_is_filename = (source == filename_ptr);
   std::string raw = source ? source : "";
   LogUtf8StageOnce(book, "filename_raw", raw);
 
