@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub_manifest.h"
 
 #include "book/book_xml.h"
+#include "book/epub_css_class_map.h"
 #include "book/page.h"
 #include "debug_log.h"
 #include "formats/common/xml_parse_utils.h"
@@ -60,6 +61,87 @@ typedef BookParseDeps EpubDeps;
 
 using epub_package_toc_utils::BuildDocPath;
 using epub_package_toc_utils::LocateZipEntrySafe;
+using epub_package_toc_utils::ReadZipEntryText;
+
+namespace {
+
+std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
+  const char *s = xhtml_text.c_str();
+  size_t len = xhtml_text.size();
+  size_t i = 0;
+  while (i < len) {
+    const char *link_tag = strstr(s + i, "<link");
+    if (!link_tag)
+      break;
+    size_t tag_pos = (size_t)(link_tag - s);
+    const char *tag_end = strchr(link_tag, '>');
+    if (!tag_end)
+      break;
+    std::string tag(link_tag, (size_t)(tag_end - link_tag + 1));
+    std::string tag_lc = ToLowerAscii(tag);
+    if (tag_lc.find("rel=\"stylesheet\"") != std::string::npos ||
+        tag_lc.find("rel='stylesheet'") != std::string::npos) {
+      size_t href_pos = tag_lc.find("href=");
+      if (href_pos != std::string::npos) {
+        href_pos += 5;
+        char q = tag[href_pos];
+        if (q == '"' || q == '\'') {
+          size_t val_start = href_pos + 1;
+          size_t val_end = tag.find(q, val_start);
+          if (val_end != std::string::npos)
+            return tag.substr(val_start, val_end - val_start);
+        }
+      }
+    }
+    i = tag_pos + 1;
+  }
+  return "";
+}
+
+void LoadCssClassMapForDoc(const std::string &archive_path,
+                           const std::string &xhtml_path,
+                           IStatusReporter *reporter,
+                           epub_css_class_map::CssClassMap *out) {
+  out->clear();
+  if (archive_path.empty() || xhtml_path.empty())
+    return;
+
+  unzFile scan_uf = unzOpen(archive_path.c_str());
+  if (!scan_uf)
+    return;
+
+  std::string xhtml_text;
+  epub_zip_utils::ZipEntryIndex zip_index;
+  bool ok = ReadZipEntryText(scan_uf, xhtml_path, xhtml_text, reporter, "CSS-SCAN", &zip_index);
+  if (!ok || xhtml_text.empty()) {
+    unzClose(scan_uf);
+    return;
+  }
+
+  std::string css_href = ExtractLinkStylesheetHref(xhtml_text);
+  if (css_href.empty()) {
+    unzClose(scan_uf);
+    return;
+  }
+
+  std::string xhtml_folder;
+  size_t slash = xhtml_path.find_last_of('/');
+  if (slash != std::string::npos)
+    xhtml_folder = xhtml_path.substr(0, slash);
+
+  std::string css_path = NormalizePath(xhtml_folder + "/" + css_href);
+
+  std::string css_text;
+  epub_zip_utils::ZipEntryIndex css_index;
+  ok = ReadZipEntryText(scan_uf, css_path, css_text, reporter, "CSS-LOAD", &css_index);
+  unzClose(scan_uf);
+  if (!ok || css_text.empty())
+    return;
+
+  epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(), out);
+}
+
+} // namespace
 
 void epub_data_init(epub_data_t *d) {
   // Reset any leftover heap objects from previous parses.
@@ -234,6 +316,9 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     epd->parsed_doc_title.clear();
     InitParsedataWithEpubDeps(&pd, epd->book, deps);
     pd.docpath = epd->docpath;
+    if (!epd->archive_path.empty())
+      LoadCssClassMapForDoc(epd->archive_path, epd->docpath, deps.reporter,
+                            &pd.css_class_map);
     log_content_layout = deps.reporter && epd->book;
     if (log_content_layout) {
       t_content_begin = osGetTime();

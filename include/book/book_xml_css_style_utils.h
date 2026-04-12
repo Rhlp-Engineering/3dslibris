@@ -14,6 +14,7 @@ struct MarginTopResult {
 };
 
 MarginTopResult ParseMarginTop(const char *style);
+MarginTopResult ParseMarginBottom(const char *style);
 
 struct InlineStyleFlags {
   bool bold;

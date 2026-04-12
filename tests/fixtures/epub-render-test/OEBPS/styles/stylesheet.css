@@ -73,7 +73,7 @@ pre {
 }
 
 .mt-positive-px {
-  margin-top: 24px;
+  margin-top: 48px;
 }
 
 .mt-negative-px {
@@ -81,7 +81,7 @@ pre {
 }
 
 .mt-percent {
-  margin-top: 10%;
+  margin-top: 20%;
 }
 
 .mt-zero-no-unit {
@@ -89,9 +89,55 @@ pre {
 }
 
 .mt-heading-positive {
-  margin-top: 32px;
+  margin-top: 64px;
 }
 
 .mt-heading-negative {
   margin-top: -4px;
+}
+
+.helper-label {
+  font-weight: normal;
+}
+
+p.mt-class-qualified {
+  margin-top: 48px;
+}
+
+.mt-class-grouped,
+h3.mt-heading-class-grouped {
+  margin-top: 48px;
+}
+
+/* margin-bottom test classes */
+
+.mb-positive-px {
+  margin-bottom: 64px;
+}
+
+.mb-zero {
+  margin-bottom: 0;
+}
+
+.mb-percent {
+  margin-bottom: 20%;
+}
+
+/* shorthand: top right/left bottom → top=0 right/left=24px bottom=24px */
+.margin-shorthand-two {
+  margin: 0 24px 24px;
+}
+
+/* shorthand: all four → top=4px right=0 bottom=20px left=0 */
+.margin-shorthand-four {
+  margin: 4px 0 20px 0;
+}
+
+p.mb-class-qualified {
+  margin-bottom: 48px;
+}
+
+.mb-class-grouped,
+p.mb-class-grouped-qualified {
+  margin-bottom: 20%;
 }

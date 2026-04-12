@@ -235,6 +235,7 @@ static int ParseEpubSpineDocuments(
 #endif
       rc = unzOpenCurrentFile(uf);
       parsedata->docpath = path;
+      parsedata->archive_path = archive_path;
       epub_parse_currentfile(uf, parsedata, deps);
       rc = unzCloseCurrentFile(uf);
       std::string parsed_title =

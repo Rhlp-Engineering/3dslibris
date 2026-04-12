@@ -79,7 +79,8 @@ void TestParseMarginTopPercent() {
 void TestParseMarginTopZeroUnitless() {
   using R = book_xml_css_style_utils::MarginTopResult;
   R r = book_xml_css_style_utils::ParseMarginTop("margin-top: 0;");
-  test::ExpectEq("zero unitless -> None", (int)r.unit, (int)R::Unit::None);
+  test::ExpectEq("zero unitless -> Px", (int)r.unit, (int)R::Unit::Px);
+  test::ExpectEq("zero unitless value", r.value, 0);
 }
 
 void TestParseMarginTopZeroPx() {
@@ -107,6 +108,14 @@ void TestParseMarginTopEmUnit() {
   test::ExpectEq("em -> None", (int)r.unit, (int)R::Unit::None);
 }
 
+void TestParseMarginBottomZeroUnitless() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R r = book_xml_css_style_utils::ParseMarginBottom("margin-bottom: 0;");
+  test::ExpectEq("bottom zero unitless -> Px", (int)r.unit,
+                 (int)R::Unit::Px);
+  test::ExpectEq("bottom zero unitless value", r.value, 0);
+}
+
 } // namespace
 
 int main() {
@@ -122,5 +131,6 @@ int main() {
   TestParseMarginTopMissingProperty();
   TestParseMarginTopNull();
   TestParseMarginTopEmUnit();
+  TestParseMarginBottomZeroUnitless();
   return 0;
 }

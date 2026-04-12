@@ -153,29 +153,85 @@ array([3, 6, 4, 2, 6, 2, 0, 1, 6, 3, 8, 7, 7, 4, 4, 9], dtype=int32)</pre>
 
   <h3>margin-top Variants</h3>
 
-  <p>Párrafo de referencia sin margin-top. El siguiente párrafo tiene <code>margin-top: 24px</code> (positivo px), que debería añadir espacio extra antes de él.</p>
+  <p>Párrafo de referencia sin margin-top. El siguiente párrafo tiene <code>margin-top: 48px</code> (positivo px), que debería añadir espacio extra claramente visible antes de él.</p>
 
-  <p class="mt-positive-px">Este párrafo tiene <code>margin-top: 24px</code>. Debe haber espacio extra visible encima.</p>
+  <p style="margin-top: 48px">Este párrafo tiene <code>margin-top: 48px</code>. Debe haber espacio extra claramente visible encima.</p>
 
   <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: -8px</code> (negativo), que debería suprimir el espacio de párrafo habitual.</p>
 
-  <p class="mt-negative-px">Este párrafo tiene <code>margin-top: -8px</code>. No debe haber separación extra del párrafo anterior.</p>
+  <p style="margin-top: -8px">Este párrafo tiene <code>margin-top: -8px</code>. No debe haber separación extra del párrafo anterior.</p>
 
-  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 10%</code> (porcentaje), que se convierte desde PAGE_WIDTH=240.</p>
+  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 20%</code> (porcentaje), que se convierte desde PAGE_WIDTH=240.</p>
 
-  <p class="mt-percent">Este párrafo tiene <code>margin-top: 10%</code>. Equivale a 24px (10% de 240), similar al caso de 24px.</p>
+  <p style="margin-top: 20%">Este párrafo tiene <code>margin-top: 20%</code>. Equivale a 48px (20% de 240), similar al caso de 48px.</p>
 
-  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 0</code> (cero sin unidad), que no debería tener efecto.</p>
+  <p>Párrafo de referencia normal. El siguiente tiene <code>margin-top: 0</code> (cero sin unidad), que debe suprimir el espaciado.</p>
 
-  <p class="mt-zero-no-unit">Este párrafo tiene <code>margin-top: 0</code>. Espaciado normal.</p>
+  <p style="margin-top: 0">Este párrafo tiene <code>margin-top: 0</code>. Sin espaciado encima.</p>
 
-  <h2 class="mt-heading-positive">Heading con margin-top: 32px</h2>
+  <h2 style="margin-top: 64px">Heading con margin-top: 64px</h2>
 
-  <p>Este heading de nivel 2 tiene <code>margin-top: 32px</code> aplicado. Debe haber espacio extra antes del heading.</p>
+  <p>Este heading de nivel 2 tiene <code>margin-top: 64px</code> aplicado. Debe haber espacio claramente extra antes del heading.</p>
 
-  <h3 class="mt-heading-negative">Heading con margin-top: -4px</h3>
+  <h3 style="margin-top: -4px">Heading con margin-top: -4px</h3>
 
   <p>Este heading de nivel 3 tiene <code>margin-top: -4px</code>. El linefeed base del heading debe quedar suprimido.</p>
+
+  <p>Párrafo de referencia normal. El siguiente usa clase CSS simple <code>mt-positive-px</code> junto con otra clase inocua en <code>class=""</code>.</p>
+
+  <p class="helper-label mt-positive-px">Este párrafo usa clases CSS <code>helper-label mt-positive-px</code>. Debe verse espacio extra encima igual que con el caso inline de 48px.</p>
+
+  <p>Párrafo de referencia normal. El siguiente usa selector CSS calificado <code>p.mt-class-qualified</code>.</p>
+
+  <p class="helper-label mt-class-qualified">Este párrafo usa la clase <code>mt-class-qualified</code>, definida como selector <code>p.mt-class-qualified</code>. Debe verse espacio claramente extra encima.</p>
+
+  <p>Párrafo de referencia normal. El siguiente usa una clase de selector agrupado <code>.mt-class-grouped, h3.mt-heading-class-grouped</code>.</p>
+
+  <p class="mt-class-grouped">Este párrafo usa <code>mt-class-grouped</code> desde un selector agrupado. Debe verse espacio claramente extra encima.</p>
+
+  <h3 class="mt-heading-class-grouped">Heading con clase agrupada CSS</h3>
+
+  <p>Este heading usa <code>h3.mt-heading-class-grouped</code>. Debe heredar espacio extra antes del heading desde CSS.</p>
+
+  <hr/>
+
+  <h3>margin-bottom Variants</h3>
+
+  <p style="margin-bottom: 64px">Este párrafo tiene <code>margin-bottom: 64px</code>. Debe haber espacio extra claramente visible debajo, antes del siguiente párrafo.</p>
+
+  <p>Párrafo de referencia normal tras un párrafo con <code>margin-bottom: 64px</code>.</p>
+
+  <p style="margin-bottom: 0">Este párrafo tiene <code>margin-bottom: 0</code>. El espacio por defecto entre párrafos debe suprimirse.</p>
+
+  <p>Párrafo inmediatamente después de <code>margin-bottom: 0</code>. Debe aparecer pegado al anterior.</p>
+
+  <p style="margin-bottom: 20%">Este párrafo tiene <code>margin-bottom: 20%</code>. Equivale a 48px (20% de 240). Debe haber espacio claramente visible debajo.</p>
+
+  <p>Párrafo de referencia tras <code>margin-bottom: 20%</code>.</p>
+
+  <p class="helper-label mb-positive-px">Este párrafo usa clases CSS <code>helper-label mb-positive-px</code>. Debe haber espacio extra visible debajo.</p>
+
+  <p>Párrafo de referencia tras <code>mb-positive-px</code>.</p>
+
+  <p class="mb-class-qualified">Este párrafo usa selector CSS calificado <code>p.mb-class-qualified</code>. Debe haber espacio extra debajo.</p>
+
+  <p>Párrafo de referencia tras <code>mb-class-qualified</code>.</p>
+
+  <p class="helper-label mb-class-grouped-qualified">Este párrafo usa selector agrupado para <code>margin-bottom: 10%</code> y otra clase inocua.</p>
+
+  <p>Párrafo de referencia tras <code>mb-class-grouped-qualified</code>.</p>
+
+  <hr/>
+
+  <h3>margin shorthand Variants</h3>
+
+  <p style="margin: 0 24px 24px">Este párrafo usa <code>margin: 0 24px 24px</code> (shorthand 3 valores). top=0 suprime espacio arriba; bottom=24px añade espacio abajo.</p>
+
+  <p>Párrafo de referencia tras shorthand 3 valores.</p>
+
+  <p style="margin: 4px 0 20px 0">Este párrafo usa <code>margin: 4px 0 20px 0</code> (shorthand 4 valores). top=4px, bottom=20px. Debe verse espacio moderado arriba y abajo.</p>
+
+  <p>Párrafo de referencia tras shorthand 4 valores.</p>
 
 </body>
 </html>

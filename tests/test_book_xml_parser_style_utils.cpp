@@ -73,11 +73,107 @@ void TestRestoreParsedStyleMarkersReinjectsPreContext() {
   test::ExpectEq("mono marker", (int)p.buf[1], TEXT_MONO_ON);
 }
 
+void TestResolveCssMarginLinefeedsUsesCeilQuantization() {
+  book_xml_css_style_utils::MarginTopResult m{};
+  m.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  m.value = 24;
+  test::ExpectEq("24px at 16px line height -> 2 linefeeds",
+                 book_xml_parser_style_utils::ResolveCssMarginLinefeeds(m, 16),
+                 2);
+
+  m.unit = book_xml_css_style_utils::MarginTopResult::Unit::Percent;
+  m.value = 10;
+  test::ExpectEq("10 percent of 240 at 20px line height -> 2 linefeeds",
+                 book_xml_parser_style_utils::ResolveCssMarginLinefeeds(m, 20),
+                 2);
+}
+
+void TestResolveBlockSpacingLinefeedsHonorsDefaultsAndZero() {
+  book_xml_css_style_utils::MarginTopResult none{};
+  test::ExpectEq("none keeps top default",
+                 book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+                     1, none, 16),
+                 1);
+  test::ExpectEq("none keeps bottom default",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, none, 16),
+                 2);
+
+  book_xml_css_style_utils::MarginTopResult zero{};
+  zero.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  zero.value = 0;
+  test::ExpectEq("zero suppresses top default",
+                 book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+                     1, zero, 16),
+                 0);
+  test::ExpectEq("zero suppresses bottom default",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, zero, 16),
+                 0);
+
+  book_xml_css_style_utils::MarginTopResult positive{};
+  positive.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  positive.value = 24;
+  test::ExpectEq("positive top keeps css target when already above default",
+                 book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+                     1, positive, 16),
+                 2);
+  test::ExpectEq("positive bottom forces one extra line when css equals default",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, positive, 16),
+                 3);
+}
+
+void TestResolveBlockSpacingLinefeedsKeepsSmallExplicitMarginsVisible() {
+  book_xml_css_style_utils::MarginTopResult small_top{};
+  small_top.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  small_top.value = 4;
+  test::ExpectEq("small explicit top still adds visible spacing",
+                 book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+                     1, small_top, 15),
+                 2);
+
+  book_xml_css_style_utils::MarginTopResult small_bottom{};
+  small_bottom.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  small_bottom.value = 20;
+  test::ExpectEq("small explicit bottom still adds visible spacing",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, small_bottom, 15),
+                 3);
+
+  book_xml_css_style_utils::MarginTopResult medium_top{};
+  medium_top.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  medium_top.value = 48;
+  test::ExpectEq("48px top resolves to css target instead of over-adding",
+                 book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+                     1, medium_top, 15),
+                 4);
+
+  book_xml_css_style_utils::MarginTopResult large_bottom{};
+  large_bottom.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  large_bottom.value = 64;
+  test::ExpectEq("64px bottom resolves to css target instead of over-adding",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, large_bottom, 15),
+                 4);
+
+  book_xml_css_style_utils::MarginTopResult capped{};
+  capped.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
+  capped.value = 96;
+  test::ExpectEq("explicit margins are capped to avoid runaway spacing",
+                 book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                     2, capped, 15),
+                 4);
+}
+
 } // namespace
 
 int main() {
   TestResolveParsedTextStylePrefersMono();
   TestRestoreParsedStyleMarkersReinjectsMono();
   TestRestoreParsedStyleMarkersReinjectsPreContext();
+  TestResolveCssMarginLinefeedsUsesCeilQuantization();
+  TestResolveBlockSpacingLinefeedsHonorsDefaultsAndZero();
+  TestResolveBlockSpacingLinefeedsKeepsSmallExplicitMarginsVisible();
   return 0;
 }

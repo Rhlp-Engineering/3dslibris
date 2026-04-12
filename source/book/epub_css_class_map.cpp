@@ -1,0 +1,199 @@
+#include "book/epub_css_class_map.h"
+
+#include "book/book_xml_css_style_utils.h"
+#include "shared/string_utils.h"
+
+#include <string.h>
+#include <vector>
+
+namespace epub_css_class_map {
+
+namespace {
+
+bool IsIdentChar(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+         (c >= '0' && c <= '9') || c == '-' || c == '_';
+}
+
+std::string TrimAscii(const std::string &text) {
+  size_t start = 0;
+  while (start < text.size() && (text[start] == ' ' || text[start] == '\t' ||
+                                 text[start] == '\r' || text[start] == '\n'))
+    ++start;
+  size_t end = text.size();
+  while (end > start && (text[end - 1] == ' ' || text[end - 1] == '\t' ||
+                         text[end - 1] == '\r' || text[end - 1] == '\n'))
+    --end;
+  return text.substr(start, end - start);
+}
+
+void SkipWhitespace(const char *s, size_t len, size_t *pos) {
+  while (*pos < len && (s[*pos] == ' ' || s[*pos] == '\t' ||
+                        s[*pos] == '\r' || s[*pos] == '\n'))
+    ++(*pos);
+}
+
+void SkipToChar(const char *s, size_t len, size_t *pos, char target) {
+  while (*pos < len && s[*pos] != target)
+    ++(*pos);
+}
+
+void SkipBlockComment(const char *s, size_t len, size_t *pos) {
+  if (*pos + 1 < len && s[*pos] == '/' && s[*pos + 1] == '*') {
+    *pos += 2;
+    while (*pos + 1 < len) {
+      if (s[*pos] == '*' && s[*pos + 1] == '/') {
+        *pos += 2;
+        return;
+      }
+      ++(*pos);
+    }
+    *pos = len;
+  }
+}
+
+bool ExtractSingleClassSelectorName(const std::string &selector,
+                                    std::string *class_name_out) {
+  if (!class_name_out)
+    return false;
+
+  const std::string trimmed = TrimAscii(selector);
+  if (trimmed.empty())
+    return false;
+
+  // Support ".class" and "tag.class". Reject combinators, descendant
+  // selectors, pseudo classes, and compound selectors.
+  size_t pos = 0;
+  while (pos < trimmed.size() && IsIdentChar(trimmed[pos]))
+    ++pos;
+  if (pos >= trimmed.size() || trimmed[pos] != '.')
+    return false;
+  ++pos;
+
+  const size_t class_start = pos;
+  while (pos < trimmed.size() && IsIdentChar(trimmed[pos]))
+    ++pos;
+  if (pos == class_start || pos != trimmed.size())
+    return false;
+
+  *class_name_out = trimmed.substr(class_start, pos - class_start);
+  return true;
+}
+
+void ParseSelectorList(const std::string &selector_list,
+                       std::vector<std::string> *class_names_out) {
+  if (!class_names_out)
+    return;
+  size_t start = 0;
+  while (start <= selector_list.size()) {
+    size_t comma = selector_list.find(',', start);
+    std::string selector =
+        selector_list.substr(start, comma == std::string::npos
+                                        ? std::string::npos
+                                        : comma - start);
+    std::string class_name;
+    if (ExtractSingleClassSelectorName(selector, &class_name))
+      class_names_out->push_back(class_name);
+    if (comma == std::string::npos)
+      break;
+    start = comma + 1;
+  }
+}
+
+} // namespace
+
+void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
+  if (!css_text || len == 0 || !out)
+    return;
+
+  size_t pos = 0;
+  while (pos < len) {
+    SkipWhitespace(css_text, len, &pos);
+    if (pos >= len)
+      break;
+
+    if (pos + 1 < len && css_text[pos] == '/' && css_text[pos + 1] == '*') {
+      SkipBlockComment(css_text, len, &pos);
+      continue;
+    }
+
+    size_t selector_start = pos;
+    SkipToChar(css_text, len, &pos, '{');
+    if (pos >= len || css_text[pos] != '{')
+      break;
+    std::string selector_list(css_text + selector_start, pos - selector_start);
+    std::vector<std::string> class_names;
+    ParseSelectorList(selector_list, &class_names);
+    ++pos;
+
+    size_t block_start = pos;
+    SkipToChar(css_text, len, &pos, '}');
+    size_t block_end = pos;
+    if (pos < len)
+      ++pos;
+
+    if (class_names.empty())
+      continue;
+
+    std::string block(css_text + block_start, block_end - block_start);
+    const char *b = block.c_str();
+
+    using book_xml_css_style_utils::ParseMarginBottom;
+    using book_xml_css_style_utils::ParseMarginTop;
+
+    MarginTopResult mt = ParseMarginTop(b);
+    MarginTopResult mb = ParseMarginBottom(b);
+
+    if (mt.unit != MarginTopResult::Unit::None ||
+        mb.unit != MarginTopResult::Unit::None) {
+      for (size_t i = 0; i < class_names.size(); i++) {
+        CssClassMargins &entry = (*out)[class_names[i]];
+        if (mt.unit != MarginTopResult::Unit::None)
+          entry.margin_top = mt;
+        if (mb.unit != MarginTopResult::Unit::None)
+          entry.margin_bottom = mb;
+      }
+    }
+  }
+}
+
+bool LookupMarginsForClassAttr(const std::string &class_attr,
+                               const CssClassMap &class_map,
+                               CssClassMargins *out) {
+  if (!out)
+    return false;
+  *out = CssClassMargins{};
+  if (class_attr.empty() || class_map.empty())
+    return false;
+
+  bool found_any = false;
+  size_t pos = 0;
+  while (pos < class_attr.size()) {
+    while (pos < class_attr.size() &&
+           (class_attr[pos] == ' ' || class_attr[pos] == '\t' ||
+            class_attr[pos] == '\r' || class_attr[pos] == '\n'))
+      ++pos;
+    const size_t start = pos;
+    while (pos < class_attr.size() && IsIdentChar(class_attr[pos]))
+      ++pos;
+    if (pos == start) {
+      if (pos < class_attr.size())
+        ++pos;
+      continue;
+    }
+
+    const std::string class_name = class_attr.substr(start, pos - start);
+    CssClassMap::const_iterator it = class_map.find(class_name);
+    if (it == class_map.end())
+      continue;
+    if (it->second.margin_top.unit != MarginTopResult::Unit::None)
+      out->margin_top = it->second.margin_top;
+    if (it->second.margin_bottom.unit != MarginTopResult::Unit::None)
+      out->margin_bottom = it->second.margin_bottom;
+    found_any = true;
+  }
+
+  return found_any;
+}
+
+} // namespace epub_css_class_map

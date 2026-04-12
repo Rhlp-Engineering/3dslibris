@@ -14,8 +14,10 @@
 
 #include <expat.h>
 #include <3ds.h>
+#include <map>
 #include <string>
 #include <vector>
+#include "book/epub_css_class_map.h"
 #include "shared/status_reporter.h"
 
 #define PAGEBUFSIZE 4096
@@ -130,6 +132,15 @@ struct parsedata_t {
 	std::string doc_title;   //! Current XHTML <title> text (best chapter label).
 	std::string doc_heading; //! Fallback heading text from h1/h2/h3.
 	bool doc_heading_complete;
+	std::string last_p_style;    //! style= attr of the most-recently-opened <p>.
+	std::string last_h1_style;   //! style= attr of the most-recently-opened <h1>.
+	std::string last_h2_style;   //! style= attr of the most-recently-opened <h2>.
+	std::string last_h_style;    //! style= attr of the most-recently-opened <h3..h6>.
+	std::string last_p_class;
+	std::string last_h1_class;
+	std::string last_h2_class;
+	std::string last_h_class;
+	epub_css_class_map::CssClassMap css_class_map;
 	bool collecting_fb2_binary;
 	bool fb2_binary_too_large;
 	std::string fb2_binary_id;

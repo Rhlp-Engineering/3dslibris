@@ -50,6 +50,11 @@ static LineBreakMeasureResult FindLineBreakImpl(
     if (preformatted) {
       if (glyph.text.codepoint == '\n')
         return LineBreakMeasureResult(i, width);
+      if (glyph.text.whitespace && width + glyph.advance <= max_width) {
+        last_break = i + 1;
+        width_at_last_break = width + glyph.advance;
+        have_break = true;
+      }
     } else if (glyph.text.whitespace) {
       return LineBreakMeasureResult(i, width);
     }
@@ -71,7 +76,7 @@ static LineBreakMeasureResult FindLineBreakImpl(
     }
 
     if (width > max_width) {
-      if (!preformatted && have_break && last_break > start)
+      if (have_break && last_break > start)
         return LineBreakMeasureResult(last_break, width_at_last_break);
       if (!preformatted && IsClosingWordAttachedPunctuation(glyph.text.codepoint) &&
           i > start + 1) {

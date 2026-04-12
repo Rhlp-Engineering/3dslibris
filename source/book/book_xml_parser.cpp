@@ -360,22 +360,22 @@ static std::string ExtractClassAttr(const char **attr) {
 static book_xml_css_style_utils::MarginTopResult
 LookupClassMarginTop(const std::string &class_attr,
                      const epub_css_class_map::CssClassMap &class_map) {
-  if (class_attr.empty() || class_map.empty())
-    return {};
-  auto it = class_map.find(class_attr);
-  if (it != class_map.end())
-    return it->second.margin_top;
+  epub_css_class_map::CssClassMargins margins;
+  if (epub_css_class_map::LookupMarginsForClassAttr(class_attr, class_map,
+                                                    &margins)) {
+    return margins.margin_top;
+  }
   return {};
 }
 
 static book_xml_css_style_utils::MarginTopResult
 LookupClassMarginBottom(const std::string &class_attr,
                         const epub_css_class_map::CssClassMap &class_map) {
-  if (class_attr.empty() || class_map.empty())
-    return {};
-  auto it = class_map.find(class_attr);
-  if (it != class_map.end())
-    return it->second.margin_bottom;
+  epub_css_class_map::CssClassMargins margins;
+  if (epub_css_class_map::LookupMarginsForClassAttr(class_attr, class_map,
+                                                    &margins)) {
+    return margins.margin_bottom;
+  }
   return {};
 }
 
@@ -401,34 +401,48 @@ ParseElementMarginBottomWithClass(const std::string &last_style,
   return LookupClassMarginBottom(last_class, class_map);
 }
 
-static int MarginTopToExtraLf(
-    const book_xml_css_style_utils::MarginTopResult &m, int line_h) {
+static const char *MarginUnitName(
+    book_xml_css_style_utils::MarginTopResult::Unit unit) {
   using Unit = book_xml_css_style_utils::MarginTopResult::Unit;
-  if (m.unit == Unit::None || line_h <= 0)
-    return 0;
-  int px = m.value;
-  if (m.unit == Unit::Percent)
-    px = (m.value * PAGE_WIDTH) / 100;
-  if (m.negative)
-    return (px > 0) ? -1 : 0;
-  // margin-top:0 explicitly set → suppress paragraph spacing (sentinel -1).
-  if (px == 0)
-    return -1;
-  // Clamp small percentages to at least 1 linefeed rather than rounding to 0.
-  return std::max(1, std::min(px / line_h, 4));
+  switch (unit) {
+  case Unit::Px:
+    return "px";
+  case Unit::Percent:
+    return "%";
+  case Unit::None:
+  default:
+    return "none";
+  }
 }
 
-static int MarginBottomToExtraLf(
-    const book_xml_css_style_utils::MarginTopResult &m, int line_h) {
-  using Unit = book_xml_css_style_utils::MarginTopResult::Unit;
-  if (m.unit == Unit::None || line_h <= 0)
-    return 0;
-  int px = m.value;
-  if (m.unit == Unit::Percent)
-    px = (m.value * PAGE_WIDTH) / 100;
-  if (m.negative || px == 0)
-    return 0;
-  return std::max(1, std::min(px / line_h, 4));
+static void LogResolvedBlockMargin(parsedata_t *p, const char *tag,
+                                   const char *phase,
+                                   const std::string &style_attr,
+                                   const std::string &class_attr,
+                                   const book_xml_css_style_utils::MarginTopResult &m,
+                                   int line_h, int default_lf, int final_lf) {
+#ifdef DSLIBRIS_DEBUG
+  if (!p || !p->book || !p->book->GetStatusReporter())
+    return;
+  if (style_attr.empty() && class_attr.empty())
+    return;
+  DBG_LOGF_CAT(
+      p->book->GetStatusReporter(), DBG_LEVEL_INFO, DBG_CAT_EPUB,
+      "EPUB: margin %s tag=%s path=%s style=\"%s\" class=\"%s\" unit=%s value=%d negative=%d line_h=%d default_lf=%d final_lf=%d screen=%d pen_y=%d",
+      phase ? phase : "?", tag ? tag : "?", p->docpath.c_str(),
+      style_attr.c_str(), class_attr.c_str(), MarginUnitName(m.unit), m.value,
+      m.negative ? 1 : 0, line_h, default_lf, final_lf, p->screen, p->pen.y);
+#else
+  (void)p;
+  (void)tag;
+  (void)phase;
+  (void)style_attr;
+  (void)class_attr;
+  (void)m;
+  (void)line_h;
+  (void)default_lf;
+  (void)final_lf;
+#endif
 }
 
 static void ParseElementStyleFlags(const char **attr, bool *bold_out,
@@ -1030,6 +1044,28 @@ static bool blankline(parsedata_t *p) {
   return (p->buf[p->buflen - 1] == '\n') && (p->buf[p->buflen - 2] == '\n');
 }
 
+static int CountTrailingLinefeeds(const parsedata_t *p) {
+  if (!p || p->buflen <= 0)
+    return 0;
+  int count = 0;
+  for (int i = p->buflen - 1; i >= 0; --i) {
+    if (p->buf[i] != '\n')
+      break;
+    ++count;
+  }
+  return count;
+}
+
+static int EmitAdditionalTopLinefeeds(parsedata_t *p, int desired_lf) {
+  if (!p || desired_lf <= 0)
+    return 0;
+  const int existing_lf = CountTrailingLinefeeds(p);
+  const int add_lf = std::max(0, desired_lf - existing_lf);
+  for (int i = 0; i < add_lf; i++)
+    linefeed(p);
+  return add_lf;
+}
+
 static void AdvanceParsedScreen(parsedata_t *p) {
   if (!p || !p->ts || !p->book)
     return;
@@ -1505,21 +1541,19 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H1);
     p->last_h1_style = ExtractStyleAttr(attr);
     p->last_h1_class = ExtractClassAttr(attr);
-    bool lf = !blankline(p);
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
-    if (lf) {
-      const book_xml_css_style_utils::MarginTopResult mtr =
-          ParseElementMarginTopWithClass(attr, p);
-      const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0) {
-        linefeed(p);
-        for (int i = 1; i < extra_lf; i++)
-          linefeed(p);
-      }
-    }
+    const book_xml_css_style_utils::MarginTopResult mtr =
+        ParseElementMarginTopWithClass(attr, p);
+    const int line_h = ts->GetHeight() + ts->linespacing;
+    const int default_lf = 1;
+    const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+        default_lf, mtr, line_h);
+    LogResolvedBlockMargin(p, "h1", "top", p->last_h1_style,
+                           p->last_h1_class, mtr, line_h, default_lf,
+                           lf_count);
+    EmitAdditionalTopLinefeeds(p, lf_count);
   } else if (!strcmp(el, "h2")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
@@ -1537,21 +1571,19 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H2);
     p->last_h2_style = ExtractStyleAttr(attr);
     p->last_h2_class = ExtractClassAttr(attr);
-    bool lf = !blankline(p);
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
-    if (lf) {
-      const book_xml_css_style_utils::MarginTopResult mtr =
-          ParseElementMarginTopWithClass(attr, p);
-      const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0) {
-        linefeed(p);
-        for (int i = 1; i < extra_lf; i++)
-          linefeed(p);
-      }
-    }
+    const book_xml_css_style_utils::MarginTopResult mtr =
+        ParseElementMarginTopWithClass(attr, p);
+    const int line_h = ts->GetHeight() + ts->linespacing;
+    const int default_lf = 1;
+    const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+        default_lf, mtr, line_h);
+    LogResolvedBlockMargin(p, "h2", "top", p->last_h2_style,
+                           p->last_h2_class, mtr, line_h, default_lf,
+                           lf_count);
+    EmitAdditionalTopLinefeeds(p, lf_count);
   } else if (!strcmp(el, "h3")) {
     heading_layout::KeepWithNextRequest req{};
     req.pen_y = p->pen.y;
@@ -1573,12 +1605,13 @@ void start(void *data, const char *el, const char **attr) {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0) {
-        linefeed(p);
-        for (int i = 1; i < extra_lf; i++)
-          linefeed(p);
-      }
+      const int default_lf = 1;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+          default_lf, mtr, line_h);
+      LogResolvedBlockMargin(p, "h3", "top", p->last_h_style,
+                             p->last_h_class, mtr, line_h, default_lf,
+                             lf_count);
+      EmitAdditionalTopLinefeeds(p, lf_count);
     }
   } else if (!strcmp(el, "h4")) {
     parse_push(p, TAG_H4);
@@ -1588,11 +1621,13 @@ void start(void *data, const char *el, const char **attr) {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0 && !blankline(p))
-        linefeed(p);
-      for (int i = 1; i < extra_lf; i++)
-        linefeed(p);
+      const int default_lf = !blankline(p) ? 1 : 0;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+          default_lf, mtr, line_h);
+      LogResolvedBlockMargin(p, "h4", "top", p->last_h_style,
+                             p->last_h_class, mtr, line_h, default_lf,
+                             lf_count);
+      EmitAdditionalTopLinefeeds(p, lf_count);
     }
   } else if (!strcmp(el, "h5")) {
     parse_push(p, TAG_H5);
@@ -1602,11 +1637,13 @@ void start(void *data, const char *el, const char **attr) {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0 && !blankline(p))
-        linefeed(p);
-      for (int i = 1; i < extra_lf; i++)
-        linefeed(p);
+      const int default_lf = !blankline(p) ? 1 : 0;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+          default_lf, mtr, line_h);
+      LogResolvedBlockMargin(p, "h5", "top", p->last_h_style,
+                             p->last_h_class, mtr, line_h, default_lf,
+                             lf_count);
+      EmitAdditionalTopLinefeeds(p, lf_count);
     }
   } else if (!strcmp(el, "h6")) {
     parse_push(p, TAG_H6);
@@ -1616,11 +1653,13 @@ void start(void *data, const char *el, const char **attr) {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0 && !blankline(p))
-        linefeed(p);
-      for (int i = 1; i < extra_lf; i++)
-        linefeed(p);
+      const int default_lf = !blankline(p) ? 1 : 0;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+          default_lf, mtr, line_h);
+      LogResolvedBlockMargin(p, "h6", "top", p->last_h_style,
+                             p->last_h_class, mtr, line_h, default_lf,
+                             lf_count);
+      EmitAdditionalTopLinefeeds(p, lf_count);
     }
   } else if (!strcmp(el, "head"))
     parse_push(p, TAG_HEAD);
@@ -1636,25 +1675,32 @@ void start(void *data, const char *el, const char **attr) {
     const bool tight_list_paragraph =
         book_xml_list_utils::HasPendingListItemContent(p);
     const bool tight_block_paragraph = ParseInAnyEasyParagraphTightBlock(p);
-    if (!blankline(p) && !tight_list_paragraph && !tight_block_paragraph) {
-      const book_xml_css_style_utils::MarginTopResult mtr =
-          ParseElementMarginTopWithClass(attr, p);
-      const int line_h = ts->GetHeight() + ts->linespacing;
-      const int extra_lf = MarginTopToExtraLf(mtr, line_h);
-      if (extra_lf >= 0) {
-        const int base_lf =
-            std::max(p->book->GetParagraphSpacing(),
-                     extra_lf > 0 ? extra_lf : 0);
-        for (int i = 0; i < base_lf; i++) {
-          linefeed(p);
-        }
-      }
-      // extra_lf == -1: negative margin-top → suppress paragraph spacing
+    const bool can_apply_top_margin =
+        !tight_list_paragraph && !tight_block_paragraph;
+    const book_xml_css_style_utils::MarginTopResult mtr =
+        ParseElementMarginTopWithClass(attr, p);
+    const int line_h = ts->GetHeight() + ts->linespacing;
+    if (can_apply_top_margin) {
+      const int default_lf = p->book->GetParagraphSpacing();
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
+          default_lf, mtr, line_h);
+      LogResolvedBlockMargin(p, "p", "top", p->last_p_style,
+                             p->last_p_class, mtr, line_h, default_lf,
+                             lf_count);
+      EmitAdditionalTopLinefeeds(p, lf_count);
       for (int i = 0; i < p->book->GetParagraphIndent() && !inside_list_item &&
                       !parse_in(p, TAG_DD); i++) {
         AppendParsedByte(p, ' ');
         p->pen.x += ts->GetAdvance(' ');
       }
+    } else {
+      const char *phase = "top-skipped";
+      if (tight_list_paragraph)
+        phase = "top-skipped-tight-list";
+      else if (tight_block_paragraph)
+        phase = "top-skipped-tight-block";
+      LogResolvedBlockMargin(p, "p", phase, p->last_p_style, p->last_p_class,
+                             mtr, line_h, 0, 0);
     }
   } else if (!strcmp(el, "hr")) {
     parse_push(p, TAG_UNKNOWN);
@@ -1769,13 +1815,12 @@ void start(void *data, const char *el, const char **attr) {
       const int line_h = ts->GetHeight() + ts->linespacing;
       const book_xml_css_style_utils::MarginTopResult mtr =
           book_xml_css_style_utils::ParseMarginTop(img_style);
-      const int extra_top = MarginTopToExtraLf(mtr, line_h);
-      if (extra_top > 0) {
-        if (!blankline(p))
-          linefeed(p);
-        for (int i = 1; i < extra_top; i++)
-          linefeed(p);
-      }
+      const int default_lf = !blankline(p) ? 1 : 0;
+      const int lf_count =
+          book_xml_parser_style_utils::ResolveBlockTopLinefeeds(default_lf,
+                                                                mtr, line_h);
+      for (int i = 0; i < lf_count; i++)
+        linefeed(p);
     }
 
     std::string resolved;
@@ -1835,8 +1880,10 @@ void start(void *data, const char *el, const char **attr) {
           const int line_h = ts->GetHeight() + ts->linespacing;
           const book_xml_css_style_utils::MarginTopResult mbr =
               book_xml_css_style_utils::ParseMarginBottom(img_style);
-          const int extra_bot = MarginBottomToExtraLf(mbr, line_h);
-          for (int i = 0; i < extra_bot; i++)
+          const int lf_count =
+              book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+                  0, mbr, line_h);
+          for (int i = 0; i < lf_count; i++)
             linefeed(p);
         }
         break;
@@ -2138,10 +2185,12 @@ void end(void *data, const char *el) {
       const book_xml_css_style_utils::MarginTopResult mbr =
           ParseElementMarginBottomWithClass(p->last_p_style, p->last_p_class,
                                             p->css_class_map);
-      const int extra_lf = MarginBottomToExtraLf(mbr, line_h);
-      const int lf_count = (mbr.unit != book_xml_css_style_utils::MarginTopResult::Unit::None)
-                               ? extra_lf
-                               : 2;
+      const int default_lf = 2;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+          default_lf, mbr, line_h);
+      LogResolvedBlockMargin(p, "p", "bottom", p->last_p_style,
+                             p->last_p_class, mbr, line_h, default_lf,
+                             lf_count);
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
@@ -2155,9 +2204,12 @@ void end(void *data, const char *el) {
       const book_xml_css_style_utils::MarginTopResult mbr =
           ParseElementMarginBottomWithClass(p->last_h1_style, p->last_h1_class,
                                             p->css_class_map);
-      const int extra_lf = MarginBottomToExtraLf(mbr, line_h);
-      const int lf_count = (mbr.unit != book_xml_css_style_utils::MarginTopResult::Unit::None)
-                               ? extra_lf : 2;
+      const int default_lf = 2;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+          default_lf, mbr, line_h);
+      LogResolvedBlockMargin(p, "h1", "bottom", p->last_h1_style,
+                             p->last_h1_class, mbr, line_h, default_lf,
+                             lf_count);
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
@@ -2170,9 +2222,12 @@ void end(void *data, const char *el) {
       const book_xml_css_style_utils::MarginTopResult mbr =
           ParseElementMarginBottomWithClass(p->last_h2_style, p->last_h2_class,
                                             p->css_class_map);
-      const int extra_lf = MarginBottomToExtraLf(mbr, line_h);
-      const int lf_count = (mbr.unit != book_xml_css_style_utils::MarginTopResult::Unit::None)
-                               ? extra_lf : 1;
+      const int default_lf = 1;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+          default_lf, mbr, line_h);
+      LogResolvedBlockMargin(p, "h2", "bottom", p->last_h2_style,
+                             p->last_h2_class, mbr, line_h, default_lf,
+                             lf_count);
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
@@ -2189,9 +2244,12 @@ void end(void *data, const char *el) {
       const book_xml_css_style_utils::MarginTopResult mbr =
           ParseElementMarginBottomWithClass(p->last_h_style, p->last_h_class,
                                             p->css_class_map);
-      const int extra_lf = MarginBottomToExtraLf(mbr, line_h);
-      const int lf_count = (mbr.unit != book_xml_css_style_utils::MarginTopResult::Unit::None)
-                               ? extra_lf : 2;
+      const int default_lf = 2;
+      const int lf_count = book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
+          default_lf, mbr, line_h);
+      LogResolvedBlockMargin(p, el, "bottom", p->last_h_style,
+                             p->last_h_class, mbr, line_h, default_lf,
+                             lf_count);
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
