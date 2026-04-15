@@ -6,6 +6,7 @@
 #include "formats/cbz/cbz_worker.h"
 #include "formats/common/book_error.h"
 #include "formats/common/pdf_view_utils.h"
+#include "debug_log.h"
 
 #include <3ds.h>
 #include <algorithm>
@@ -92,8 +93,12 @@ uint8_t ParseCbzFile(Book *book, const char *path) {
     return 255;
 
   std::vector<CbzPageEntry> entries;
-  if (!IndexCbzArchiveEntries(path, &entries))
+  if (!IndexCbzArchiveEntries(path, &entries)) {
+    DBG_LOGF_CAT(book->GetStatusReporter(), DBG_LEVEL_WARN, DBG_CAT_RENDER,
+                 "CBZ open failed path=%s reason=%s", path,
+                 GetLastCbzArchiveError());
     return BOOK_ERR_CORRUPT;
+  }
 
   book->ClearChapters();
   book->ClearTocConfidence();
@@ -105,7 +110,12 @@ uint8_t IndexCbzMetadata(Book *book, const char *path) {
   if (!book || !path)
     return 255;
   std::vector<CbzPageEntry> entries;
-  return IndexCbzArchiveEntries(path, &entries) ? 0 : BOOK_ERR_CORRUPT;
+  if (IndexCbzArchiveEntries(path, &entries))
+    return 0;
+  DBG_LOGF_CAT(book->GetStatusReporter(), DBG_LEVEL_WARN, DBG_CAT_RENDER,
+               "CBZ metadata index failed path=%s reason=%s", path,
+               GetLastCbzArchiveError());
+  return BOOK_ERR_CORRUPT;
 }
 
 int cbz_extract_cover(Book *book, const std::string &cbzpath) {

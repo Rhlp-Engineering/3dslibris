@@ -84,6 +84,8 @@ struct Book::CbzState {
   bool worker_init_attempted;
   bool preload_pending;
   int failed_page;
+  int logged_failed_page;
+  std::string last_error;
 
   CbzState()
       : archive_path(), entries(), page_count(0), is_new_3ds(false),
@@ -92,7 +94,7 @@ struct Book::CbzState {
         viewport_interaction_active(false), current_source(),
         current_preview(), current_interactive(), prev_slot(), next_slot(),
         worker(NULL), worker_init_attempted(false), preload_pending(false),
-        failed_page(-1) {}
+        failed_page(-1), logged_failed_page(-1), last_error() {}
 };
 
 inline void ResetCbzBitmapCache(Book::CbzState::BitmapCache *cache) {

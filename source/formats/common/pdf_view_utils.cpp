@@ -8,7 +8,7 @@
 namespace pdf_view_utils {
 namespace {
 
-static const float kZoomPresets[] = {0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f};
+static const float kZoomPresets[] = {0.5f, 0.75f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f};
 
 float Clamp01(float value) {
   if (value < 0.0f)
@@ -43,7 +43,7 @@ int ClampZoomIndex(int zoom_index) {
 DevicePolicy GetDevicePolicy(bool is_new_3ds) {
   DevicePolicy policy;
   policy.default_zoom_index = 2;
-  policy.max_zoom_index = is_new_3ds ? 5 : 3;
+  policy.max_zoom_index = is_new_3ds ? 6 : 4;
   policy.keep_preview_cache = true;
   policy.keep_tile_cache = is_new_3ds;
   policy.mupdf_store_bytes =

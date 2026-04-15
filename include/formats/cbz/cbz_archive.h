@@ -11,3 +11,4 @@ bool ReadCbzArchiveEntryBytes(const std::string &archive_path,
                               const CbzPageEntry &entry,
                               std::vector<unsigned char> *out,
                               size_t max_bytes);
+const char *GetLastCbzArchiveError();

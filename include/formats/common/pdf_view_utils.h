@@ -12,6 +12,8 @@ struct DevicePolicy {
   unsigned int mupdf_store_bytes;
 };
 
+static const int kMaxZoomIndex = 6;
+
 struct PreviewLayout {
   int x;
   int y;

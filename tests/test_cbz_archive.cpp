@@ -36,10 +36,11 @@ int main(int argc, char **argv) {
 
   std::vector<CbzPageEntry> entries;
   ExpectTrue("index archive", IndexCbzArchiveEntries(argv[1], &entries));
-  ExpectEqInt("entry count", (int)entries.size(), 3);
+  ExpectEqInt("entry count", (int)entries.size(), 4);
   ExpectEq("entry 0", entries[0].normalized_path, "001-cover.jpg");
-  ExpectEq("entry 1", entries[1].normalized_path, "002-page.png");
-  ExpectEq("entry 2", entries[2].normalized_path, "010-last.jpeg");
+  ExpectEq("entry 1", entries[1].normalized_path, "002-page.PNG");
+  ExpectEq("entry 2", entries[2].normalized_path, "nested/003-middle.jpg");
+  ExpectEq("entry 3", entries[3].normalized_path, "folder/../010-last.JPEG");
 
   std::vector<unsigned char> bytes;
   ExpectTrue("read first entry",
@@ -51,5 +52,8 @@ int main(int argc, char **argv) {
   ExpectTrue("read third entry",
              ReadCbzArchiveEntryBytes(argv[1], entries[2], &bytes, 1024 * 1024));
   ExpectEqInt("third entry non-empty", (int)!bytes.empty(), 1);
+  ExpectTrue("read fourth entry",
+             ReadCbzArchiveEntryBytes(argv[1], entries[3], &bytes, 1024 * 1024));
+  ExpectEqInt("fourth entry non-empty", (int)!bytes.empty(), 1);
   return 0;
 }

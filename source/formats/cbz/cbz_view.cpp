@@ -6,6 +6,7 @@
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/text.h"
+#include "debug_log.h"
 
 #include <algorithm>
 #include <cmath>
@@ -194,17 +195,21 @@ bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index) {
   if (!ReadCbzArchiveEntryBytes(cbz_state->archive_path,
                                 cbz_state->entries[(size_t)page_index], &bytes,
                                 kCbzMaxEntryBytes)) {
+    cbz_state->last_error = GetLastCbzArchiveError();
     cbz_state->failed_page = page_index;
     return false;
   }
 
   CbzDecodedPage decoded;
   if (!DecodeCbzPageImage(bytes, cbz_state->max_zoom_index, &decoded)) {
+    cbz_state->last_error = GetLastCbzDecodeError();
     cbz_state->failed_page = page_index;
     return false;
   }
 
   cbz_state->failed_page = -1;
+  cbz_state->logged_failed_page = -1;
+  cbz_state->last_error.clear();
   ResetCbzPageBitmap(&cbz_state->current_source);
   cbz_state->current_source.page = page_index;
   cbz_state->current_source.original_width = decoded.original_width;
@@ -360,8 +365,19 @@ void Book::DrawCurrentCbzView(Text *ts) {
   if (cbz_state->current_interactive.page != page_index)
     ResetCbzBitmapCache(&cbz_state->current_interactive);
 
-  if (!EnsureCbzPreviewCache(cbz_state, page_index))
+  if (!EnsureCbzPreviewCache(cbz_state, page_index)) {
+    IStatusReporter *reporter = GetStatusReporter();
+    if (reporter && cbz_state->failed_page == page_index &&
+        cbz_state->logged_failed_page != page_index) {
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_WARN, DBG_CAT_RENDER,
+                   "CBZ page load failed page=%d path=%s entry=%s reason=%s",
+                   page_index, cbz_state->archive_path.c_str(),
+                   cbz_state->entries[(size_t)page_index].normalized_path.c_str(),
+                   cbz_state->last_error.c_str());
+      cbz_state->logged_failed_page = page_index;
+    }
     return;
+  }
 
   const pdf_view_utils::NormalizedRect viewport =
       ComputeCurrentCbzViewport(cbz_state);

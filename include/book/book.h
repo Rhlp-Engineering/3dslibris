@@ -283,6 +283,7 @@ public:
   bool PumpDeferredCbzWork(u32 budget_ms);
   void CancelCbzDeferredWork();
   void SetMuPdfViewportInteraction(bool active);
+  void ResetMuPdfViewport();
   bool ChangeMuPdfZoom(int delta);
   bool MoveMuPdfViewportToPreview(int touch_x, int touch_y);
   bool JumpMuPdfChapter(int delta);

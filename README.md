@@ -25,8 +25,9 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 - Repository status: public release available and under active maintenance
 - Latest downloadable binaries and SD package: [GitHub Releases](https://github.com/RigleGit/3dslibris/releases)
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
+- Releases also include `3dslibris-debug.cia` for the same debug-oriented build on installed-title setups
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` with books stored on SD and optional bundled books in RomFS.
-- Main reading focus in `2.2.0`: safer HOME/app lifecycle handling across `.3dsx` and `.cia`, more conservative old3DS cover scheduling under memory pressure, and improved EPUB spacing/TOC handling.
+- Main reading focus in `2.2.0`: safer HOME/app lifecycle handling across `.3dsx` and `.cia`, more conservative old3DS cover scheduling under memory pressure, improved EPUB spacing/TOC handling, and better fixed-layout reading controls for PDF/CBZ/XPS on 3DS hardware.
 
 ## Install
 
@@ -60,8 +61,9 @@ Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
 - `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
 - `make cia` creates `3dslibris.cia`
+- `make debug-cia` creates `3dslibris-debug.cia`
 - `make source-release` creates `dist/3dslibris-source.tar.gz`
-- GitHub Releases: pushing a tag like `v2.2.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
+- GitHub Releases: pushing a tag like `v2.2.0` triggers `.github/workflows/release.yml` and attaches `3dslibris.cia`, `3dslibris-debug.cia`, `3dslibris.3dsx`, `3dslibris-debug.3dsx`, `dist/3dslibris-sdmc.zip`, and `dist/3dslibris-source.tar.gz` to the release
 
 ## Supported formats
 
@@ -95,13 +97,16 @@ Generated install package targets:
 - `PDF`
   - Viewer-only path with MuPDF-backed rendering
   - Top screen shows a zoomed page region; bottom screen shows the full-page preview and viewport box
+  - Includes an extra zoom tier aimed at old3DS readability
   - Uses the shared fixed-layout reader controls documented below
   - PDF-enabled builds in this branch are distributed with AGPL-driven notice and source-release requirements; see the license section below
 - `CBZ`
   - Viewer-only path with MuPDF-backed image-page rendering
+  - Includes an extra zoom tier aimed at old3DS readability
   - Uses the shared fixed-layout reader controls documented below
 - `XPS`
   - Viewer-only path with MuPDF-backed rendering
+  - Includes an extra zoom tier aimed at old3DS readability
   - Uses the shared fixed-layout reader controls documented below
 
 ## Known limitations
@@ -135,6 +140,7 @@ release packaging flow used by the project, including the `.cia` toolchain.
 
 Expected outputs:
 - `3dslibris.cia`
+- `3dslibris-debug.cia`
 - `3dslibris.3dsx`
 - `3dslibris-debug.3dsx`
 - `3dslibris.smdh`
@@ -188,10 +194,15 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 - `A`: zoom in
 - `B`: zoom out
 - `Left/Right`: previous or next page
+- `L/R`: previous or next page in fixed-layout documents (`PDF` / `CBZ`)
 - `Up/Down`: next or previous chapter when the document exposes an outline; otherwise previous or next page
 - `Touch`: move the viewport by tapping or dragging on the page preview
 - `SELECT`: open settings
 - `START`: return to library
+
+Fixed-layout notes:
+- Zoom now includes one extra tier beyond the previous maximum, mainly to help readability on old3DS.
+- Page changes reset the fixed-layout viewport to a sane default before deferred redraw/refinement continues.
 
 ## Documentation
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)

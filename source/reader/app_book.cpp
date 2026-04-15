@@ -28,6 +28,7 @@
 #include "formats/common/book_error.h"
 #include "shared/app_flow_utils.h"
 #include "reader/deferred_relayout_utils.h"
+#include "reader/fixed_layout_input_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/button.h"
 #include "debug_log.h"
@@ -567,6 +568,20 @@ void ReaderController::HandleEventInBook() {
         status_dirty = true;
         delay_fixed_layout_deferred();
       }
+    } else if (reader_input_utils::FixedLayoutSupportsShoulderPageTurn(
+                   bookcurrent_->format) &&
+               (keys & (key.r | KEY_R))) {
+      if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1)) {
+        status_dirty = true;
+        delay_fixed_layout_deferred();
+      }
+    } else if (reader_input_utils::FixedLayoutSupportsShoulderPageTurn(
+                   bookcurrent_->format) &&
+               (keys & (key.l | KEY_L))) {
+      if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1)) {
+        status_dirty = true;
+        delay_fixed_layout_deferred();
+      }
     } else if (keys & (key.right | KEY_RIGHT)) {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1)) {
         status_dirty = true;
@@ -580,6 +595,7 @@ void ReaderController::HandleEventInBook() {
     } else if (keys & (key.down | KEY_DOWN)) {
       if (!bookcurrent_->GetChapters().empty()) {
         if (bookcurrent_->JumpFixedLayoutChapter(1)) {
+          bookcurrent_->ResetFixedLayoutViewportForNavigation();
           DrawBookPage(bookcurrent_, ts);
           status_dirty = true;
           delay_fixed_layout_deferred();
@@ -591,6 +607,7 @@ void ReaderController::HandleEventInBook() {
     } else if (keys & (key.up | KEY_UP)) {
       if (!bookcurrent_->GetChapters().empty()) {
         if (bookcurrent_->JumpFixedLayoutChapter(-1)) {
+          bookcurrent_->ResetFixedLayoutViewportForNavigation();
           DrawBookPage(bookcurrent_, ts);
           status_dirty = true;
           delay_fixed_layout_deferred();

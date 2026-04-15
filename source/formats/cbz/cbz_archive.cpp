@@ -5,8 +5,18 @@
 
 #include <algorithm>
 #include <climits>
+#include <cstdio>
 
 namespace {
+
+static char g_last_cbz_archive_error[192] = "";
+
+void SetLastCbzArchiveError(const char *message) {
+  if (!message)
+    message = "";
+  std::snprintf(g_last_cbz_archive_error, sizeof(g_last_cbz_archive_error),
+                "%s", message);
+}
 
 std::string NormalizeCbzEntryName(const std::string &name) {
   std::string out = name;
@@ -31,6 +41,7 @@ bool ReadCurrentZipEntry(unzFile uf, unsigned long uncompressed_size,
   out->clear();
   if (uncompressed_size == 0 || uncompressed_size > max_bytes ||
       uncompressed_size > (unsigned long)INT_MAX) {
+    SetLastCbzArchiveError("zip entry rejected by size limits");
     return false;
   }
   out->reserve((size_t)uncompressed_size);
@@ -45,6 +56,7 @@ bool ReadCurrentZipEntry(unzFile uf, unsigned long uncompressed_size,
     if (total + (size_t)n > max_bytes) {
       unzCloseCurrentFile(uf);
       out->clear();
+      SetLastCbzArchiveError("zip entry exceeded size limit while reading");
       return false;
     }
     out->insert(out->end(), buf, buf + n);
@@ -54,6 +66,8 @@ bool ReadCurrentZipEntry(unzFile uf, unsigned long uncompressed_size,
   unzCloseCurrentFile(uf);
   if (n < 0 || out->empty()) {
     out->clear();
+    SetLastCbzArchiveError(n < 0 ? "zip entry read failed"
+                                 : "zip entry was empty");
     return false;
   }
   return true;
@@ -66,10 +80,13 @@ bool IndexCbzArchiveEntries(const std::string &archive_path,
   if (!entries || archive_path.empty())
     return false;
   entries->clear();
+  SetLastCbzArchiveError("");
 
   unzFile uf = unzOpen(archive_path.c_str());
-  if (!uf)
+  if (!uf) {
+    SetLastCbzArchiveError("unable to open CBZ archive");
     return false;
+  }
 
   int rc = unzGoToFirstFile(uf);
   while (rc == UNZ_OK) {
@@ -97,7 +114,11 @@ bool IndexCbzArchiveEntries(const std::string &archive_path,
                    [](const CbzPageEntry &a, const CbzPageEntry &b) {
                      return a.normalized_path < b.normalized_path;
                    });
-  return !entries->empty();
+  if (entries->empty()) {
+    SetLastCbzArchiveError("no supported image entries found in CBZ");
+    return false;
+  }
+  return true;
 }
 
 bool ReadCbzArchiveEntryBytes(const std::string &archive_path,
@@ -107,10 +128,13 @@ bool ReadCbzArchiveEntryBytes(const std::string &archive_path,
   if (!out || archive_path.empty() || entry.path.empty())
     return false;
   out->clear();
+  SetLastCbzArchiveError("");
 
   unzFile uf = unzOpen(archive_path.c_str());
-  if (!uf)
+  if (!uf) {
+    SetLastCbzArchiveError("unable to reopen CBZ archive");
     return false;
+  }
 
   bool ok = false;
   if (entry.offset != 0 && unzSetOffset(uf, entry.offset) == UNZ_OK) {
@@ -124,8 +148,14 @@ bool ReadCbzArchiveEntryBytes(const std::string &archive_path,
     unz_file_info fi;
     if (unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0) == UNZ_OK)
       ok = ReadCurrentZipEntry(uf, fi.uncompressed_size, out, max_bytes);
+  } else if (!ok) {
+    SetLastCbzArchiveError("zip entry locate failed");
   }
 
   unzClose(uf);
   return ok;
+}
+
+const char *GetLastCbzArchiveError() {
+  return g_last_cbz_archive_error;
 }

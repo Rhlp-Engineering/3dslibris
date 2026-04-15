@@ -3,6 +3,7 @@
 #include "formats/mupdf/mupdf_view.h"
 
 #include "book/page.h"
+#include "formats/common/fixed_layout_viewport_utils.h"
 #include "ui/text.h"
 
 namespace {
@@ -484,6 +485,16 @@ void Book::SetMuPdfViewportInteraction(bool active) {
   if (!IsPdf() || !mupdf_state)
     return;
   mupdf_state->viewport_interaction_active = active;
+}
+
+void Book::ResetMuPdfViewport() {
+  if (!IsPdf() || !mupdf_state)
+    return;
+  const fixed_layout_viewport_utils::ViewportCenter center =
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+  mupdf_state->viewport_center_x = center.x;
+  mupdf_state->viewport_center_y = center.y;
+  mupdf_state->viewport_interaction_active = false;
 }
 
 bool Book::JumpMuPdfChapter(int delta) {

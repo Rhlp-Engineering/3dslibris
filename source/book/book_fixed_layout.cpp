@@ -28,6 +28,10 @@ void Book::SetFixedLayoutViewportInteraction(bool active) {
 }
 
 void Book::ResetFixedLayoutViewportForNavigation() {
+  if (IsPdf()) {
+    ResetMuPdfViewport();
+    return;
+  }
   if (IsCbz())
     ResetCbzViewport();
 }
