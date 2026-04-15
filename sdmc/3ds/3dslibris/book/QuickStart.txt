@@ -72,7 +72,7 @@ Bookmarks:
 Other:
 - X: cycle theme (normal / dark / sepia)
 - Start: return to library
-- Select: open settings
+- Select: open BOOK settings
 
 Bookmark persistence:
 - Bookmarks are saved in `sdmc:/3ds/3dslibris/3dslibris.xml`.
@@ -101,7 +101,7 @@ Viewport navigation:
 
 Other:
 - Start: return to library
-- Select: open settings
+- Select: open BOOK settings
 
 Notes:
 - High-quality redraw can appear shortly after interaction.
@@ -148,6 +148,28 @@ MOBI notes:
 8) Settings and orientation
 ------------------------------------------------------------
 
+- There are two settings menus:
+  - GENERAL settings: open from the library
+  - BOOK settings: open while reading
+- GENERAL settings contain global options such as:
+  - font configuration
+  - font size
+  - paragraph spacing
+  - screen orientation
+  - clock format
+  - color mode
+  - library view
+- BOOK settings contain only book/document-specific actions such as:
+  - go to page
+  - index
+  - bookmarks
+  - format-specific options like MOBI line-wrap fix
+- Go to page:
+  - touch the slider to choose a page
+  - Left/Right: move by 1 page
+  - Up/Down or L/R: move by 10 pages
+  - A: confirm
+  - B / Select / Start: cancel
 - Left-handed mode supported
 - Grid/list navigation behavior follows orientation updates
 - Runtime UI assets and fonts can be replaced from SD paths

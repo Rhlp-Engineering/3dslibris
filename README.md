@@ -152,7 +152,7 @@ Expected outputs:
 - `A`: open the selected book
 - `L` / `R`: jump to the previous or next library page
 - `Touch`: tap a book to select it, tap it again to open it
-- `Y` / `Select`: open settings
+- `Y` / `Select`: open `GENERAL` settings
 
 Bundled runtime files:
 - `sdmc/3ds/3dslibris/resources/splash.jpg`
@@ -186,7 +186,7 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 - `D-Pad Left/Right`: jump between bookmarks
 - `Y`: toggle bookmark
 - `X`: change background color
-- `SELECT`: settings
+- `SELECT`: open `BOOK` settings for the current book/format
 - `START`: return to library
 - Touch UI for library, settings, index, bookmarks, font menus...
 
@@ -197,12 +197,23 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 - `L/R`: previous or next page in fixed-layout documents (`PDF` / `CBZ`)
 - `Up/Down`: next or previous chapter when the document exposes an outline; otherwise previous or next page
 - `Touch`: move the viewport by tapping or dragging on the page preview
-- `SELECT`: open settings
+- `SELECT`: open `BOOK` settings for the current document
 - `START`: return to library
 
 Fixed-layout notes:
 - Zoom now includes one extra tier beyond the previous maximum, mainly to help readability on old3DS.
 - Page changes reset the fixed-layout viewport to a sane default before deferred redraw/refinement continues.
+
+## Settings menus
+- `GENERAL` settings are opened from the library and contain global preferences such as font configuration, font size, paragraph spacing, screen orientation, clock format, color mode, and library view.
+- `BOOK` settings are opened while reading and contain only book/document-specific actions such as `go to page`, `index`, `bookmarks`, and format-specific toggles like the MOBI `line wrap fix` when applicable.
+- `go to page` opens a slider popup with the current page number.
+- In the `go to page` popup:
+  - `Touch`: drag/tap the slider to choose a page
+  - `Left/Right`: move by 1 page
+  - `Up/Down` or `L/R`: move by 10 pages
+  - `A`: confirm jump
+  - `B` / `Select` / `Start`: cancel
 
 ## Documentation
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
