@@ -80,11 +80,30 @@ void TestLookupMarginsForClassAttrRejectsUnknownClasses() {
   test::ExpectFalse("no classes found", found);
 }
 
+void TestParseCssIntoClassMapDetectsListStyleNone() {
+  const char *css =
+      ".ornamentless { list-style-type: none; }\n"
+      "ol.clean { list-style: none; }\n"
+      ".normal-list { list-style-type: disc; }\n";
+
+  CssClassMap out;
+  epub_css_class_map::ParseCssIntoClassMap(css, std::strlen(css), &out);
+
+  test::ExpectTrue("ornamentless parsed", out.find("ornamentless") != out.end());
+  test::ExpectTrue("qualified clean parsed", out.find("clean") != out.end());
+  test::ExpectTrue("ornamentless hides markers",
+                   out["ornamentless"].hide_list_markers);
+  test::ExpectTrue("clean hides markers", out["clean"].hide_list_markers);
+  test::ExpectFalse("normal list keeps markers",
+                    out["normal-list"].hide_list_markers);
+}
+
 } // namespace
 
 int main() {
   TestParseCssIntoClassMapSupportsQualifiedAndGroupedSelectors();
   TestLookupMarginsForClassAttrMergesKnownClasses();
   TestLookupMarginsForClassAttrRejectsUnknownClasses();
+  TestParseCssIntoClassMapDetectsListStyleNone();
   return 0;
 }

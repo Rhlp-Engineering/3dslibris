@@ -12,6 +12,9 @@ using book_xml_css_style_utils::MarginTopResult;
 struct CssClassMargins {
   MarginTopResult margin_top;
   MarginTopResult margin_bottom;
+  bool hide_list_markers;
+
+  CssClassMargins() : hide_list_markers(false) {}
 };
 
 // Map: bare class name (no '.') → extracted margins.
@@ -28,5 +31,8 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out);
 bool LookupMarginsForClassAttr(const std::string &class_attr,
                                const CssClassMap &class_map,
                                CssClassMargins *out);
+
+bool LookupHideListMarkersForClassAttr(const std::string &class_attr,
+                                       const CssClassMap &class_map);
 
 } // namespace epub_css_class_map

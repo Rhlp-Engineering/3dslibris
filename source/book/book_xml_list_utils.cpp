@@ -71,6 +71,22 @@ bool ParseListMarkerHiddenAttr(const char **attr) {
   return false;
 }
 
+bool ParseListMarkerHiddenCssClass(const parsedata_t *p, const char **attr) {
+  if (!p || !attr)
+    return false;
+  for (int i = 0; attr[i]; i += 2) {
+    const char *name = attr[i];
+    const char *value = attr[i + 1];
+    if (!value || !value[0])
+      continue;
+    if (!AttrNameEqualsLocal(name, "class"))
+      continue;
+    return epub_css_class_map::LookupHideListMarkersForClassAttr(
+        value, p->css_class_map);
+  }
+  return false;
+}
+
 ordered_list_style_t ParseOrderedListStyleAttr(const char **attr,
                                                bool *has_explicit_style) {
   if (has_explicit_style)
@@ -180,7 +196,8 @@ void ConfigureElementListSemantics(parsedata_t *p, const char **attr) {
     return;
 
   const u8 current = (u8)(p->stacksize - 1);
-  p->list_marker_hidden_stack[current] = ParseListMarkerHiddenAttr(attr);
+  p->list_marker_hidden_stack[current] =
+      ParseListMarkerHiddenAttr(attr) || ParseListMarkerHiddenCssClass(p, attr);
 
   if (p->stack[current] != TAG_OL)
     return;

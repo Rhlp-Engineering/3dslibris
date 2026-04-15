@@ -148,6 +148,22 @@ void TestListMarkerSuppressionFollowsClassAndAncestors() {
                    book_xml_list_utils::HasSuppressedListMarkerContext(&p));
 }
 
+void TestListMarkerSuppressionUsesCssClassMap() {
+  parsedata_t p{};
+  parse_init(&p);
+
+  epub_css_class_map::CssClassMargins style{};
+  style.hide_list_markers = true;
+  p.css_class_map["ornamentless"] = style;
+
+  const char *attrs[] = {"class", "ornamentless", NULL};
+  parse_push(&p, TAG_UL);
+  book_xml_list_utils::ConfigureElementListSemantics(&p, attrs);
+
+  test::ExpectTrue("css class map suppresses markers",
+                   book_xml_list_utils::HasSuppressedListMarkerContext(&p));
+}
+
 void TestPendingListItemContentTracksNearestItem() {
   parsedata_t p{};
   parse_init(&p);
@@ -181,6 +197,7 @@ int main() {
   TestOrderedListMarkerFormatting();
   TestOrderedListStyleFollowsDepthAndTypeAttr();
   TestListMarkerSuppressionFollowsClassAndAncestors();
+  TestListMarkerSuppressionUsesCssClassMap();
   TestPendingListItemContentTracksNearestItem();
   return 0;
 }
