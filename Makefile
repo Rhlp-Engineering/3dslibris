@@ -96,6 +96,7 @@ BANNERTOOL	?= bannertool
 endif
 
 CIA_RSF		:=	assets/cia/build-cia.rsf
+CIA_DEBUG_RSF	:=	assets/cia/build-cia-debug.rsf
 CIA_BANNER_IMG	:=	assets/release/banner.png
 CIA_BANNER_WAV	:=	assets/cia/BannerAudio.wav
 CIA_LOGO	:=	assets/cia/logo.bcma.lz
@@ -316,6 +317,7 @@ debug-cia:
 	@$(MAKE) --no-print-directory \
 		TARGET=$(DEBUG_TARGET) \
 		BUILD=$(DEBUG_BUILD) \
+		CIA_RSF=$(CIA_DEBUG_RSF) \
 		APP_TITLE_OVERRIDE="3dslibris debug" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
@@ -323,6 +325,7 @@ debug-cia:
 	@$(MAKE) --no-print-directory \
 		TARGET=$(DEBUG_TARGET) \
 		BUILD=$(DEBUG_BUILD) \
+		CIA_RSF=$(CIA_DEBUG_RSF) \
 		APP_TITLE_OVERRIDE="3dslibris debug" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
