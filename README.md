@@ -27,7 +27,7 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
 - Releases also include `3dslibris-debug.cia` for the same debug-oriented build on installed-title setups
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` with books stored on SD and optional bundled books in RomFS.
-- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and the per-book `go to page` slider from `2.3.0`, while fixing a real crash when switching directly from one open book to another and hardening the reader handoff state so failed opens return cleanly to the library.
+- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and the per-book `go to page` slider from `2.3.0`, while tightening reader stability and EPUB compatibility.
 
 ## Install
 
