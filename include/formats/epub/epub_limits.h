@@ -12,6 +12,7 @@ namespace epub_limits {
 
 static const size_t kTocMaxBytes = 192 * 1024;
 static const size_t kTocMaxEntries = 2048;
+static const size_t kContentMaxBytes = 12 * 1024 * 1024;
 static const size_t kCoverMaxEntryBytes = 8 * 1024 * 1024;
 static const size_t kCoverMaxNonJpegBytes = 2 * 1024 * 1024;
 static const size_t kCoverMaxDecodedRgbBytes = 16 * 1024 * 1024;
