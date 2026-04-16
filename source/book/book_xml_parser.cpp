@@ -23,6 +23,7 @@
 #include "book/book_xml_table_utils.h"
 #include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
+#include "formats/common/html_entity_utils.h"
 #include "book/heading_layout.h"
 #include "formats/epub/epub.h"
 #include "formats/epub/epub_page_cache.h"
@@ -2390,42 +2391,15 @@ int unknown(void *encodingHandlerData, const XML_Char *name,
 
 void fallback(void *data, const XML_Char *s, int len) {
   parsedata_t *p = (parsedata_t *)data;
-  int advancespace = p->ts->GetAdvance(' ');
-  if (s[0] == '&') {
-    int code = 0;
-    sscanf(s, "&#%d;", &code);
-    if (code) {
-      AppendParsedByte(p, (u32)code);
-      p->pen.x += p->ts->GetAdvance(code);
-      return;
-    }
+  if (!p || !s || len <= 0 || s[0] != '&')
+    return;
 
-    if (!strncmp(s, "&nbsp;", 5)) {
-      AppendParsedByte(p, ' ');
-      p->pen.x += advancespace;
-      return;
-    }
-    if (!strcmp(s, "&quot;")) {
-      AppendParsedByte(p, '"');
-      p->pen.x += advancespace;
-      return;
-    }
-    if (!strcmp(s, "&amp;")) {
-      AppendParsedByte(p, '&');
-      p->pen.x += advancespace;
-      return;
-    }
-    if (!strcmp(s, "&lt;")) {
-      AppendParsedByte(p, '<');
-      p->pen.x += advancespace;
-      return;
-    }
-    if (!strcmp(s, "&gt;")) {
-      AppendParsedByte(p, '>');
-      p->pen.x += advancespace;
-      return;
-    }
-  }
+  uint32_t cp = 0;
+  if (!html_entity_utils::DecodeHtmlEntityCodepoint(std::string(s, len), &cp))
+    return;
+
+  AppendParsedByte(p, (u32)cp);
+  p->pen.x += p->ts->GetAdvance(cp);
 }
 
 } // namespace xml::book

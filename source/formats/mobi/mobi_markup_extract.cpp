@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "book/book.h"
+#include "formats/common/html_entity_utils.h"
 #include "formats/common/text_helpers.h"
 #include "formats/mobi/mobi.h"
 #include "formats/mobi/mobi_heading_markers.h"
@@ -70,47 +71,7 @@ static void AppendSingleSpace(std::string *out) {
 }
 
 static bool DecodeHtmlEntity(const std::string &entity, std::string *out) {
-  if (!out)
-    return false;
-  if (entity.empty())
-    return false;
-  if (entity[0] == '#') {
-    unsigned long parsed = 0;
-    if (entity.size() >= 2 && (entity[1] == 'x' || entity[1] == 'X')) {
-      if (sscanf(entity.c_str() + 2, "%lx", &parsed) != 1)
-        return false;
-    } else {
-      if (sscanf(entity.c_str() + 1, "%lu", &parsed) != 1)
-        return false;
-    }
-    u32 cp = (u32)parsed;
-    if (cp == 0)
-      return false;
-    AppendUtf8Codepoint(out, cp);
-    return true;
-  }
-
-  if (entity == "amp")
-    out->push_back('&');
-  else if (entity == "lt")
-    out->push_back('<');
-  else if (entity == "gt")
-    out->push_back('>');
-  else if (entity == "quot")
-    out->push_back('"');
-  else if (entity == "apos")
-    out->push_back('\'');
-  else if (entity == "nbsp")
-    out->push_back(' ');
-  else if (entity == "mdash")
-    AppendUtf8Codepoint(out, 0x2014);
-  else if (entity == "ndash")
-    AppendUtf8Codepoint(out, 0x2013);
-  else if (entity == "hellip")
-    AppendUtf8Codepoint(out, 0x2026);
-  else
-    return false;
-  return true;
+  return html_entity_utils::DecodeHtmlEntityUtf8(entity, out);
 }
 
 enum MobiMarkupBlockItemType {

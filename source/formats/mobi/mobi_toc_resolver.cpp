@@ -13,6 +13,7 @@
 #include <string.h>
 
 #include "debug_log.h"
+#include "formats/common/html_entity_utils.h"
 #include "formats/common/file_read_utils.h"
 #include "formats/mobi/mobi_record_decode.h"
 #include "formats/mobi/mobi_record_scan.h"
@@ -25,61 +26,7 @@ typedef mobi_structured_toc_parser::MobiStructuredTocEntry MobiStructuredTocEntr
 static const size_t kMobiMaxBytes = 64 * 1024 * 1024;
 
 bool DecodeHtmlEntity(const std::string &entity, std::string *out) {
-  if (!out)
-    return false;
-  if (entity.empty())
-    return false;
-  if (entity[0] == '#') {
-    unsigned long parsed = 0;
-    if (entity.size() >= 2 && (entity[1] == 'x' || entity[1] == 'X')) {
-      if (sscanf(entity.c_str() + 2, "%lx", &parsed) != 1)
-        return false;
-    } else {
-      if (sscanf(entity.c_str() + 1, "%lu", &parsed) != 1)
-        return false;
-    }
-    u32 cp = (u32)parsed;
-    if (cp == 0)
-      return false;
-    if (cp < 0x80u) {
-      out->push_back((char)cp);
-    } else if (cp < 0x800u) {
-      out->push_back((char)(0xC0u | (cp >> 6)));
-      out->push_back((char)(0x80u | (cp & 0x3Fu)));
-    } else if (cp < 0x10000u) {
-      out->push_back((char)(0xE0u | (cp >> 12)));
-      out->push_back((char)(0x80u | ((cp >> 6) & 0x3Fu)));
-      out->push_back((char)(0x80u | (cp & 0x3Fu)));
-    } else {
-      out->push_back((char)(0xF0u | (cp >> 18)));
-      out->push_back((char)(0x80u | ((cp >> 12) & 0x3Fu)));
-      out->push_back((char)(0x80u | ((cp >> 6) & 0x3Fu)));
-      out->push_back((char)(0x80u | (cp & 0x3Fu)));
-    }
-    return true;
-  }
-
-  if (entity == "amp")
-    out->push_back('&');
-  else if (entity == "lt")
-    out->push_back('<');
-  else if (entity == "gt")
-    out->push_back('>');
-  else if (entity == "quot")
-    out->push_back('"');
-  else if (entity == "apos")
-    out->push_back('\'');
-  else if (entity == "nbsp")
-    out->push_back(' ');
-  else if (entity == "mdash")
-    out->append("\xE2\x80\x94");
-  else if (entity == "ndash")
-    out->append("\xE2\x80\x93");
-  else if (entity == "hellip")
-    out->append("\xE2\x80\xA6");
-  else
-    return false;
-  return true;
+  return html_entity_utils::DecodeHtmlEntityUtf8(entity, out);
 }
 
 size_t FindAsciiNoCase(const std::string &haystack, const char *needle,
