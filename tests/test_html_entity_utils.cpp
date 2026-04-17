@@ -71,6 +71,19 @@ void TestNormalizesNamedEntitiesForXml() {
                     "Portugu&#234;s &amp; cora&#231;&#227;o &#8211; &#227;");
 }
 
+void TestNormalizesNamedEntitiesAcrossChunks() {
+  html_entity_utils::ChunkedEntityNormalizerState state;
+  std::string out;
+  html_entity_utils::NormalizeHtmlNamedEntitiesForXmlChunk(
+      "&ec", false, &state, &out);
+  html_entity_utils::NormalizeHtmlNamedEntitiesForXmlChunk(
+      "irc; e &nd", false, &state, &out);
+  html_entity_utils::NormalizeHtmlNamedEntitiesForXmlChunk(
+      "ash;", true, &state, &out);
+  test::ExpectStrEq("chunked entities normalized", out.c_str(),
+                    "&#234; e &#8211;");
+}
+
 } // namespace
 
 int main() {
@@ -80,5 +93,6 @@ int main() {
   TestEncodesUtf8Output();
   TestRejectsInvalidEntities();
   TestNormalizesNamedEntitiesForXml();
+  TestNormalizesNamedEntitiesAcrossChunks();
   return 0;
 }

@@ -1,5 +1,6 @@
 #include "formats/common/xml_parse_utils.h"
 
+#include <algorithm>
 #include <stdio.h>
 #include <vector>
 
@@ -142,6 +143,14 @@ XmlParseResult ParseXmlString(const std::string &xml,
 
 XmlParseResult ParseXmlZipEntry(unzFile uf, const XmlParserOptions &options,
                                 size_t chunk_size) {
+  return ParseXmlZipEntryTransformed(uf, options, chunk_size, NULL, NULL);
+}
+
+XmlParseResult ParseXmlZipEntryTransformed(unzFile uf,
+                                           const XmlParserOptions &options,
+                                           size_t chunk_size,
+                                           XmlTransformChunkFn transform_chunk,
+                                           void *transform_ctx) {
   if (!uf || chunk_size == 0) {
     XmlParseResult result;
     result.ok = false;
@@ -154,6 +163,7 @@ XmlParseResult ParseXmlZipEntry(unzFile uf, const XmlParserOptions &options,
     return BuildParseError(NULL, 0);
 
   std::vector<char> buffer(chunk_size);
+  std::string transformed;
   XmlParseResult result;
   while (true) {
     if (ShouldAbortParse(options)) {
@@ -168,7 +178,18 @@ XmlParseResult ParseXmlZipEntry(unzFile uf, const XmlParserOptions &options,
       break;
     }
 
-    enum XML_Status status = XML_Parse(parser, buffer.data(), len, len == 0);
+    const bool final = (len == 0);
+    const char *parse_bytes = buffer.data();
+    int parse_len = len;
+    if (transform_chunk) {
+      transformed.clear();
+      transform_chunk(std::string(buffer.data(), (size_t)std::max(len, 0)),
+                      final, transform_ctx, &transformed);
+      parse_bytes = transformed.c_str();
+      parse_len = (int)transformed.size();
+    }
+
+    enum XML_Status status = XML_Parse(parser, parse_bytes, parse_len, final);
     result.bytes_consumed += (size_t)len;
     if (status == XML_STATUS_ERROR) {
       result = BuildParseError(parser, result.bytes_consumed);

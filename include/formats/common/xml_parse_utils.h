@@ -20,6 +20,8 @@
 namespace xml_parse_utils {
 
 typedef bool (*XmlShouldStopFn)(void *user_data);
+typedef void (*XmlTransformChunkFn)(const std::string &chunk, bool final,
+                                    void *transform_ctx, std::string *out);
 
 struct XmlParserOptions {
   XML_StartElementHandler start_element;
@@ -61,6 +63,11 @@ XmlParseResult ParseXmlString(const std::string &xml,
                               const XmlParserOptions &options);
 XmlParseResult ParseXmlZipEntry(unzFile uf, const XmlParserOptions &options,
                                 size_t chunk_size);
+XmlParseResult ParseXmlZipEntryTransformed(unzFile uf,
+                                           const XmlParserOptions &options,
+                                           size_t chunk_size,
+                                           XmlTransformChunkFn transform_chunk,
+                                           void *transform_ctx);
 std::string FormatXmlParseError(const XmlParseResult &result);
 
 } // namespace xml_parse_utils

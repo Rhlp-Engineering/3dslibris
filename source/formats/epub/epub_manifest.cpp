@@ -37,7 +37,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/common/html_entity_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_cover.h"
-#include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_package_toc_utils.h"
 #include "formats/epub/epub_zip_utils.h"
 #include "parse.h"
@@ -67,34 +66,6 @@ using epub_package_toc_utils::LocateZipEntrySafe;
 using epub_package_toc_utils::ReadZipEntryText;
 
 namespace {
-
-bool ReadOpenZipEntryText(unzFile uf, std::string *out, size_t max_bytes) {
-  if (!uf || !out)
-    return false;
-
-  unz_file_info fi;
-  if (unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0) != UNZ_OK)
-    return false;
-  if (fi.uncompressed_size == 0 || fi.uncompressed_size > max_bytes)
-    return false;
-
-  out->assign((size_t)fi.uncompressed_size, '\0');
-  size_t total = 0;
-  while (total < out->size()) {
-    int n = unzReadCurrentFile(uf, &(*out)[total],
-                               (unsigned int)(out->size() - total));
-    if (n < 0) {
-      out->clear();
-      return false;
-    }
-    if (n == 0)
-      break;
-    total += (size_t)n;
-  }
-
-  out->resize(total);
-  return total > 0;
-}
 
 std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
   const char *s = xhtml_text.c_str();
@@ -170,6 +141,15 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
     return;
 
   epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(), out);
+}
+
+void NormalizeHtmlEntityChunkForXml(const std::string &chunk, bool final,
+                                    void *transform_ctx, std::string *out) {
+  html_entity_utils::ChunkedEntityNormalizerState *state =
+      static_cast<html_entity_utils::ChunkedEntityNormalizerState *>(
+          transform_ctx);
+  html_entity_utils::NormalizeHtmlNamedEntitiesForXmlChunk(chunk, final, state,
+                                                           out);
 }
 
 } // namespace
@@ -393,11 +373,10 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
 
   xml_parse_utils::XmlParseResult parse_result;
   if (epd->type == PARSE_CONTENT) {
-    std::string xml;
-    if (!ReadOpenZipEntryText(uf, &xml, epub_limits::kContentMaxBytes))
-      return XML_ERROR_NO_MEMORY;
-    parse_result = xml_parse_utils::ParseXmlString(
-        html_entity_utils::NormalizeHtmlNamedEntitiesForXml(xml), options);
+    html_entity_utils::ChunkedEntityNormalizerState normalize_state;
+    parse_result = xml_parse_utils::ParseXmlZipEntryTransformed(
+        uf, options, parser_limits::kXmlStreamBufferSize,
+        NormalizeHtmlEntityChunkForXml, &normalize_state);
   } else {
     parse_result =
         xml_parse_utils::ParseXmlZipEntry(uf, options,

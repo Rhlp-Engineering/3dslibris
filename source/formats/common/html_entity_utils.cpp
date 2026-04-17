@@ -76,6 +76,32 @@ static std::string StripEntityDelimiters(const std::string &entity) {
   return entity.substr(start, end - start);
 }
 
+static void AppendNormalizedEntityToken(const std::string &full,
+                                        std::string *out) {
+  if (!out) {
+    return;
+  }
+  const std::string token = StripEntityDelimiters(full);
+  if (token.empty()) {
+    *out += full;
+    return;
+  }
+  if (token[0] == '#' || IsPredefinedXmlEntity(token)) {
+    *out += full;
+    return;
+  }
+
+  uint32_t cp = 0;
+  if (!DecodeHtmlEntityCodepoint(token, &cp)) {
+    *out += full;
+    return;
+  }
+
+  char numeric[24];
+  std::snprintf(numeric, sizeof(numeric), "&#%u;", (unsigned)cp);
+  *out += numeric;
+}
+
 } // namespace
 
 bool DecodeHtmlEntityCodepoint(const std::string &entity, uint32_t *out) {
@@ -168,6 +194,44 @@ std::string NormalizeHtmlNamedEntitiesForXml(const std::string &in) {
   }
 
   return out;
+}
+
+void NormalizeHtmlNamedEntitiesForXmlChunk(const std::string &chunk, bool final,
+                                           ChunkedEntityNormalizerState *state,
+                                           std::string *out) {
+  if (!state || !out)
+    return;
+
+  std::string input;
+  input.reserve(state->carry.size() + chunk.size());
+  input += state->carry;
+  input += chunk;
+  state->carry.clear();
+
+  for (size_t i = 0; i < input.size(); ++i) {
+    if (input[i] != '&') {
+      out->push_back(input[i]);
+      continue;
+    }
+
+    const size_t semi = input.find(';', i + 1);
+    if (semi == std::string::npos) {
+      if (!final) {
+        state->carry.assign(input.data() + i, input.size() - i);
+      } else {
+        out->append(input.data() + i, input.size() - i);
+      }
+      return;
+    }
+
+    if (semi - i > 24) {
+      out->push_back(input[i]);
+      continue;
+    }
+
+    AppendNormalizedEntityToken(input.substr(i, semi - i + 1), out);
+    i = semi;
+  }
 }
 
 } // namespace html_entity_utils
