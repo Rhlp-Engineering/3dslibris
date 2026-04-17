@@ -27,7 +27,7 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
 - Releases also include `3dslibris-debug.cia` for the same debug-oriented build on installed-title setups
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` with books stored on SD and optional bundled books in RomFS.
-- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and `go to page` slider from `2.3.0`, while concentrating on stability fixes for browser rendering, metadata warmup, EPUB parsing, and book-opening lifecycle issues seen on real hardware.
+- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and `go to page` slider from `2.3.0`, while concentrating on real-hardware stability fixes for browser rendering, metadata warmup, EPUB parsing, suspend/open lifecycle, and switching between books.
 
 ## Install
 
@@ -218,6 +218,12 @@ Fixed-layout notes:
   - `Up/Down` or `L/R`: move by 10 pages
   - `A`: confirm jump
   - `B` / `Select` / `Start`: cancel
+
+## 2.3.1 patch focus
+- Hardens the book-opening lifecycle used by `START -> library -> open another book`, including cancellation of stale open sessions and safer suspend/resume behavior while a book is still opening.
+- Fixes browser-side issues seen on hardware in `2.3.0`, including `list view` metadata/title warmup stalling after only a few entries and `gallery view` marquee corruption on the selected title.
+- Improves EPUB robustness by handling more named HTML entities found in real books and by propagating cancellation/error states more cleanly through the open pipeline.
+- Keeps the reading view clear of leftover browser artifacts when entering a book.
 
 ## Documentation
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)
