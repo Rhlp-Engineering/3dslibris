@@ -52,6 +52,17 @@ void TestWarmupRejectsWrappedClock() {
               browser_warmup_utils::IsBrowserWarmupIdle(50, 100, false));
 }
 
+void TestVisibleBrowserEntryCount() {
+  ExpectTrue("list full page visible count",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 0, 12) == 7);
+  ExpectTrue("list tail visible count",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 7, 12) == 5);
+  ExpectTrue("negative page start rejected",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, -1, 12) == 0);
+  ExpectTrue("empty tail rejected",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 12, 12) == 0);
+}
+
 void TestSelectedCoverWarmupUsesShortIdle() {
   ExpectTrue("selected cover uses short idle",
              browser_warmup_utils::ShouldQueueCoverWarmup(
@@ -112,6 +123,7 @@ int main() {
   TestWarmupRequiresIdleDelay();
   TestHeavyWarmupRequiresLongerIdleDelay();
   TestWarmupRejectsWrappedClock();
+  TestVisibleBrowserEntryCount();
   TestSelectedCoverWarmupUsesShortIdle();
   TestNonSelectedCoverWarmupUsesHeavyIdle();
   TestOld3dsWarmupQueueLimit();

@@ -570,10 +570,17 @@ void LibraryController::EnqueueJob(app_job_type_t type, Book *book) {
 }
 
 void LibraryController::QueueBookWarmup(Book *book) {
-  if (!book || book->coverPixels || book->coverAttempts >= kCoverMaxAttempts)
+  if (!book)
     return;
+  const bool cover_done =
+      book->coverPixels || book->coverAttempts >= kCoverMaxAttempts;
   const u64 now_ms = osGetTime();
-  if (book->coverRetryAfterMs != 0 && now_ms < book->coverRetryAfterMs)
+  const bool cover_retry_pending =
+      !cover_done && book->coverRetryAfterMs != 0 &&
+      now_ms < book->coverRetryAfterMs;
+  if (book->metadataIndexTried && cover_done)
+    return;
+  if (cover_retry_pending && book->metadataIndexTried)
     return;
   const size_t queue_before = job_queue_.size();
   const size_t queued_heavy_jobs = CountQueuedHeavyJobs(job_queue_);
@@ -641,8 +648,10 @@ void LibraryController::TickBrowserWarmup() {
   }
   QueueBookWarmup(app_.GetSelectedBook());
   const int page_start = app_.GetBrowserPageStart();
+  const int visible_count = browser_warmup_utils::VisibleBrowserEntryCount(
+      CurrentBrowserPageSize(app_), page_start, app_.BookCount());
   for (int i = page_start;
-       i < app_.BookCount() && i < page_start + APP_BROWSER_BUTTON_COUNT;
+       i < page_start + visible_count;
        i++) {
     Book *book = app_.books[i];
     if (!book || book == app_.GetSelectedBook())
@@ -678,6 +687,8 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
 
   u64 start_ms = osGetTime();
   while (!job_queue_.empty()) {
+    if (app_.ShouldAbortWork())
+      break;
     while (!job_queue_.empty() && !job_queue_.front().book)
       job_queue_.pop_front();
     if (job_queue_.empty())
@@ -727,7 +738,8 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           app_flow_utils::SupportsMetadataIndexing(
               app_flow_utils::DetectBookFormat(book->GetFileName()))) {
         rc = book->Index();
-        // Do not penalise cover extraction on metadata failure.
+        if (rc == 0)
+          book->ClearBrowserDisplayNameCache();
         app_.SetBrowserDirty(true);
       }
     } else if (job.type == APP_JOB_EXTRACT_COVER) {
@@ -772,6 +784,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
                 SaveCoverCache(book, path);
                 book->coverAttempts = kCoverMaxAttempts;
                 book->coverRetryAfterMs = 0;
+              } else if (rc == BOOK_ERR_CANCELLED) {
               } else if (rc != 0) {
                 book->coverAttempts++;
               } else {
@@ -789,6 +802,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
             book->coverRetryAfterMs = 0;
+          } else if (rc == BOOK_ERR_CANCELLED) {
           } else if (rc != 0) {
             book->coverAttempts++;
           } else {
@@ -802,6 +816,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
             book->coverRetryAfterMs = 0;
+          } else if (rc == BOOK_ERR_CANCELLED) {
           } else if (rc != 0) {
             book->coverAttempts++;
           } else {
@@ -814,6 +829,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
             book->coverRetryAfterMs = 0;
+          } else if (rc == BOOK_ERR_CANCELLED) {
           } else if (rc != 0) {
             book->coverAttempts++;
           } else {
@@ -826,6 +842,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
             book->coverRetryAfterMs = 0;
+          } else if (rc == BOOK_ERR_CANCELLED) {
           } else if (rc != 0) {
             book->coverAttempts++;
           } else {
@@ -836,7 +853,8 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
         const u64 retry_delay_ms = browser_warmup_utils::CoverRetryDelayMs(
             app_.IsNew3dsDevice(), is_selected_book, rc,
             book->coverPixels != nullptr);
-        if (retry_delay_ms != 0 && book->coverAttempts < kCoverMaxAttempts) {
+        if (rc != BOOK_ERR_CANCELLED && retry_delay_ms != 0 &&
+            book->coverAttempts < kCoverMaxAttempts) {
           book->coverRetryAfterMs = osGetTime() + retry_delay_ms;
 #ifdef DSLIBRIS_DEBUG
           DBG_LOGF(&app_,
@@ -881,6 +899,9 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
                book->GetFileName() ? book->GetFileName() : "(null)");
     }
     DBG_LOG(&app_, msg);
+
+    if (app_.ShouldAbortWork())
+      break;
 
     if (osGetTime() - start_ms >= budget_ms)
       break;

@@ -32,6 +32,14 @@ inline bool IsBrowserHeavyWarmupIdle(uint64_t now_ms,
   return (now_ms - last_interaction_ms) >= kBrowserHeavyWarmupIdleDelayMs;
 }
 
+inline int VisibleBrowserEntryCount(int page_size, int page_start,
+                                    int book_count) {
+  if (page_size <= 0 || page_start < 0 || book_count <= page_start)
+    return 0;
+  const int remaining = book_count - page_start;
+  return remaining < page_size ? remaining : page_size;
+}
+
 inline bool ShouldQueueCoverWarmup(bool is_selected_book, bool warmup_idle,
                                    bool heavy_warmup_idle) {
   return is_selected_book ? warmup_idle : heavy_warmup_idle;
