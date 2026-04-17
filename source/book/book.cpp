@@ -223,6 +223,8 @@ Book::Book(const BookContext &c) : ctx(c) {
   fb2_inline_images_bytes = 0;
   inline_image_cache_bytes = 0;
   layout_revision = 0;
+  open_session_id_ = 0;
+  open_abort_requested_ = false;
   ClearTocConfidence();
 }
 
@@ -601,6 +603,8 @@ void Book::Close() {
   ClearChapterDocStartPages();
   ClearInlineImages();
   ClearTocConfidence();
+  open_session_id_ = 0;
+  open_abort_requested_ = false;
 }
 
 bool Book::IsMobiFile() const { return HasExtCaseInsensitive(filename, ".mobi"); }
@@ -652,3 +656,15 @@ unsigned int Book::GetLayoutRevision() const { return layout_revision; }
 void Book::SetLayoutRevision(unsigned int revision) {
   layout_revision = revision;
 }
+
+unsigned int Book::GetOpenSessionId() const { return open_session_id_; }
+
+void Book::SetOpenSessionId(unsigned int session_id) {
+  open_session_id_ = session_id;
+}
+
+bool Book::IsOpenAbortRequested() const { return open_abort_requested_; }
+
+void Book::RequestAbortOpen() { open_abort_requested_ = true; }
+
+void Book::ClearOpenAbortRequest() { open_abort_requested_ = false; }

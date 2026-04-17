@@ -5,6 +5,7 @@
 #include "book/book.h"
 
 #include "formats/cbz/cbz.h"
+#include "formats/common/book_error.h"
 #include "formats/epub/epub.h"
 #include "formats/pdf/pdf.h"
 
@@ -39,6 +40,11 @@ u8 Book::Index() {
     err = IndexCbzMetadata(this, path.c_str());
   } else {
     err = 0;
+  }
+  if (err == BOOK_ERR_CANCELLED) {
+    metadataIndexTried = false;
+    metadataIndexed = false;
+    return err;
   }
   if (!err) {
     metadataIndexed = true;

@@ -502,6 +502,26 @@ void App::SetOpeningStartedAtMs(u64 started_at_ms) {
   reader_state_.opening.started_at_ms = started_at_ms;
 }
 
+unsigned int App::GetOpeningSessionId() const {
+  return reader_state_.opening.session_id;
+}
+
+void App::SetOpeningSessionId(unsigned int session_id) {
+  reader_state_.opening.session_id = session_id;
+}
+
+unsigned int App::GetCurrentBookSessionId() const {
+  return reader_state_.current_book_session_id;
+}
+
+void App::SetCurrentBookSessionId(unsigned int session_id) {
+  reader_state_.current_book_session_id = session_id;
+}
+
+unsigned int App::AllocateBookSessionId() {
+  return reader_state_.next_book_session_id++;
+}
+
 bool App::IsDeferredRelayoutPending() const {
   return reader_state_.deferred_relayout.pending;
 }
@@ -588,6 +608,10 @@ bool App::IsHomebrewEnvironment() const { return is_homebrew_; }
 
 bool App::IsAppletSuspended() const { return applet_suspended_; }
 
+bool App::ShouldAbortWork() const {
+  return applet_suspended_ || nav_.mode == AppMode::Quit;
+}
+
 void App::AptHookCallback(APT_HookType hook, void *param) {
   App *app = static_cast<App *>(param);
   if (app)
@@ -596,8 +620,11 @@ void App::AptHookCallback(APT_HookType hook, void *param) {
 
 void App::HandleAppletHook(APT_HookType hook) {
 #ifdef DSLIBRIS_DEBUG
-  DBG_LOGF(this, "APPLET hook=%s mode=%d", AppletHookName(hook),
-           (int)nav_.mode);
+  DBG_LOGF(this,
+           "APPLET hook=%s mode=%d current_session=%u opening_session=%u",
+           AppletHookName(hook), (int)nav_.mode,
+           reader_state_.current_book_session_id,
+           reader_state_.opening.session_id);
 #endif
   switch (hook) {
   case APTHOOK_ONSUSPEND:
@@ -628,8 +655,11 @@ void App::HandleAppletSuspend() {
   const size_t removed_jobs = PauseBrowserJobs();
   OnReaderAppletSuspended();
 #ifdef DSLIBRIS_DEBUG
-  DBG_LOGF(this, "APPLET suspended queue_dropped=%u mode=%d",
-           (unsigned)removed_jobs, (int)nav_.mode);
+  DBG_LOGF(this,
+           "APPLET suspended queue_dropped=%u mode=%d current_session=%u opening_session=%u",
+           (unsigned)removed_jobs, (int)nav_.mode,
+           reader_state_.current_book_session_id,
+           reader_state_.opening.session_id);
 #endif
 }
 
@@ -647,7 +677,9 @@ void App::HandleAppletResume() {
   RequestStatusRedraw();
   OnReaderAppletResumed();
 #ifdef DSLIBRIS_DEBUG
-  DBG_LOGF(this, "APPLET resumed mode=%d", (int)nav_.mode);
+  DBG_LOGF(this, "APPLET resumed mode=%d current_session=%u opening_session=%u",
+           (int)nav_.mode, reader_state_.current_book_session_id,
+           reader_state_.opening.session_id);
 #endif
 }
 
@@ -967,7 +999,8 @@ void App::PrintStatus(const char *msg) {
     fprintf(status_log_file_, "[%s] %s\n", buffer, msg);
     status_log_write_count_++;
 #ifdef DSLIBRIS_DEBUG
-    fflush(status_log_file_);
+    if ((status_log_write_count_ & 7u) == 0u)
+      fflush(status_log_file_);
 #else
     if ((status_log_write_count_ & 15u) == 0u)
       fflush(status_log_file_);

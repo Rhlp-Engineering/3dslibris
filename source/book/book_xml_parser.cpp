@@ -443,7 +443,7 @@ static void LogResolvedBlockMargin(parsedata_t *p, const char *tag,
   if (style_attr.empty() && class_attr.empty())
     return;
   DBG_LOGF_CAT(
-      p->book->GetStatusReporter(), DBG_LEVEL_INFO, DBG_CAT_EPUB,
+      p->book->GetStatusReporter(), DBG_LEVEL_TRACE, DBG_CAT_EPUB,
       "EPUB: margin %s tag=%s path=%s style=\"%s\" class=\"%s\" unit=%s value=%d negative=%d line_h=%d default_lf=%d final_lf=%d screen=%d pen_y=%d",
       phase ? phase : "?", tag ? tag : "?", p->docpath.c_str(),
       style_attr.c_str(), class_attr.c_str(), MarginUnitName(m.unit), m.value,

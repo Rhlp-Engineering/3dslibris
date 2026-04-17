@@ -116,6 +116,8 @@ private:
   ReflowWorkerState *reflow_worker_state;
   BookContext ctx;
   unsigned int layout_revision;
+  unsigned int open_session_id_;
+  bool open_abort_requested_;
 
   void ClearInlineImageCache();
   bool LoadInlineImageSource(u16 image_id, std::vector<u8> *out,
@@ -322,6 +324,11 @@ public:
   bool NeedsMobiRenderRefresh() const;
   unsigned int GetLayoutRevision() const;
   void SetLayoutRevision(unsigned int revision);
+  unsigned int GetOpenSessionId() const;
+  void SetOpenSessionId(unsigned int session_id);
+  bool IsOpenAbortRequested() const;
+  void RequestAbortOpen();
+  void ClearOpenAbortRequest();
 };
 
 #include "formats/cbz/cbz_state.h"

@@ -72,7 +72,8 @@ void ReflowWorkerThreadFunc(void *arg) {
                                ? (w->started_at_ms - w->submitted_at_ms)
                                : 0;
       DBG_LOGF(book->GetStatusReporter(),
-               "REFLOW[w]: open begin queue_ms=%llu book=%s",
+               "REFLOW[w]: open begin session=%u queue_ms=%llu book=%s",
+               book->GetOpenSessionId(),
                (unsigned long long)queue_ms,
                book->GetFileName() ? book->GetFileName() : "");
     }
@@ -84,8 +85,9 @@ void ReflowWorkerThreadFunc(void *arg) {
               ? (w->finished_at_ms - w->started_at_ms)
               : 0;
       DBG_LOGF(book->GetStatusReporter(),
-               "REFLOW[w]: open finish rc=%u worker_ms=%llu book=%s",
-               (unsigned)w->job_result, (unsigned long long)worker_ms,
+               "REFLOW[w]: open finish session=%u rc=%u worker_ms=%llu book=%s",
+               book->GetOpenSessionId(), (unsigned)w->job_result,
+               (unsigned long long)worker_ms,
                book->GetFileName() ? book->GetFileName() : "");
     }
     __atomic_store_n(&w->job_pending, false, __ATOMIC_RELEASE);
@@ -99,6 +101,7 @@ void Book::PrepareForOpen() {
   Text *text = GetText();
   if (text)
     text->SetStyle(TEXT_STYLE_REGULAR);
+  ClearOpenAbortRequest();
   tocResolveTried = false;
   tocResolved = false;
   ClearTocConfidence();
@@ -231,16 +234,18 @@ void Book::CancelAsyncReflowOpen() {
   if (w->thread_handle) {
 #ifdef DSLIBRIS_DEBUG
     if (GetStatusReporter())
-      DBG_LOGF(GetStatusReporter(), "REFLOW cancel: joining thread book=%s",
-               GetFileName() ? GetFileName() : "");
+      DBG_LOGF(GetStatusReporter(),
+               "REFLOW cancel: joining thread session=%u book=%s",
+               GetOpenSessionId(), GetFileName() ? GetFileName() : "");
 #endif
     threadJoin(w->thread_handle, U64_MAX);
     threadFree(w->thread_handle);
     w->thread_handle = NULL;
 #ifdef DSLIBRIS_DEBUG
     if (GetStatusReporter())
-      DBG_LOGF(GetStatusReporter(), "REFLOW cancel: thread joined book=%s",
-               GetFileName() ? GetFileName() : "");
+      DBG_LOGF(GetStatusReporter(),
+               "REFLOW cancel: thread joined session=%u book=%s",
+               GetOpenSessionId(), GetFileName() ? GetFileName() : "");
 #endif
   }
   delete w;
