@@ -241,9 +241,13 @@ void Book::CancelAsyncReflowOpen() {
                "REFLOW cancel: joining thread session=%u book=%s",
                (unsigned)w->session_id, GetFileName() ? GetFileName() : "");
 #endif
+    threadJoin(w->thread_handle, U64_MAX);
+    threadFree(w->thread_handle);
+    w->thread_handle = NULL;
   }
   delete w;
   reflow_worker_state->worker = NULL;
+  reflow_worker_state->worker_init_attempted = false;
 }
 
 void Book::ResetReflowWorkerState() {

@@ -67,7 +67,7 @@ static std::string ResolveDefaultFontDir() {
 static int g_orientation_touch_diag_budget = 0;
 #endif
 
-const char *AppletHookName(APT_HookType hook) {
+[[gnu::unused]] static const char *AppletHookName(APT_HookType hook) {
   switch (hook) {
   case APTHOOK_ONSUSPEND:
     return "suspend";
@@ -392,12 +392,14 @@ void App::RunChaptersMenuFrame(u32 keys) {
   chaptermenu->HandleInput(keys);
   const bool dirty_after_input = chaptermenu && chaptermenu->IsDirty();
 #ifdef DSLIBRIS_DEBUG
-  static int s_chapters_dirty_budget = 64;
-  if (s_chapters_dirty_budget > 0 &&
-      (keys != 0 || dirty_before != dirty_after_input)) {
-    DBG_LOGF(this, "INDEX frame state dirty_before=%d dirty_after_input=%d",
-             dirty_before ? 1 : 0, dirty_after_input ? 1 : 0);
-    s_chapters_dirty_budget--;
+  {
+    static int s_chapters_dirty_budget = 64;
+    const bool dirty_before = chaptermenu->IsDirty();
+    (void)dirty_before;
+    if (s_chapters_dirty_budget > 0) {
+      DBG_LOGF(this, "INDEX frame state dirty_after_input=%d", dirty_after_input ? 1 : 0);
+      s_chapters_dirty_budget--;
+    }
   }
 #endif
   if (dirty_after_input)
@@ -509,14 +511,6 @@ u64 App::GetOpeningStartedAtMs() const { return reader_state_.opening.started_at
 
 void App::SetOpeningStartedAtMs(u64 started_at_ms) {
   reader_state_.opening.started_at_ms = started_at_ms;
-}
-
-unsigned int App::GetOpeningSessionId() const {
-  return reader_state_.opening.session_id;
-}
-
-void App::SetOpeningSessionId(unsigned int session_id) {
-  reader_state_.opening.session_id = session_id;
 }
 
 unsigned int App::GetCurrentBookSessionId() const {
@@ -661,12 +655,12 @@ void App::HandleAppletSuspend() {
   applet_suspend_handled_ = true;
   nav_.browser.wait_input_release = true;
   nav_.browser.last_interaction_ms = osGetTime();
-  const size_t removed_jobs = PauseBrowserJobs();
+  PauseBrowserJobs();
   OnReaderAppletSuspended();
 #ifdef DSLIBRIS_DEBUG
   DBG_LOGF(this,
-           "APPLET suspended queue_dropped=%u mode=%d current_session=%u opening_session=%u",
-           (unsigned)removed_jobs, (int)nav_.mode,
+           "APPLET suspended mode=%d current_session=%u opening_session=%u",
+           (int)nav_.mode,
            reader_state_.current_book_session_id,
            reader_state_.opening.session_id);
 #endif

@@ -51,7 +51,7 @@ static const int kOpeningTitleMaxWidth = 216;
 static const int kOpeningTitleMaxLines = 3;
 static const int kOpeningTitleLineHeight = 16;
 
-const char *SafeBookName(Book *book) {
+[[gnu::unused]] static const char *SafeBookName(Book *book) {
   if (!book)
     return "(null)";
   if (book->GetFileName() && *book->GetFileName())
@@ -549,13 +549,17 @@ void ReaderController::HandleEventInOpening() {
     return;
 
   const u8 err = opening_book->ConsumeAsyncReflowOpenResult();
-  const u64 elapsed_ms =
-      app_.GetOpeningStartedAtMs() ? (osGetTime() - app_.GetOpeningStartedAtMs()) : 0;
-  DBG_LOGF(&app_,
-           "REFLOW: async open complete session=%u rc=%u ms=%llu book=%s",
-           app_.GetOpeningSessionId(), (unsigned)err,
-           (unsigned long long)elapsed_ms,
-           opening_book->GetFileName() ? opening_book->GetFileName() : "");
+#ifdef DSLIBRIS_DEBUG
+  {
+    const u64 elapsed_ms =
+        app_.GetOpeningStartedAtMs() ? (osGetTime() - app_.GetOpeningStartedAtMs()) : 0;
+    DBG_LOGF(&app_,
+             "REFLOW: async open complete session=%u rc=%u ms=%llu book=%s",
+             app_.GetOpeningSessionId(), (unsigned)err,
+             (unsigned long long)elapsed_ms,
+             opening_book->GetFileName() ? opening_book->GetFileName() : "");
+  }
+#endif
 
   OpenBookRelayoutState relayout_state = {
       app_.IsOpeningNeedsRelayout(), app_.GetOpeningOldPageCount(),

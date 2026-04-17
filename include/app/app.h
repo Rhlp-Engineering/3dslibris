@@ -224,8 +224,6 @@ public:
   std::list<int> &MutableOpeningOldBookmarks();
   u64 GetOpeningStartedAtMs() const;
   void SetOpeningStartedAtMs(u64 started_at_ms);
-  unsigned int GetOpeningSessionId() const;
-  void SetOpeningSessionId(unsigned int session_id);
   unsigned int GetCurrentBookSessionId() const;
   void SetCurrentBookSessionId(unsigned int session_id);
   unsigned int AllocateBookSessionId();
@@ -240,9 +238,6 @@ public:
   std::list<int> &MutableDeferredRelayoutOldBookmarks();
   int GetDeferredRelayoutInitialPosition() const;
   void SetDeferredRelayoutInitialPosition(int initial_position);
-  unsigned int GetCurrentBookSessionId() const;
-  void SetCurrentBookSessionId(unsigned int session_id);
-  unsigned int AllocateBookSessionId();
   unsigned int GetLayoutRevision() const;
   void SetLayoutRevision(unsigned int layout_revision);
   bool IsPdfTouchDragActive() const;

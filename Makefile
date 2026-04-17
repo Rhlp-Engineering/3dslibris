@@ -306,7 +306,7 @@ debug-3dsx:
 	@$(MAKE) --no-print-directory \
 		TARGET=$(DEBUG_TARGET) \
 		BUILD=$(DEBUG_BUILD) \
-		APP_TITLE_OVERRIDE="3dslibris debug" \
+		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
 		all
@@ -318,7 +318,7 @@ debug-cia:
 		TARGET=$(DEBUG_TARGET) \
 		BUILD=$(DEBUG_BUILD) \
 		CIA_RSF=$(CIA_DEBUG_RSF) \
-		APP_TITLE_OVERRIDE="3dslibris debug" \
+		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
 		all
@@ -326,7 +326,7 @@ debug-cia:
 		TARGET=$(DEBUG_TARGET) \
 		BUILD=$(DEBUG_BUILD) \
 		CIA_RSF=$(CIA_DEBUG_RSF) \
-		APP_TITLE_OVERRIDE="3dslibris debug" \
+		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
 		cia
