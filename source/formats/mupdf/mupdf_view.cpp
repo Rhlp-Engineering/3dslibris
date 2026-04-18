@@ -4,6 +4,7 @@
 
 #include "book/page.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
+#include "settings/prefs.h"
 #include "ui/text.h"
 
 namespace {
@@ -490,8 +491,12 @@ void Book::SetMuPdfViewportInteraction(bool active) {
 void Book::ResetMuPdfViewport() {
   if (!IsPdf() || !mupdf_state)
     return;
+  const fixed_layout_viewport_utils::PageTurnDirection direction =
+      (GetPrefs() && GetPrefs()->fixed_layout_rtl)
+          ? fixed_layout_viewport_utils::PAGE_TURN_RIGHT_TO_LEFT
+          : fixed_layout_viewport_utils::PAGE_TURN_LEFT_TO_RIGHT;
   const fixed_layout_viewport_utils::ViewportCenter center =
-      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter(direction);
   mupdf_state->viewport_center_x = center.x;
   mupdf_state->viewport_center_y = center.y;
   mupdf_state->viewport_interaction_active = false;

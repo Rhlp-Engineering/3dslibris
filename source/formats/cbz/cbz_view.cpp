@@ -5,6 +5,7 @@
 #include "formats/cbz/cbz_worker.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "formats/common/pdf_view_utils.h"
+#include "settings/prefs.h"
 #include "ui/text.h"
 #include "debug_log.h"
 
@@ -460,8 +461,12 @@ void Book::SetCbzViewportInteraction(bool active) {
 void Book::ResetCbzViewport() {
   if (!IsCbz() || !cbz_state)
     return;
+  const fixed_layout_viewport_utils::PageTurnDirection direction =
+      (GetPrefs() && GetPrefs()->fixed_layout_rtl)
+          ? fixed_layout_viewport_utils::PAGE_TURN_RIGHT_TO_LEFT
+          : fixed_layout_viewport_utils::PAGE_TURN_LEFT_TO_RIGHT;
   const fixed_layout_viewport_utils::ViewportCenter center =
-      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter(direction);
   cbz_state->viewport_center_x = center.x;
   cbz_state->viewport_center_y = center.y;
   cbz_state->viewport_interaction_active = false;

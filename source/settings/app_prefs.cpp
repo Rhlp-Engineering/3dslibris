@@ -149,8 +149,14 @@ static bool CurrentBookUsesLineWrapFixSlot(App *app) {
   return app && app->IsBookSettingsContext() && book && book->IsMobiFile();
 }
 
+static bool CurrentBookUsesReadingDirectionSlot(App *app) {
+  Book *book = app ? app->GetCurrentBook() : NULL;
+  return app && app->IsBookSettingsContext() && book && book->IsFixedLayout();
+}
+
 static bool CurrentBookShowsLineWrapFix(App *app) {
-  return CurrentBookUsesLineWrapFixSlot(app);
+  return CurrentBookUsesLineWrapFixSlot(app) ||
+         CurrentBookUsesReadingDirectionSlot(app);
 }
 
 static bool CurrentBookUsesTextLayoutSettings(App *app) {
@@ -163,6 +169,13 @@ static bool CurrentBookCanGoToPage(App *app) {
   Book *book = app ? app->GetCurrentBook() : NULL;
   return app && app->IsBookSettingsContext() && book &&
          book->GetPageCount() > 0;
+}
+
+static void ToggleFixedLayoutReadingDirection(Prefs *prefs) {
+  if (!prefs)
+    return;
+  prefs->fixed_layout_rtl = !prefs->fixed_layout_rtl;
+  prefs->Write();
 }
 
 static GoToPagePopupLayout BuildGoToPagePopupLayout() {
@@ -767,6 +780,12 @@ void SettingsController::PrefsRefreshButton(int index) {
       app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel2(
           app->GetCurrentBook()->GetMobiLineWrapFix() ? std::string("on")
                                                       : std::string("off"));
+    } else if (CurrentBookUsesReadingDirectionSlot(app)) {
+      app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel1(
+          std::string("reading direction"));
+      app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel2(
+          app->prefs->fixed_layout_rtl ? std::string("Right to left")
+                                       : std::string("Left to right"));
     } else {
       app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel1(
           std::string("library view"));
@@ -837,6 +856,14 @@ void SettingsController::PrefsHandlePress() {
   if (selected_button == PREFS_BUTTON_LIBRARY_VIEW) {
     if (CurrentBookUsesLineWrapFixSlot(app)) {
       ToggleCurrentBookMobiLineWrapFix();
+    } else if (CurrentBookUsesReadingDirectionSlot(app)) {
+      ToggleFixedLayoutReadingDirection(app->prefs);
+      if (app->GetCurrentBook()) {
+        app->GetCurrentBook()->ResetFixedLayoutViewportForNavigation();
+        app->RequestStatusRedraw();
+      }
+      PrefsRefreshButton(PREFS_BUTTON_LIBRARY_VIEW);
+      app->MarkPrefsDirty();
     } else {
       ToggleBrowserViewSetting(app);
       PrefsRefreshButton(PREFS_BUTTON_LIBRARY_VIEW);

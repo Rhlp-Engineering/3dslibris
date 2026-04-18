@@ -189,6 +189,9 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
         p->prefs->browser_view_mode =
             browser_view_utils::ParsePrefValue(attr[i + 1]);
       }
+      if (!strcmp(attr[i], "fixedLayoutRtl")) {
+        p->prefs->fixed_layout_rtl = atoi(attr[i + 1]) != 0;
+      }
     }
   }
 }
@@ -306,9 +309,10 @@ int Prefs::Write() {
 
   fprintf(fp, "<dslibris format=\"2\">\n");
   fprintf(fp,
-          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" />\n",
+          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" fixedLayoutRtl=\"%d\" />\n",
           swapshoulder, time24h,
-          browser_view_utils::ToPrefValue(browser_view_mode));
+          browser_view_utils::ToPrefValue(browser_view_mode),
+          fixed_layout_rtl ? 1 : 0);
   fprintf(fp, "\t<screen colorMode=\"%d\" flip=\"%d\" />\n", colorMode,
           app->orientation);
   fprintf(fp,
@@ -406,4 +410,5 @@ void Prefs::Init() {
   swapshoulder = false;
   time24h = true;
   browser_view_mode = BROWSER_VIEW_GALLERY;
+  fixed_layout_rtl = false;
 }
