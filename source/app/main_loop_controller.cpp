@@ -6,6 +6,7 @@
 #include "app/app.h"
 #include "debug_log.h"
 #include "library/browser_warmup_utils.h"
+#include "shared/debug_runtime_mode.h"
 
 MainLoopController::MainLoopController(App &app) : app_(app) {}
 
@@ -31,11 +32,13 @@ int MainLoopController::RunMainLoop() {
     }
 
     if (app_.GetMode() == AppMode::Browser) {
-      bool allow_jobs = browser_warmup_utils::IsBrowserWarmupIdle(
-          osGetTime(), app_.GetBrowserLastInteractionMs(),
-          app_.IsBrowserWaitingInputRelease());
-      if (allow_jobs)
-        app_.ProcessJobs(3);
+      if (!debug_runtime::BrowserWarmupDisabled()) {
+        bool allow_jobs = browser_warmup_utils::IsBrowserWarmupIdle(
+            osGetTime(), app_.GetBrowserLastInteractionMs(),
+            app_.IsBrowserWaitingInputRelease());
+        if (allow_jobs)
+          app_.ProcessJobs(3);
+      }
     }
 
 #ifdef DSLIBRIS_DEBUG
@@ -66,7 +69,8 @@ int MainLoopController::RunMainLoop() {
                  (int)app_.GetMode());
         break;
       }
-      app_.TickBrowserWarmup();
+      if (!debug_runtime::BrowserWarmupDisabled())
+        app_.TickBrowserWarmup();
       if (app_.GetMode() != AppMode::Browser) {
         DBG_LOGF(&app_, "MAIN browser frame aborted after warmup mode=%d",
                  (int)app_.GetMode());

@@ -40,6 +40,7 @@
 #include "debug_log.h"
 #include "path_utils.h"
 #include "parse.h"
+#include "shared/debug_runtime_mode.h"
 #include "settings/prefs.h"
 #include "reader/book_switch_utils.h"
 #include "ui/text.h"
@@ -166,6 +167,10 @@ App::App() {
   DBG_LOGF(this, "ENV runtime=%s device=%s",
            is_homebrew_ ? "3dsx/homebrew" : "cia/title",
            is_new_3ds_ ? "new3ds" : "old3ds");
+  if (debug_runtime::BackgroundWorkersDisabled()) {
+    DBG_LOG(this, "DEBUG mode: background workers disabled");
+    DBG_LOG(this, "BROWSER warmup: disabled in debug");
+  }
 #endif
 }
 
@@ -1002,8 +1007,7 @@ void App::PrintStatus(const char *msg) {
     fprintf(status_log_file_, "[%s] %s\n", buffer, msg);
     status_log_write_count_++;
 #ifdef DSLIBRIS_DEBUG
-    if ((status_log_write_count_ & 7u) == 0u)
-      fflush(status_log_file_);
+    fflush(status_log_file_);
 #else
     if ((status_log_write_count_ & 15u) == 0u)
       fflush(status_log_file_);

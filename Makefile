@@ -138,6 +138,11 @@ CFLAGS		+=	-DDSLIBRIS_DEBUG -g -O2
 CXXFLAGS	+=	-DDSLIBRIS_DEBUG
 endif
 
+ifeq ($(DISABLE_BACKGROUND_WORKERS),1)
+CFLAGS		+=	-DDEBUG_DISABLE_BACKGROUND_WORKERS=1
+CXXFLAGS	+=	-DDEBUG_DISABLE_BACKGROUND_WORKERS=1
+endif
+
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=3dsx.specs $(ARCH) -Wl,-Map,$(notdir $*.map) -Wl,--gc-sections
 
@@ -309,6 +314,7 @@ debug-3dsx:
 		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
+		DISABLE_BACKGROUND_WORKERS=1 \
 		all
 
 #---------------------------------------------------------------------------------
@@ -321,6 +327,7 @@ debug-cia:
 		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
+		DISABLE_BACKGROUND_WORKERS=1 \
 		all
 	@$(MAKE) --no-print-directory \
 		TARGET=$(DEBUG_TARGET) \
@@ -329,6 +336,7 @@ debug-cia:
 		APP_TITLE_OVERRIDE="3dslibris [DBG]" \
 		APP_DESCRIPTION_OVERRIDE="eBook reader for Nintendo 3DS (debug)" \
 		DEBUG_LOGGING=1 \
+		DISABLE_BACKGROUND_WORKERS=1 \
 		cia
 
 #---------------------------------------------------------------------------------

@@ -4,6 +4,8 @@
 
 #include "debug_log.h"
 #include "formats/epub/epub.h"
+#include "shared/debug_runtime_mode.h"
+#include "shared/open_cancel_poll.h"
 #include "ui/text.h"
 
 namespace {
@@ -51,6 +53,8 @@ struct Book::ReflowWorkerState {
 };
 
 namespace {
+
+static const size_t kReflowWorkerStackBytes = 512u * 1024u;
 
 void ReflowWorkerThreadFunc(void *arg) {
   Book::ReflowWorkerState::Worker *w =
@@ -104,6 +108,7 @@ void Book::PrepareForOpen() {
   if (text)
     text->SetStyle(TEXT_STYLE_REGULAR);
   ClearOpenAbortRequest();
+  open_cancel_poll::Reset();
   tocResolveTried = false;
   tocResolved = false;
   ClearTocConfidence();
@@ -137,6 +142,8 @@ bool Book::SupportsAsyncReflowOpen() const {
 }
 
 bool Book::StartAsyncReflowOpen(unsigned int session_id) {
+  if (debug_runtime::BackgroundWorkersDisabled())
+    return false;
   if (!SupportsAsyncReflowOpen())
     return false;
 
@@ -157,8 +164,12 @@ bool Book::StartAsyncReflowOpen(unsigned int session_id) {
     s32 prio = 0x30;
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
     reflow_worker_state->worker = w;
-    w->thread_handle = threadCreate(ReflowWorkerThreadFunc, w, 128 * 1024,
-                                    prio + 1, 1, false);
+    // Debug builds push parser, XML, and TOC work through this worker.
+    // Small stacks here can corrupt unrelated libctru globals and then crash
+    // the next main-thread HID poll instead of failing at the real site.
+    w->thread_handle = threadCreate(ReflowWorkerThreadFunc, w,
+                                    kReflowWorkerStackBytes, prio + 1, 1,
+                                    false);
     if (!w->thread_handle) {
       delete w;
       reflow_worker_state->worker = NULL;
@@ -175,6 +186,7 @@ bool Book::StartAsyncReflowOpen(unsigned int session_id) {
     return false;
 
   PrepareForOpen();
+  SetOpenSessionId(session_id);
   reflow_worker_state->open_pending = true;
   reflow_worker_state->open_completed = false;
   reflow_worker_state->open_result = 1;

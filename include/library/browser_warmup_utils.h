@@ -80,4 +80,27 @@ inline uint64_t CoverRetryDelayMs(bool is_new_3ds, bool is_selected_book,
   return 0;
 }
 
+inline bool MetadataWarmupDone(bool supports_metadata_indexing,
+                               bool metadata_index_tried) {
+  return !supports_metadata_indexing || metadata_index_tried;
+}
+
+inline bool CoverWarmupDone(bool supports_cover_warmup, bool has_cover_pixels,
+                            unsigned int cover_attempts,
+                            unsigned int cover_attempt_limit) {
+  return !supports_cover_warmup || has_cover_pixels ||
+         cover_attempts >= cover_attempt_limit;
+}
+
+inline bool BookWarmupDone(bool supports_metadata_indexing,
+                           bool metadata_index_tried,
+                           bool supports_cover_warmup,
+                           bool has_cover_pixels,
+                           unsigned int cover_attempts,
+                           unsigned int cover_attempt_limit) {
+  return MetadataWarmupDone(supports_metadata_indexing, metadata_index_tried) &&
+         CoverWarmupDone(supports_cover_warmup, has_cover_pixels,
+                         cover_attempts, cover_attempt_limit);
+}
+
 } // namespace browser_warmup_utils

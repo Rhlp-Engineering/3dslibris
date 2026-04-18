@@ -49,6 +49,7 @@
 #include "library/browser_presentation_utils.h"
 #include "library/browser_view_utils.h"
 #include "library/browser_warmup_utils.h"
+#include "shared/debug_runtime_mode.h"
 #include "shared/string_utils.h"
 #include "settings/prefs.h"
 #include "path_utils.h"
@@ -90,6 +91,14 @@ static int CurrentBrowserColumnCount(const App &app) {
 
 static bool ShouldCurrentBrowserLoadCovers(const App &app) {
   return browser_view_utils::ShouldLoadCovers(CurrentBrowserViewMode(app));
+}
+
+static bool SupportsBrowserCoverWarmup(format_t format, const char *filename) {
+  if (format == FORMAT_EPUB || format == FORMAT_PDF || format == FORMAT_CBZ)
+    return true;
+  if (format != FORMAT_XHTML || !filename)
+    return false;
+  return HasExtCI(filename, ".fb2") || HasExtCI(filename, ".mobi");
 }
 
 static size_t CountQueuedHeavyJobs(const std::deque<app_job_t> &jobs) {
@@ -299,6 +308,8 @@ static std::string BuildCoverCachePath(Book *book,
   return std::string(out);
 }
 
+static bool SaveCoverCache(Book *book, const std::string &book_path);
+
 static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
   if (!book)
     return false;
@@ -312,6 +323,35 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
       DBG_LOGF(book->GetStatusReporter(), "COVER: cache miss book=%s path=%s",
                book->GetFileName() ? book->GetFileName() : "(null)",
                cache_path.c_str());
+    }
+    if (debug_runtime::BackgroundWorkersDisabled() && !book_path.empty() &&
+        !book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
+      int src_rc = -1;
+      if (book->format == FORMAT_EPUB) {
+        // In debug mode, metadata indexing jobs never run via background
+        // workers. Index synchronously here so coverImagePath gets populated.
+        if (!book->metadataIndexTried) {
+          if (book->Index() == 0)
+            book->ClearBrowserDisplayNameCache();
+        }
+        if (book->metadataIndexTried && !book->coverImagePath.empty())
+          src_rc = epub_extract_cover(book, book_path);
+      } else if (book->format == FORMAT_XHTML &&
+                 HasExtCI(book->GetFileName(), ".fb2")) {
+        src_rc = fb2_extract_cover(book, book_path);
+      } else if (book->format == FORMAT_XHTML &&
+                 HasExtCI(book->GetFileName(), ".mobi")) {
+        src_rc = mobi_extract_cover(book, book_path);
+      } else if (book->format == FORMAT_PDF) {
+        src_rc = pdf_extract_cover(book, book_path);
+      } else if (book->format == FORMAT_CBZ) {
+        src_rc = cbz_extract_cover(book, book_path);
+      }
+      if (src_rc == 0 && book->coverPixels) {
+        SaveCoverCache(book, book_path);
+        return true;
+      }
+      book->coverAttempts++;
     }
 #endif
     return false;
@@ -572,15 +612,26 @@ void LibraryController::EnqueueJob(app_job_type_t type, Book *book) {
 void LibraryController::QueueBookWarmup(Book *book) {
   if (!book)
     return;
-  const bool cover_done =
-      book->coverPixels || book->coverAttempts >= kCoverMaxAttempts;
+  const format_t format =
+      app_flow_utils::DetectBookFormat(book->GetFileName());
+  const bool supports_metadata =
+      app_flow_utils::SupportsMetadataIndexing(format);
+  const bool supports_cover =
+      SupportsBrowserCoverWarmup(book->format, book->GetFileName());
+  const bool metadata_done =
+      browser_warmup_utils::MetadataWarmupDone(supports_metadata,
+                                               book->metadataIndexTried);
+  const bool cover_done = browser_warmup_utils::CoverWarmupDone(
+      supports_cover, book->coverPixels != nullptr, book->coverAttempts,
+      kCoverMaxAttempts);
   const u64 now_ms = osGetTime();
   const bool cover_retry_pending =
       !cover_done && book->coverRetryAfterMs != 0 &&
       now_ms < book->coverRetryAfterMs;
-  if (book->metadataIndexTried && cover_done)
+  if (metadata_done && cover_done) {
     return;
-  if (cover_retry_pending && book->metadataIndexTried)
+  }
+  if (cover_retry_pending && metadata_done)
     return;
   const size_t queue_before = job_queue_.size();
   const size_t queued_heavy_jobs = CountQueuedHeavyJobs(job_queue_);
@@ -596,9 +647,6 @@ void LibraryController::QueueBookWarmup(Book *book) {
           app_.IsNew3dsDevice(), is_selected_book, warmup_idle, heavy_idle,
           queued_heavy_jobs);
   const bool should_load_covers = ShouldCurrentBrowserLoadCovers(app_);
-
-  const format_t format =
-      app_flow_utils::DetectBookFormat(book->GetFileName());
 
   if (book->format == FORMAT_EPUB) {
     if (!book->metadataIndexTried &&
@@ -638,6 +686,8 @@ void LibraryController::QueueBookWarmup(Book *book) {
 }
 
 void LibraryController::TickBrowserWarmup() {
+  if (debug_runtime::BrowserWarmupDisabled())
+    return;
   if (app_.IsAppletSuspended() || app_.GetMode() != AppMode::Browser ||
       !app_.GetSelectedBook())
     return;
@@ -646,7 +696,21 @@ void LibraryController::TickBrowserWarmup() {
           app_.IsBrowserWaitingInputRelease())) {
     return;
   }
-  QueueBookWarmup(app_.GetSelectedBook());
+  Book *selected = app_.GetSelectedBook();
+  if (selected) {
+    const format_t selected_format =
+        app_flow_utils::DetectBookFormat(selected->GetFileName());
+    const bool selected_supports_metadata =
+        app_flow_utils::SupportsMetadataIndexing(selected_format);
+    const bool selected_supports_cover =
+        SupportsBrowserCoverWarmup(selected->format, selected->GetFileName());
+    if (!browser_warmup_utils::BookWarmupDone(
+            selected_supports_metadata, selected->metadataIndexTried,
+            selected_supports_cover, selected->coverPixels != nullptr,
+            selected->coverAttempts, kCoverMaxAttempts)) {
+      QueueBookWarmup(selected);
+    }
+  }
   const int page_start = app_.GetBrowserPageStart();
   const int visible_count = browser_warmup_utils::VisibleBrowserEntryCount(
       CurrentBrowserPageSize(app_), page_start, app_.BookCount());
@@ -656,6 +720,17 @@ void LibraryController::TickBrowserWarmup() {
     Book *book = app_.books[i];
     if (!book || book == app_.GetSelectedBook())
       continue;
+    const format_t format = app_flow_utils::DetectBookFormat(book->GetFileName());
+    const bool supports_metadata =
+        app_flow_utils::SupportsMetadataIndexing(format);
+    const bool supports_cover =
+        SupportsBrowserCoverWarmup(book->format, book->GetFileName());
+    if (browser_warmup_utils::BookWarmupDone(
+            supports_metadata, book->metadataIndexTried, supports_cover,
+            book->coverPixels != nullptr, book->coverAttempts,
+            kCoverMaxAttempts)) {
+      continue;
+    }
     QueueBookWarmup(book);
   }
 }
@@ -667,6 +742,8 @@ void LibraryController::QueueTocResolve(Book *book) {
 }
 
 void LibraryController::ProcessJobs(u32 budget_ms) {
+  if (debug_runtime::BrowserWarmupDisabled())
+    return;
   if (app_.IsAppletSuspended())
     return;
   if (job_queue_.empty())
