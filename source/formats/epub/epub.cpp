@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "book/book_xml.h"
 #include "debug_log.h"
 #include "formats/common/epub_image_utils.h"
+#include "formats/common/book_error.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_page_cache.h"
 #include "formats/epub/epub_cover.h"
@@ -51,6 +52,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "path_utils.h"
 #include "book/page.h"
 #include "shared/parser_limits.h"
+#include "shared/open_cancel_poll.h"
 #include "shared/status_reporter.h"
 #include "shared/text_layout_utils.h"
 #include "parse.h"
@@ -75,6 +77,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 typedef BookParseDeps EpubDeps;
 
 static EpubDeps BuildEpubDeps(Book *book) { return BuildBookParseDeps(book); }
+
+static bool ShouldAbortEpubOpen(Book *book) {
+  return book &&
+         ((book->GetStatusReporter() &&
+           book->GetStatusReporter()->ShouldAbortWork()) ||
+          book->IsOpenAbortRequested());
+}
+
+static u64 SafeElapsedMs(u64 later, u64 earlier) {
+  return later >= earlier ? (later - earlier) : 0;
+}
+
 using epub_toc_diag_utils::ClipForDiag;
 using epub_toc_diag_utils::LogResolvedChapterSamples;
 using epub_toc_diag_utils::LogTocEntrySamples;
@@ -192,7 +206,8 @@ static int ParseEpubSpineDocuments(
     unzFile uf, Book *book, epub_data_t *parsedata,
     const std::string &archive_path, const std::string &folder,
     const std::vector<std::string> &hrefs, const EpubDeps &deps,
-    std::map<std::string, u16> *page_start_by_href
+    std::map<std::string, u16> *page_start_by_href,
+    epub_page_cache::StreamWriter *stream_writer
 #ifdef DSLIBRIS_DEBUG
     ,
     u64 *t_after_content
@@ -218,6 +233,20 @@ static int ParseEpubSpineDocuments(
   book->SetInlineImageProbeZip(inline_probe_uf);
 
   for (size_t i = 0; i < hrefs.size(); i++) {
+    if (open_cancel_poll::Poll(book, app, "epub-spine-loop")) {
+      rc = BOOK_ERR_CANCELLED;
+      break;
+    }
+    if (book->GetPageCount() >= epub_limits::kMaxPagesInMemory) {
+      if (app) {
+        DBG_LOGF(app,
+                 "EPUB: page limit reached pages=%u limit=%u spine=%u/%u",
+                 (unsigned)book->GetPageCount(),
+                 (unsigned)epub_limits::kMaxPagesInMemory,
+                 (unsigned)spine_doc_index, (unsigned)hrefs.size());
+      }
+      break;
+    }
     spine_doc_index++;
     const std::string &href = hrefs[i];
     size_t pos = href.find_last_of('.');
@@ -254,6 +283,20 @@ static int ParseEpubSpineDocuments(
         if (page_start_by_href->find(path_key) == page_start_by_href->end())
           (*page_start_by_href)[path_key] = chapter_start_page;
       }
+      if (stream_writer && stream_writer->IsOpen()) {
+        if (!stream_writer->FlushPages(book, chapter_start_page)) {
+          rc = BOOK_ERR_CANCELLED;
+          break;
+        }
+      }
+#ifdef DSLIBRIS_DEBUG
+      if (app && (spine_doc_index % 20 == 0 || spine_doc_index == 1)) {
+        DBG_LOGF(app, "EPUB: spine progress %u/%u pages=%u mem_free=%u",
+                 (unsigned)spine_doc_index, (unsigned)hrefs.size(),
+                 (unsigned)book->GetPageCount(),
+                 (unsigned)osGetMemRegionFree(MEMREGION_ALL));
+      }
+#endif
 #ifdef DSLIBRIS_DEBUG
       if (app) {
         u64 doc_ms = osGetTime() - t_doc_begin;
@@ -270,6 +313,10 @@ static int ParseEpubSpineDocuments(
         }
       }
 #endif
+      if (open_cancel_poll::Poll(book, app, "epub-spine-doc-done")) {
+        rc = BOOK_ERR_CANCELLED;
+        break;
+      }
     } else if (app) {
       char msg[256];
       sprintf(msg, "NOT FOUND IN ZIP: %s", path.c_str());
@@ -342,6 +389,9 @@ int epub(Book *book, std::string name, bool metadataonly) {
     unzClose(uf);
     return rc;
   }
+  if (rc == 0 && ShouldAbortEpubOpen(book))
+    return FinalizeEpubParse(uf, &parsedata, book, name, deps,
+                             BOOK_ERR_CANCELLED, false);
 
   if (metadataonly) {
     ApplyEpubMetadataOnlyResult(book, parsedata, folder);
@@ -350,9 +400,11 @@ int epub(Book *book, std::string name, bool metadataonly) {
     if (reporter) {
       DBG_LOGF(reporter,
                "EPUB: metadata timing container=%llums opf=%llums total=%llums",
-               (unsigned long long)(t_after_container - t_parse_begin),
-               (unsigned long long)(t_after_rootfile - t_after_container),
-               (unsigned long long)(osGetTime() - t_parse_begin));
+               (unsigned long long)SafeElapsedMs(t_after_container,
+                                                 t_parse_begin),
+               (unsigned long long)SafeElapsedMs(t_after_rootfile,
+                                                 t_after_container),
+               (unsigned long long)SafeElapsedMs(osGetTime(), t_parse_begin));
       DBG_LOG(reporter, "EPUB: metadata done");
     }
     return rc;
@@ -381,16 +433,51 @@ int epub(Book *book, std::string name, bool metadataonly) {
   }
 
   std::vector<std::string> hrefs = BuildEpubSpineDocumentList(parsedata);
+  if (ShouldAbortEpubOpen(book))
+    return FinalizeEpubParse(uf, &parsedata, book, name, deps,
+                             BOOK_ERR_CANCELLED, false);
   std::map<std::string, u16> page_start_by_href;
+
+  epub_page_cache::StreamWriter stream_writer;
+  const bool use_stream =
+      stream_writer.Begin(book, name.c_str(),
+                          deps.ts ? (int)deps.ts->GetPixelSize() : 0,
+                          deps.ts ? (int)deps.ts->linespacing : 0,
+                          deps.paragraph_spacing, deps.paragraph_indent,
+                          deps.orientation,
+                          deps.ts ? (int)deps.ts->margin.left : 0,
+                          deps.ts ? (int)deps.ts->margin.right : 0,
+                          deps.ts ? (int)deps.ts->margin.top : 0,
+                          deps.ts ? (int)deps.ts->margin.bottom : 0,
+                          deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL);
+
   rc = ParseEpubSpineDocuments(
-      uf, book, &parsedata, name, folder, hrefs, deps, &page_start_by_href
+      uf, book, &parsedata, name, folder, hrefs, deps, &page_start_by_href,
+      use_stream ? &stream_writer : NULL
 #ifdef DSLIBRIS_DEBUG
       ,
       &t_after_content
 #endif
   );
-  if (rc != 0)
+  if (rc == 0 && (ShouldAbortEpubOpen(book) || book->GetPageCount() == 0)) {
+    rc = ShouldAbortEpubOpen(book) ? BOOK_ERR_CANCELLED : 1;
+    if (reporter) {
+      DBG_LOGF(reporter,
+               "EPUB: empty-result rc=%d hrefs=%u docs=%u pages=%u aborted=%u",
+               rc, (unsigned)hrefs.size(), (unsigned)page_start_by_href.size(),
+               (unsigned)book->GetPageCount(),
+               ShouldAbortEpubOpen(book) ? 1u : 0u);
+    }
+  }
+  if (rc != 0) {
+    stream_writer.Abort();
     return FinalizeEpubParse(uf, &parsedata, book, name, deps, rc, false);
+  }
+  if (open_cancel_poll::Poll(book, reporter, "epub-content-done")) {
+    stream_writer.Abort();
+    return FinalizeEpubParse(uf, &parsedata, book, name, deps,
+                             BOOK_ERR_CANCELLED, false);
+  }
   if (reporter) {
     char msg[96];
     snprintf(msg, sizeof(msg), "EPUB: content done pages=%u",
@@ -398,17 +485,34 @@ int epub(Book *book, std::string name, bool metadataonly) {
     DBG_LOG(reporter, msg);
     DBG_LOGF(reporter,
              "EPUB: timing container=%llums opf=%llums spine=%llums total=%llums docs=%u pages=%u",
-             (unsigned long long)(t_after_container - t_parse_begin),
-             (unsigned long long)(t_after_rootfile - t_after_container),
-             (unsigned long long)(t_after_content - t_after_rootfile),
-             (unsigned long long)(t_after_content - t_parse_begin),
+             (unsigned long long)SafeElapsedMs(t_after_container,
+                                               t_parse_begin),
+             (unsigned long long)SafeElapsedMs(t_after_rootfile,
+                                               t_after_container),
+             (unsigned long long)SafeElapsedMs(t_after_content,
+                                               t_after_rootfile),
+             (unsigned long long)SafeElapsedMs(t_after_content,
+                                               t_parse_begin),
              (unsigned)page_start_by_href.size(),
              (unsigned)book->GetPageCount());
   }
 
   ResolveEpubTocFromPackageData(uf, book, parsedata, folder, page_start_by_href,
                                 reporter);
-  return FinalizeEpubParse(uf, &parsedata, book, name, deps, rc, true);
+  if (open_cancel_poll::Poll(book, reporter, "epub-toc-finalize")) {
+    stream_writer.Abort();
+    return FinalizeEpubParse(uf, &parsedata, book, name, deps,
+                             BOOK_ERR_CANCELLED, false);
+  }
+
+  bool stream_saved = false;
+  if (use_stream) {
+    stream_saved = stream_writer.Finalize(book);
+    if (!stream_saved)
+      stream_writer.Abort();
+  }
+  return FinalizeEpubParse(uf, &parsedata, book, name, deps, rc,
+                           !stream_saved);
 }
 
 int epub_extract_cover(Book *book, const std::string &epubpath) {

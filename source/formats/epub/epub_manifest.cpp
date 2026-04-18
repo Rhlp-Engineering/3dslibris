@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/common/book_error.h"
 #include "formats/common/html_entity_utils.h"
 #include "formats/common/xml_parse_utils.h"
+#include "shared/open_cancel_poll.h"
 #include "formats/epub/epub_cover.h"
 #include "formats/epub/epub_package_toc_utils.h"
 #include "formats/epub/epub_zip_utils.h"
@@ -320,7 +321,9 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     options.abort_parse = [](void *user_data) {
       Book *book = static_cast<Book *>(user_data);
       return book &&
-             ((book->GetStatusReporter() &&
+             (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                     "epub-container-parse") ||
+              (book->GetStatusReporter() &&
                book->GetStatusReporter()->ShouldAbortWork()) ||
               book->IsOpenAbortRequested());
     };
@@ -331,7 +334,9 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     options.abort_parse = [](void *user_data) {
       Book *book = static_cast<Book *>(user_data);
       return book &&
-             ((book->GetStatusReporter() &&
+             (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                     "epub-rootfile-parse") ||
+              (book->GetStatusReporter() &&
                book->GetStatusReporter()->ShouldAbortWork()) ||
               book->IsOpenAbortRequested());
     };
@@ -359,7 +364,10 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     options.abort_parse = [](void *user_data) {
       parsedata_t *parsedata = static_cast<parsedata_t *>(user_data);
       return parsedata &&
-             ((parsedata->book && parsedata->book->IsOpenAbortRequested()) ||
+             ((parsedata->book &&
+               open_cancel_poll::Poll(parsedata->book, parsedata->reporter,
+                                      "epub-content-parse")) ||
+              (parsedata->book && parsedata->book->IsOpenAbortRequested()) ||
               (parsedata->reporter && parsedata->reporter->ShouldAbortWork()));
     };
     options.abort_user_data = &pd;

@@ -11,9 +11,11 @@
 #include "book/page_buffer_utils.h"
 #include "formats/common/page_cache_utils.h"
 #include "path_utils.h"
+#include "shared/open_cancel_poll.h"
 #include <3ds.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -119,6 +121,10 @@ CollectPages(Book *book) {
   const u16 page_count = book->GetPageCount();
   pages.reserve(page_count);
   for (u16 i = 0; i < page_count; i++) {
+    if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                               "epub-cache-collect-pages")) {
+      return std::vector<page_cache_utils::CachedPage>();
+    }
     Page *page = book->GetPage((int)i);
     const int length = page ? page->GetLength() : 0;
     page_cache_utils::CachedPage cached_page;
@@ -338,6 +344,11 @@ void Save(Book *book, const char *book_path, int pixel_size,
 
   if (ok) {
     for (auto &kv : doc_starts) {
+      if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                 "epub-cache-docstarts")) {
+        ok = false;
+        break;
+      }
       u16 doc_page = kv.second;
       if (fwrite(&doc_page, 1, sizeof(doc_page), fp) != sizeof(doc_page)) {
         ok = false;
@@ -354,6 +365,11 @@ void Save(Book *book, const char *book_path, int pixel_size,
   if (ok) {
     u32 img_count = book->GetInlineImageCount();
     for (u32 i = 0; i < img_count; i++) {
+      if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                 "epub-cache-images")) {
+        ok = false;
+        break;
+      }
       const std::string *imgpath = book->GetInlineImagePath((u16)i);
       if (!imgpath || imgpath->empty()) {
         ok = false;
@@ -394,6 +410,186 @@ void SavePending(Book *book) {
        p.margin_bottom, p.regular_font.empty() ? NULL : p.regular_font.c_str());
 
   book->SetPendingEpubPageCacheSave(false);
+}
+
+StreamWriter::StreamWriter() : fp_(NULL), cache_path_(), pages_written_(0) {}
+
+StreamWriter::~StreamWriter() { Abort(); }
+
+bool StreamWriter::Begin(Book *book, const char *book_path, int pixel_size,
+                         int line_spacing, int paragraph_spacing,
+                         int paragraph_indent, int orientation, int margin_left,
+                         int margin_right, int margin_top, int margin_bottom,
+                         const char *regular_font) {
+  if (fp_)
+    Abort();
+  if (!book || !book_path)
+    return false;
+
+  EnsureCacheDirs();
+
+  EpubCacheLayoutParams params = BuildLayoutParams(
+      book_path, pixel_size, line_spacing, paragraph_spacing, paragraph_indent,
+      orientation, margin_left, margin_right, margin_top, margin_bottom,
+      regular_font);
+
+  cache_path_ = BuildCachePath(book_path, params);
+  if (cache_path_.empty())
+    return false;
+
+  fp_ = fopen(cache_path_.c_str(), "wb");
+  if (!fp_)
+    return false;
+
+  const char *title_c = book->GetTitle();
+  std::string title = title_c ? title_c : "";
+  title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+
+  EpubPageCacheHeader hdr;
+  memset(&hdr, 0, sizeof(hdr));
+  hdr.magic = kEpubPageCacheMagic;
+  hdr.version = kEpubPageCacheVersion;
+  hdr.title_len = (u16)title.size();
+
+  bool ok = fwrite(&hdr, 1, sizeof(hdr), fp_) == sizeof(hdr);
+  if (ok)
+    ok = page_cache_utils::WriteRawString(fp_, title);
+
+  if (!ok) {
+    fclose(fp_);
+    fp_ = NULL;
+    remove(cache_path_.c_str());
+    return false;
+  }
+
+  pages_written_ = 0;
+  return true;
+}
+
+bool StreamWriter::FlushPages(Book *book, u16 from_page) {
+  if (!fp_ || !book)
+    return false;
+
+  const u16 total = book->GetPageCount();
+  for (u16 i = from_page; i < total; i++) {
+    if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                               "epub-stream-flush"))
+      return false;
+    Page *page = book->GetPage((int)i);
+    const int length = page ? page->GetLength() : 0;
+    const u16 len16 = (u16)(length > 0 ? length : 0);
+    if (len16 > kPageCachePageMaxBytes)
+      return false;
+    if (fwrite(&len16, 1, sizeof(len16), fp_) != sizeof(len16))
+      return false;
+    if (len16 > 0) {
+      const u32 *buffer = page->GetBuffer();
+      if (!buffer)
+        return false;
+      const size_t byte_count = (size_t)len16 * sizeof(u32);
+      if (fwrite(buffer, 1, byte_count, fp_) != byte_count)
+        return false;
+    }
+    pages_written_++;
+  }
+  return true;
+}
+
+bool StreamWriter::Finalize(Book *book) {
+  if (!fp_ || !book || pages_written_ == 0)
+    return false;
+
+  const std::vector<ChapterEntry> &chapters = book->GetChapters();
+  const std::vector<page_cache_utils::CachedChapter> cached_chapters =
+      CollectChapters(chapters);
+  const std::unordered_map<std::string, u16> &doc_starts =
+      book->GetChapterDocStartPages();
+
+  bool ok = page_cache_utils::WriteChapters(fp_, cached_chapters,
+                                            kPageCacheChapterTitleMaxBytes);
+
+  if (ok) {
+    for (auto &kv : doc_starts) {
+      if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                 "epub-stream-docstarts")) {
+        ok = false;
+        break;
+      }
+      u16 doc_page = kv.second;
+      if (fwrite(&doc_page, 1, sizeof(doc_page), fp_) != sizeof(doc_page)) {
+        ok = false;
+        break;
+      }
+      if (!page_cache_utils::WriteLengthPrefixedString16(
+              fp_, kv.first, kPageCachePathMaxBytes, true)) {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  if (ok) {
+    u32 img_count = book->GetInlineImageCount();
+    for (u32 i = 0; i < img_count; i++) {
+      if (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                 "epub-stream-images")) {
+        ok = false;
+        break;
+      }
+      const std::string *imgpath = book->GetInlineImagePath((u16)i);
+      if (!imgpath || imgpath->empty()) {
+        ok = false;
+        break;
+      }
+      if (!page_cache_utils::WriteLengthPrefixedString16(
+              fp_, *imgpath, kPageCachePathMaxBytes, false)) {
+        ok = false;
+        break;
+      }
+    }
+  }
+
+  if (ok) {
+    const char *title_c = book->GetTitle();
+    std::string title = title_c ? title_c : "";
+    title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+
+    EpubPageCacheHeader hdr;
+    memset(&hdr, 0, sizeof(hdr));
+    hdr.magic = kEpubPageCacheMagic;
+    hdr.version = kEpubPageCacheVersion;
+    hdr.title_len = (u16)title.size();
+    hdr.page_count = pages_written_;
+    hdr.chapter_count = (u32)cached_chapters.size();
+    hdr.doc_start_count = (u32)doc_starts.size();
+    hdr.image_count = book->GetInlineImageCount();
+
+    if (fseek(fp_, 0, SEEK_SET) != 0)
+      ok = false;
+    else
+      ok = fwrite(&hdr, 1, sizeof(hdr), fp_) == sizeof(hdr);
+  }
+
+  fclose(fp_);
+  fp_ = NULL;
+  if (!ok) {
+    remove(cache_path_.c_str());
+    return false;
+  }
+  cache_path_.clear();
+  return true;
+}
+
+void StreamWriter::Abort() {
+  if (fp_) {
+    fclose(fp_);
+    fp_ = NULL;
+    if (!cache_path_.empty()) {
+      remove(cache_path_.c_str());
+      cache_path_.clear();
+    }
+  }
+  pages_written_ = 0;
 }
 
 } // namespace epub_page_cache

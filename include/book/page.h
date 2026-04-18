@@ -63,6 +63,7 @@ class Page {
 	//! Copy src to buf for len codepoints.
 	void SetBuffer(const u32 *src, int len); 
 	void AdoptBuffer(page_buffer_utils::OwnedPageBuffer *owned);
+	void FreeBuffer();
 	//	void Draw();
 	void Draw(Text *ts);
 };

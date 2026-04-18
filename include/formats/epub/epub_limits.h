@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
 namespace epub_limits {
 
@@ -20,5 +21,7 @@ static const size_t kSvgWrapperMaxBytes = 512 * 1024;
 static const int kCoverMaxDimension = 4096;
 
 static const bool kEnableRealTocResolve = false;
+
+static const uint16_t kMaxPagesInMemory = 5000;
 
 } // namespace epub_limits

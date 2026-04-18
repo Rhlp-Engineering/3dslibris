@@ -6,6 +6,7 @@
 #include "formats/common/book_error.h"
 #include "formats/common/xml_parse_utils.h"
 #include "parse.h"
+#include "shared/open_cancel_poll.h"
 #include "shared/parser_limits.h"
 #include "shared/string_utils.h"
 
@@ -59,7 +60,10 @@ u8 ParseXmlBookFile(Book *book, const char *path, bool fulltext,
   options.abort_parse = [](void *user_data) {
     parsedata_t *parsedata = static_cast<parsedata_t *>(user_data);
     return parsedata &&
-           ((parsedata->book && parsedata->book->IsOpenAbortRequested()) ||
+           ((parsedata->book &&
+             open_cancel_poll::Poll(parsedata->book, parsedata->reporter,
+                                    "xml-book-stream")) ||
+            (parsedata->book && parsedata->book->IsOpenAbortRequested()) ||
             (parsedata->reporter && parsedata->reporter->ShouldAbortWork()));
   };
   options.abort_user_data = &parsedata;

@@ -129,6 +129,11 @@ void Page::AdoptBuffer(page_buffer_utils::OwnedPageBuffer *owned) {
   SyncBufferAlias();
 }
 
+void Page::FreeBuffer() {
+  std::vector<u32>().swap(storage);
+  SyncBufferAlias();
+}
+
 void Page::Draw(Text *ts) {
 #ifdef DSLIBRIS_DEBUG
   const u64 draw_tick_start = svcGetSystemTick();
