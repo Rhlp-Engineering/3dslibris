@@ -271,6 +271,7 @@ public:
   void ShowBookmarksView();
   void ShowChaptersView();
   bool BookNeedsRelayout(Book *book) const;
+  size_t PauseBrowserJobs();
 
 private:
   static App* s_instance_;
@@ -387,7 +388,6 @@ private:
   void EnqueueJob(app_job_type_t type, Book *book);
   void QueueBookWarmup(Book *book);
   void QueueTocResolve(Book *book);
-  size_t PauseBrowserJobs();
 
   // app_prefs.cpp
   void PrefsHandlePress();

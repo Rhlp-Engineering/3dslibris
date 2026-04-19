@@ -1042,6 +1042,9 @@ u8 ReaderController::OpenBook() {
 
   if (selected_book->SupportsAsyncReflowOpen() &&
       !debug_runtime::ForceSynchronousBookOpen()) {
+    if (switching_books) {
+      app_.PauseBrowserJobs();
+    }
     DetachCurrentBookForSwitch(&app_, selected_book, session_id, "async-open");
     if (selected_book->StartAsyncReflowOpen(session_id)) {
       app_.SetOpeningPending(true);

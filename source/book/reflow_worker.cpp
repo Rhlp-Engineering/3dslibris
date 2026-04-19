@@ -4,6 +4,7 @@
 
 #include "debug_log.h"
 #include "formats/epub/epub.h"
+#include "reader/reflow_open_gate_utils.h"
 #include "shared/debug_runtime_mode.h"
 #include "shared/open_cancel_poll.h"
 #include "ui/text.h"
@@ -138,7 +139,8 @@ u8 Book::OpenPrepared() {
 }
 
 bool Book::SupportsAsyncReflowOpen() const {
-  return UsesTextLayoutSettings();
+  return reader::ShouldUseAsyncReflowOpen(UsesTextLayoutSettings(),
+                                          IsMobiFile());
 }
 
 bool Book::StartAsyncReflowOpen(unsigned int session_id) {

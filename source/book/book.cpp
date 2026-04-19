@@ -579,15 +579,23 @@ void Book::ReservePageCapacity(size_t incoming_pages) {
 }
 
 void Book::Close() {
+  IStatusReporter *r = GetStatusReporter();
+  DBG_LOGF(r, "BOOK close: begin book=%s", filename.c_str());
   const bool flush_pending_epub_cache =
       reflow_cache_save_utils::ShouldFlushDeferredCacheSaveOnClose(
           epub_page_cache_save_pending, IsAsyncReflowOpenPending(),
           (unsigned int)GetPageCount());
+  DBG_LOGF(r, "BOOK close: cancel-async-reflow book=%s", filename.c_str());
   CancelAsyncReflowOpen();
-  if (flush_pending_epub_cache)
-    epub_page_cache::SavePending(this);
+  if (flush_pending_epub_cache) {
+    DBG_LOGF(r, "BOOK close: save-epub-cache begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+    epub_page_cache::SavePending(this, true);
+    DBG_LOGF(r, "BOOK close: save-epub-cache done book=%s", filename.c_str());
+  }
   epub_page_cache_save_pending = false;
+  DBG_LOGF(r, "BOOK close: cancel-mobi-parse book=%s", filename.c_str());
   CancelDeferredMobiParse();
+  DBG_LOGF(r, "BOOK close: clear-pages count=%d book=%s", (int)pages.size(), filename.c_str());
   std::vector<Page *>::iterator it = pages.begin();
   while (it != pages.end()) {
     delete *it;
@@ -595,8 +603,11 @@ void Book::Close() {
     ++it;
   }
   pages.clear();
+  DBG_LOGF(r, "BOOK close: reset-reflow book=%s", filename.c_str());
   ResetReflowWorkerState();
+  DBG_LOGF(r, "BOOK close: reset-cbz book=%s", filename.c_str());
   ResetCbzState();
+  DBG_LOGF(r, "BOOK close: reset-mupdf book=%s", filename.c_str());
   ResetMuPdfState();
   chapters.clear();
   ClearChapterAnchors();
@@ -605,6 +616,7 @@ void Book::Close() {
   ClearTocConfidence();
   open_session_id_ = 0;
   open_abort_requested_ = false;
+  DBG_LOGF(r, "BOOK close: done book=%s", filename.c_str());
 }
 
 void Book::ResetCbzFailureState() {

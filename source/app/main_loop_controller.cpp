@@ -58,7 +58,9 @@ int MainLoopController::RunMainLoop() {
       break;
 
     case AppMode::Opening:
-      app_.UpdateStatus();
+      if (!app_.IsOpeningPending()) {
+        app_.UpdateStatus();
+      }
       app_.HandleEventInOpening();
       break;
 
