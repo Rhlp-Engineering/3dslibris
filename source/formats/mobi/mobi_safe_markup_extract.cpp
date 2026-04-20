@@ -99,7 +99,6 @@ static void AppendInlineImageToken(std::string *out, uint16_t image_id,
 std::string ExtractToText(const std::string &markup_utf8,
                           const InlineImageCallbacks &image_callbacks) {
   std::string out;
-  out.reserve(markup_utf8.size());
 
   bool in_script = false;
   bool in_style = false;
@@ -128,10 +127,9 @@ std::string ExtractToText(const std::string &markup_utf8,
             out.push_back('\n');
           pending_space = false;
         } else if (tag_name == "img" && !closing) {
-          const std::string tag = markup_utf8.substr(i + 1, close - i - 1);
           uint16_t recindex = 0;
           if (image_callbacks.register_inline_image &&
-              mobi_extract_image_recindex(tag, &recindex)) {
+              mobi_extract_image_recindex(tag_text, &recindex)) {
             const uint16_t image_id = image_callbacks.register_inline_image(
                 image_callbacks.user_data, mobi_inline_image_path(recindex));
             if (pending_space) {

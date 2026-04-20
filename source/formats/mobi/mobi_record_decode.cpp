@@ -363,7 +363,9 @@ bool BuildMergedText(const std::string &raw, const std::vector<uint32_t> &offset
   if (!merged)
     return false;
   merged->clear();
-  merged->reserve(header.text_len > 0 ? (size_t)header.text_len : 1024 * 1024);
+  // Do not reserve(text_len) here — a large contiguous reservation on a
+  // fragmented 3DS heap can fail and std::terminate. The string grows
+  // incrementally instead, which is safer under heap fragmentation.
 
   HuffCdicDecoder huff;
   HuffCdicDecoder *decoder = NULL;

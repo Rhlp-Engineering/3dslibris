@@ -82,6 +82,12 @@ static void SaveMobiPageCache(Book *book, const char *book_path,
   if (!book || !book_path || !deps.reporter ||
       book->GetPageCount() == 0)
     return;
+  if (debug_runtime::ForceSynchronousMobiFinalize()) {
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF(deps.reporter, "MOBI: cache-save skipped conservative-runtime");
+#endif
+    return;
+  }
   const TextLayoutSnapshot &layout = deps.layout;
   if (layout.pixel_size == 0)
     return;
