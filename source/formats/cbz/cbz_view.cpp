@@ -6,6 +6,7 @@
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "settings/prefs.h"
+#include "shared/debug_runtime_mode.h"
 #include "ui/text.h"
 #include "debug_log.h"
 
@@ -415,6 +416,15 @@ bool HasCbzNeighborPending(const Book::CbzState *cbz_state, int page_index) {
   return false;
 }
 
+void ResetCbzDeferredCachesForSynchronousRender(Book::CbzState *cbz_state) {
+  if (!cbz_state)
+    return;
+  ResetCbzBitmapCache(&cbz_state->current_interactive);
+  ResetCbzAdjacentSlot(&cbz_state->prev_slot);
+  ResetCbzAdjacentSlot(&cbz_state->next_slot);
+  cbz_state->preload_pending = false;
+}
+
 } // namespace
 
 void Book::ResetCbzTransientViewState(bool restart_worker) {
@@ -471,6 +481,14 @@ void Book::DrawCurrentCbzView(Text *ts) {
     }
     DrawCbzLoadFailure(this, ts, page_index, cbz_state->last_error);
     return;
+  }
+
+  // In synchronous mode, render interactive cache immediately after preview.
+  // This gives proper zoom-aware resolution without background threads.
+  if (debug_runtime::ForceSynchronousCbzDecode() &&
+      !CbzBitmapCacheValid(cbz_state->current_interactive, page_index,
+                           cbz_state->zoom_index)) {
+    EnsureCbzInteractiveCache(cbz_state, page_index);
   }
 
   const pdf_view_utils::NormalizedRect viewport =
@@ -616,6 +634,8 @@ bool Book::JumpCbzChapter(int delta) {
 bool Book::HasPendingCbzDeferredWork() const {
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
     return false;
+  if (debug_runtime::ForceSynchronousCbzDecode())
+    return false;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);
   if (cbz_state->failed_page == page_index)
@@ -640,6 +660,8 @@ bool Book::HasPendingCbzDeferredWork() const {
 u32 Book::GetCbzDeferredDelayMs() const {
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
     return 0;
+  if (debug_runtime::ForceSynchronousCbzDecode())
+    return 0;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);
   if (!CbzPreviewCacheValid(cbz_state->current_preview, page_index) ||
@@ -661,7 +683,10 @@ u32 Book::GetCbzDeferredDelayMs() const {
 }
 
 bool Book::PumpDeferredCbzWork(u32 budget_ms) {
+  (void)budget_ms;
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
+    return false;
+  if (debug_runtime::ForceSynchronousCbzDecode())
     return false;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);

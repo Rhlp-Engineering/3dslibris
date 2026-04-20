@@ -6,6 +6,7 @@
 #include "debug_log.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "settings/prefs.h"
+#include "shared/debug_runtime_mode.h"
 #include "ui/text.h"
 
 namespace {
@@ -74,6 +75,25 @@ static void DrawMuPdfLoadFailure(Book *book, Text *ts, int page_index) {
   ts->SetColorMode(saved_color);
   ts->SetScreen(saved_screen);
   ts->margin.bottom = saved_bottom_margin;
+}
+
+static void ResetMuPdfDeferredCachesForSynchronousRender(
+    Book::MuPdfState *mupdf_state) {
+  if (!mupdf_state)
+    return;
+  CancelMuPdfIncrementalRenderState(mupdf_state);
+  ResetBitmapCache(&mupdf_state->current_interactive_tile);
+  ResetBitmapCache(&mupdf_state->current_final_zoom);
+  if (mupdf_state->cached_display_list && mupdf_state->ctx) {
+    fz_drop_display_list(mupdf_state->ctx, mupdf_state->cached_display_list);
+    mupdf_state->cached_display_list = NULL;
+  }
+  mupdf_state->cached_display_list_page = -1;
+  if (mupdf_state->ctx) {
+    ResetAdjacentSlot(&mupdf_state->prev_slot, mupdf_state->ctx);
+    ResetAdjacentSlot(&mupdf_state->next_slot, mupdf_state->ctx);
+  }
+  mupdf_state->final_cache_pending = false;
 }
 
 } // namespace
@@ -274,7 +294,10 @@ pdf_view_utils::NormalizedRect ComputeCurrentMuPdfViewport(
 MuPdfDeferredStage GetNextMuPdfDeferredStage(
     const Book::MuPdfState *mupdf_state, int page_index,
     const pdf_view_utils::NormalizedRect &viewport) {
+  (void)viewport;
   if (!mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
+    return MuPdfDeferredStage::None;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
     return MuPdfDeferredStage::None;
 
   if (!BitmapCacheValid(mupdf_state->current_preview, page_index)) {
@@ -475,6 +498,10 @@ bool Book::ChangeMuPdfZoom(int delta) {
   if (next == mupdf_state->zoom_index)
     return false;
   mupdf_state->zoom_index = next;
+  if (debug_runtime::ForceSynchronousMuPdfRender()) {
+    ResetMuPdfDeferredCachesForSynchronousRender(mupdf_state);
+    return true;
+  }
   if (app_flow_utils::MuPdfWantsFinalQualityRender(
           mupdf_state->document_kind) &&
       (mupdf_state->current_final_zoom.page != position ||
@@ -568,6 +595,8 @@ bool Book::JumpMuPdfChapter(int delta) {
 bool Book::HasPendingMuPdfDeferredWork() const {
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
     return false;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
+    return false;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
   const pdf_view_utils::NormalizedRect viewport =
@@ -583,6 +612,8 @@ void Book::CancelMuPdfIncrementalRender() {
 
 u32 Book::GetMuPdfDeferredDelayMs() const {
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
+    return 0;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
     return 0;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
@@ -651,6 +682,13 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
                "MUPDF draw: preview-cache-done page=%d bmp=%dx%d", page_index,
                mupdf_state->current_preview.bitmap_width,
                mupdf_state->current_preview.bitmap_height);
+
+  // In synchronous mode, render the interactive tile immediately after preview.
+  // This gives proper zoom-aware resolution without background threads.
+  if (debug_runtime::ForceSynchronousMuPdfRender() &&
+      !BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)) {
+    EnsureCurrentMuPdfInteractiveTile(mupdf_state, page_index);
+  }
 
   pdf_view_utils::NormalizedRect viewport = ComputeCurrentMuPdfViewport(mupdf_state);
   mupdf_state->viewport_center_x = viewport.left + viewport.width * 0.5f;
@@ -826,7 +864,10 @@ void Book::PrefetchAdjacentMuPdfPage() {
 }
 
 bool Book::PumpDeferredMuPdfWork(u32 budget_ms) {
+  (void)budget_ms;
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
+    return false;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
     return false;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);

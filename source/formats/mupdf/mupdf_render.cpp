@@ -138,6 +138,7 @@ bool RenderMuPdfBitmap(fz_context *ctx, fz_document *doc, int page_index,
   fz_irect bbox = fz_empty_irect;
   bool ok = false;
   bool owns_list = false;
+  const bool direct_page_render = (reuse_list == NULL && out_list == NULL);
 
   fz_var(page);
   fz_var(pixmap);
@@ -180,7 +181,7 @@ bool RenderMuPdfBitmap(fz_context *ctx, fz_document *doc, int page_index,
         render_rect = bounds;
     }
 
-    if (!list) {
+    if (!list && !direct_page_render) {
       DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
                    "MUPDF render: display-list-build-begin page=%d",
                    page_index);
@@ -205,12 +206,21 @@ bool RenderMuPdfBitmap(fz_context *ctx, fz_document *doc, int page_index,
     pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 0);
     fz_clear_pixmap_with_value(ctx, pixmap, 255);
     device = fz_new_draw_device(ctx, fz_identity, pixmap);
-    DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
-                 "MUPDF render: run-list-begin page=%d", page_index);
-    fz_run_display_list(ctx, list, device, ctm, fz_infinite_rect, NULL);
-    fz_close_device(ctx, device);
-    DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
-                 "MUPDF render: run-list-done page=%d", page_index);
+    if (direct_page_render) {
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+                   "MUPDF render: run-page-begin page=%d", page_index);
+      fz_run_page(ctx, page, device, ctm, NULL);
+      fz_close_device(ctx, device);
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+                   "MUPDF render: run-page-done page=%d", page_index);
+    } else {
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+                   "MUPDF render: run-list-begin page=%d", page_index);
+      fz_run_display_list(ctx, list, device, ctm, fz_infinite_rect, NULL);
+      fz_close_device(ctx, device);
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+                   "MUPDF render: run-list-done page=%d", page_index);
+    }
 
     const int pix_w = fz_pixmap_width(ctx, pixmap);
     const int pix_h = fz_pixmap_height(ctx, pixmap);
