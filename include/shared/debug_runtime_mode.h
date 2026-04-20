@@ -2,26 +2,19 @@
 
 namespace debug_runtime {
 
-inline bool BackgroundWorkersDisabled() {
-#if defined(DEBUG_DISABLE_BACKGROUND_WORKERS) && DEBUG_DISABLE_BACKGROUND_WORKERS
-  return true;
-#else
-  return false;
-#endif
-}
+// Stability-first runtime: keep all background/deferred work disabled in both
+// normal and debug builds until the fixed-layout and MOBI paths are proven on
+// hardware again.
+inline bool BackgroundWorkersDisabled() { return true; }
 
-inline bool BrowserWarmupDisabled() { return BackgroundWorkersDisabled(); }
+inline bool BrowserWarmupDisabled() { return true; }
 
-inline bool ForceSynchronousBookOpen() { return BackgroundWorkersDisabled(); }
+inline bool ForceSynchronousBookOpen() { return true; }
 
-inline bool ForceSynchronousCbzDecode() { return BackgroundWorkersDisabled(); }
+inline bool ForceSynchronousCbzDecode() { return true; }
 
-inline bool ForceSynchronousMuPdfRender() {
-  return BackgroundWorkersDisabled();
-}
+inline bool ForceSynchronousMuPdfRender() { return true; }
 
-inline bool ForceSynchronousMobiFinalize() {
-  return BackgroundWorkersDisabled();
-}
+inline bool ForceSynchronousMobiFinalize() { return true; }
 
 } // namespace debug_runtime

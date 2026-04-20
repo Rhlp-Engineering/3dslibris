@@ -55,7 +55,7 @@ struct Book::ReflowWorkerState {
 
 namespace {
 
-static const size_t kReflowWorkerStackBytes = 512u * 1024u;
+static const size_t kReflowWorkerStackBytes = 256u * 1024u;
 
 void ReflowWorkerThreadFunc(void *arg) {
   Book::ReflowWorkerState::Worker *w =
