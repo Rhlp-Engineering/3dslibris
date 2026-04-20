@@ -58,6 +58,9 @@ https://github.com/rhaleblian/dslibris
 
 #include "expat.h"
 
+#include "menus/bookmark_menu.h"
+#include "menus/chapter_menu.h"
+#include "settings/font.h"
 #include "ui/button.h"
 #include "main.h"
 #include "parse.h"

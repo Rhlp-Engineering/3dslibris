@@ -129,13 +129,13 @@ App::App()
   nav_.browser.last_interaction_ms = 0;
 
   // Initialize controllers and other components.
-  prefs = std::make_unique<Prefs>(this);
-  library_controller_ = std::make_unique<LibraryController>(*this);
-  reader_controller_ = std::make_unique<ReaderController>(*this);
-  settings_controller_ = std::make_unique<SettingsController>(*this);
-  status_controller_ = std::make_unique<StatusController>(*this);
-  startup_controller_ = std::make_unique<StartupController>(*this);
-  main_loop_controller_ = std::make_unique<MainLoopController>(*this);
+  prefs = std::unique_ptr<Prefs>(new Prefs(this));
+  library_controller_ = std::unique_ptr<LibraryController>(new LibraryController(*this));
+  reader_controller_ = std::unique_ptr<ReaderController>(new ReaderController(*this));
+  settings_controller_ = std::unique_ptr<SettingsController>(new SettingsController(*this));
+  status_controller_ = std::unique_ptr<StatusController>(new StatusController(*this));
+  startup_controller_ = std::unique_ptr<StartupController>(new StartupController(*this));
+  main_loop_controller_ = std::unique_ptr<MainLoopController>(new MainLoopController(*this));
 
   // Initialize prefs view state.
   nav_.prefs.selected_index = -1;
@@ -177,12 +177,12 @@ App::App()
 #endif
 
   // Initialize UI components.
-  ts = std::make_unique<Text>();
+  ts = std::unique_ptr<Text>(new Text());
   ts->app = this;
 
-  fontmenu = std::make_unique<FontMenu>(this);
-  bookmarkmenu = std::make_unique<BookmarkMenu>(this);
-  chaptermenu = std::make_unique<ChapterMenu>(this);
+  fontmenu = std::unique_ptr<FontMenu>(new FontMenu(this));
+  bookmarkmenu = std::unique_ptr<BookmarkMenu>(new BookmarkMenu(this));
+  chaptermenu = std::unique_ptr<ChapterMenu>(new ChapterMenu(this));
 
 #ifdef DSLIBRIS_DEBUG
   // Log environment details for debugging purposes.

@@ -264,6 +264,7 @@ public:
   int GetPosition(void);
   const char *GetTitle();
   void SetAuthor(const std::string &s);
+  void SetFileName(const char *filename);
   void SetFolderName(const std::string &foldername);
   void SetFolderName(const char *foldername);
   void SetFolderName(std::string &foldername);

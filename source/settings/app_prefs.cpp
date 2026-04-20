@@ -107,7 +107,7 @@ static void CycleColorMode(Text *ts) {
 }
 
 static void ToggleBrowserViewSetting(App *app) {
-  if (!app || !app->prefs)
+  if (!app || !app->prefs.get())
     return;
   app->prefs->browser_view_mode =
       app->prefs->browser_view_mode == BROWSER_VIEW_LIST
@@ -280,7 +280,7 @@ bool SettingsController::ConfirmGoToPageSelection() {
     book->ResetFixedLayoutViewportForNavigation();
 
   app_.ShowCurrentBookView();
-  book->DrawCurrentView(app_.ts);
+  book->DrawCurrentView(app_.ts.get());
   app_.SetPdfDeferredReadyAtMs(
       (book->IsFixedLayout() && book->HasPendingFixedLayoutDeferredWork())
           ? (osGetTime() + book->GetFixedLayoutDeferredDelayMs())
@@ -412,7 +412,7 @@ void SettingsController::PrefsInit() {
       "bookmarks"};
 
   for (int i = 0; i < PREFS_BUTTON_COUNT; i++) {
-    app->prefsButtons[i].Init(app->ts);
+    app->prefsButtons[i].Init(app->ts.get());
     app->prefsButtons[i].SetStyle(BUTTON_STYLE_SETTING);
     app->prefsButtons[i].Resize(230, 36);
     app->prefsButtons[i].SetLabel1(labels[i]);
@@ -838,7 +838,7 @@ void SettingsController::PrefsHandlePress() {
         OpenGoToPagePopup();
       }
     } else {
-      ToggleClockFormatSetting(app->prefs);
+      ToggleClockFormatSetting(app->prefs.get());
       PrefsRefreshButton(PREFS_BUTTON_TIME24H);
       app->MarkPrefsDirty();
     }
@@ -846,7 +846,7 @@ void SettingsController::PrefsHandlePress() {
   }
 
   if (selected_button == PREFS_BUTTON_COLORMODE) {
-    CycleColorMode(app->ts);
+    CycleColorMode(app->ts.get());
     PrefsRefreshButton(PREFS_BUTTON_COLORMODE);
     app->prefs->Write();
     app->MarkPrefsDirty();
@@ -857,7 +857,7 @@ void SettingsController::PrefsHandlePress() {
     if (CurrentBookUsesLineWrapFixSlot(app)) {
       ToggleCurrentBookMobiLineWrapFix();
     } else if (CurrentBookUsesReadingDirectionSlot(app)) {
-      ToggleFixedLayoutReadingDirection(app->prefs);
+      ToggleFixedLayoutReadingDirection(app->prefs.get());
       if (app->GetCurrentBook()) {
         app->GetCurrentBook()->ResetFixedLayoutViewportForNavigation();
         app->RequestStatusRedraw();

@@ -76,12 +76,13 @@ std::list<int> CopyBookmarksAsInts(const std::list<u16> &bookmarks) {
 void ApplyRemappedBookmarks(Book *book, const std::list<int> &bookmarks) {
   if (!book)
     return;
-  std::list<u16> *dst = book->GetBookmarks();
-  dst->clear();
+  std::list<u16> &dst = book->GetBookmarks();
+  dst.clear();
   for (int bookmark : bookmarks)
-    dst->push_back((u16)bookmark);
+    dst.push_back((u16)bookmark);
 }
 
+// State struct for tracking whether an open/reopen book operation requires a relayout and what the previous page/bookmark state was.
 struct OpenBookRelayoutState {
   bool needs_relayout;
   int old_page_count;
@@ -196,7 +197,7 @@ void DrawBookPage(Book *book, Text *ts) {
 
 void ResetBookRenderState(App *app, bool clear_glyph_cache,
                           const char *reason) {
-  if (!app || !app->ts)
+  if (!app || !app->ts.get())
     return;
   if (clear_glyph_cache)
     app->ts->ClearCache();
@@ -235,6 +236,7 @@ bool TurnBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 pagecount,
   return SetBookPage(book, ts, *pagecurrent);
 }
 
+// Pumps deferred MOBI parsing work for the book, with a specified time and page budget, and outputs whether any progress was made or if the status should be considered dirty (needing redraw).
 bool PumpDeferredMobi(Book *book, u32 budget_ms, u16 page_budget,
                       u16 *pagecount, bool *status_dirty,
                       bool *deferred_pumped) {
@@ -256,6 +258,8 @@ bool PumpDeferredMobi(Book *book, u32 budget_ms, u16 page_budget,
   return (after != before) || done;
 }
 
+// Advances the book page by one, pumping deferred MOBI parsing if needed and within the specified budgets. 
+// Returns true if the page was advanced or if the status was marked dirty due to progress, false if no advancement was possible.
 bool AdvanceBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 *pagecount,
                      bool *status_dirty, bool *deferred_pumped) {
   if (!book || !ts || !pagecurrent || !pagecount || !status_dirty ||
@@ -269,13 +273,14 @@ bool AdvanceBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 *pagecount,
   if (!book->HasDeferredMobiParse())
     return false;
   PumpDeferredMobi(book, 80, 18, pagecount, status_dirty, deferred_pumped);
-  if (TurnBookPage(book, ts, pagecurrent, *pagecount, 1)) {
+  if (TurnBookPage(book, ts, pagecurrent, *pagecount, 1)) { // Try again after pumping in case new pages were parsed.
     *status_dirty = true;
     return true;
   }
   return false;
 }
 
+// Attempts to reuse the currently selected book by resetting transient state and redrawing the current page, returning whether the reuse was successful.
 bool ReuseParsedBook(App *app) {
   Book *selected = app ? app->GetSelectedBook() : NULL;
   if (!selected)
@@ -297,7 +302,7 @@ bool ReuseParsedBook(App *app) {
   Book *current = app->GetCurrentBook();
   if (current->GetPosition() >= current->GetPageCount())
     current->SetPosition(0);
-  DrawBookPage(current, app->ts);
+  DrawBookPage(current, app->ts.get());
   return true;
 }
 
@@ -308,7 +313,7 @@ OpenBookRelayoutState CaptureRelayoutState(Book *book, bool needs_relayout) {
 
   state.old_page_count = book->GetPageCount();
   state.old_position = book->GetPosition();
-  state.old_bookmarks = CopyBookmarksAsInts(*book->GetBookmarks());
+  state.old_bookmarks = CopyBookmarksAsInts(book->GetBookmarks());
   book->Close();
   return state;
 }
@@ -337,7 +342,7 @@ void DrawOpeningSplash(App *app) {
     name = selected->GetTitle();
   if (name && *name) {
     std::vector<std::string> lines = BuildOpeningTitleLines(
-        app->ts, name, kOpeningTitleMaxWidth, kOpeningTitleMaxLines,
+        app->ts.get(), name, kOpeningTitleMaxWidth, kOpeningTitleMaxLines,
         TEXT_STYLE_BROWSER);
     for (size_t i = 0; i < lines.size(); ++i) {
       app->ts->SetPen(12, (u16)(50 + (int)i * kOpeningTitleLineHeight));
@@ -532,8 +537,8 @@ bool ReaderController::MaybeFinalizeDeferredRelayout(Book *book, int page_count)
 }
 
 void ReaderController::HandleEventInOpening() {
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
   const u32 keys = hidKeysDown();
 
   if (keys & (app_.key.b | app_.key.start | app_.key.select)) {
@@ -689,8 +694,8 @@ void ReaderController::HandleEventInOpening() {
 
 void ReaderController::HandleEventInBook() {
   Book *bookcurrent_ = app_.GetCurrentBook();
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
   decltype(App::key) &key = app_.key;
   auto touch_read = [&]() { return app_.TouchRead(); };
   auto request_status_redraw = [&]() { app_.RequestStatusRedraw(); };
@@ -885,7 +890,7 @@ void ReaderController::HandleEventInBook() {
   } else if (keys & (key.right | key.left)) {
     // Navigate bookmarks.
     app_flow_utils::BookmarkJumpResult jump = app_flow_utils::FindBookmarkJumpTarget(
-        *bookcurrent_->GetBookmarks(), bookcurrent_->GetPosition(),
+        bookcurrent_->GetBookmarks(), bookcurrent_->GetPosition(),
         (keys & key.left) ? app_flow_utils::BookmarkJumpDirection::Next
                           : app_flow_utils::BookmarkJumpDirection::Previous);
 
@@ -924,27 +929,27 @@ void ReaderController::HandleEventInBook() {
 
 void ReaderController::ToggleBookmark() {
   Book *bookcurrent_ = app_.GetCurrentBook();
-  Text *ts = app_.ts;
+  Text *ts = app_.ts.get();
 
   if (!bookcurrent_ || !bookcurrent_->SupportsBookmarks())
     return;
   // Toggle bookmark for the current page.
-  std::list<u16> *bookmarks = bookcurrent_->GetBookmarks();
+  std::list<u16> &bookmarks = bookcurrent_->GetBookmarks();
   u16 pagecurrent = bookcurrent_->GetPosition();
 
   bool found = false;
-  for (std::list<u16>::iterator i = bookmarks->begin(); i != bookmarks->end();
+  for (std::list<u16>::iterator i = bookmarks.begin(); i != bookmarks.end();
        i++) {
     if (*i == pagecurrent) {
-      bookmarks->erase(i);
+      bookmarks.erase(i);
       found = true;
       break;
     }
   }
 
   if (!found) {
-    bookmarks->push_back(pagecurrent);
-    bookmarks->sort();
+    bookmarks.push_back(pagecurrent);
+    bookmarks.sort();
   }
 
   DrawBookPage(bookcurrent_, ts);
@@ -985,8 +990,8 @@ int ReaderController::GetBookIndex(Book *b) {
 }
 
 u8 ReaderController::OpenBook() {
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
   Book *selected_book = app_.GetSelectedBook();
   Book *bookcurrent_ = app_.GetCurrentBook();
 

@@ -324,12 +324,13 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
                book->GetFileName() ? book->GetFileName() : "(null)",
                cache_path.c_str());
     }
+#endif
     if (debug_runtime::BackgroundWorkersDisabled() && !book_path.empty() &&
         !book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
       int src_rc = -1;
       if (book->format == FORMAT_EPUB) {
-        // In debug mode, metadata indexing jobs never run via background
-        // workers. Index synchronously here so coverImagePath gets populated.
+        // Metadata indexing jobs may not have run yet; index synchronously
+        // here so coverImagePath gets populated before extraction.
         if (!book->metadataIndexTried) {
           if (book->Index() == 0)
             book->ClearBrowserDisplayNameCache();
@@ -353,7 +354,6 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
       }
       book->coverAttempts++;
     }
-#endif
     return false;
   }
 
@@ -1194,7 +1194,7 @@ void LibraryController::browser_init(void) {
     int row = page_idx / browser_grid_view::kGridCols;
 
     app_.buttons.push_back(new Button());
-    app_.buttons[i]->Init(app_.ts);
+    app_.buttons[i]->Init(app_.ts.get());
     app_.buttons[i]->Resize(browser_grid_view::kCoverW + 4,
                             browser_grid_view::kCoverH + 4);
     app_.buttons[i]->Move(browser_grid_view::kGridX0 +
@@ -1207,9 +1207,9 @@ void LibraryController::browser_init(void) {
 
   }
 
-  app_.buttonprev.Init(app_.ts);
-  app_.buttonnext.Init(app_.ts);
-  app_.buttonprefs.Init(app_.ts);
+  app_.buttonprev.Init(app_.ts.get());
+  app_.buttonnext.Init(app_.ts.get());
+  app_.buttonprefs.Init(app_.ts.get());
   LayoutBrowserNavButtons(&app_);
 
   if (app_.BookCount() <= 0) {

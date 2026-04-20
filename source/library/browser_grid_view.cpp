@@ -175,7 +175,7 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
       }
     } else {
       browser_presentation_utils::DrawWrappedTitleInsideCover(
-          app.ts, display_name, btnX + 2, btnY + 2, kCoverW, kCoverH,
+          app.ts.get(), display_name, btnX + 2, btnY + 2, kCoverW, kCoverH,
           TEXT_STYLE_BROWSER);
     }
 

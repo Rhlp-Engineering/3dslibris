@@ -40,7 +40,7 @@ void DrawPage(App &app, int page_start, int page_size) {
     const int title_height =
         browser_view_utils::ListTitleBoxHeight(app.ts->GetHeight());
     browser_presentation_utils::DrawWrappedTitleInsideCover(
-        app.ts, display_name, row_x, row_y, title_width, title_height,
+        app.ts.get(), display_name, row_x, row_y, title_width, title_height,
         app.ts->GetStyle());
 
     int pos = app.books[i]->GetPosition();

@@ -541,8 +541,8 @@ void Page::DrawNumber(Text *ts, u16 *number_screen) {
   bool isBookmark = false;
   u16 pagecurrent = book->GetPosition();
   u16 pagecount = book->GetPageCount();
-  std::list<u16> *bookmarks = book->GetBookmarks();
-  for (std::list<u16>::iterator i = bookmarks->begin(); i != bookmarks->end();
+  std::list<u16> &bookmarks = book->GetBookmarks();
+  for (std::list<u16>::iterator i = bookmarks.begin(); i != bookmarks.end();
        i++) {
     if (*i == pagecurrent) {
       isBookmark = true;

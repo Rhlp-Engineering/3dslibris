@@ -95,7 +95,7 @@ FontMenu::FontMenu(App *_app)
             });
 
   for (auto &filename : files) {
-    Button *b = new Button(app->ts);
+    Button *b = new Button(app->ts.get());
     b->Init();
     b->Move(5, 24 + (buttons.size() % pagesize) * 36);
     b->Resize(230, 34);
@@ -104,7 +104,7 @@ FontMenu::FontMenu(App *_app)
   }
 
   for (u8 i = 0; i < font_config_utils::FONT_TARGET_COUNT; i++) {
-    Button *b = new Button(app->ts);
+    Button *b = new Button(app->ts.get());
     b->Init();
     b->SetStyle(BUTTON_STYLE_SETTING);
     b->Move(5, 24 + (i % kTargetsPerPage) * 38);

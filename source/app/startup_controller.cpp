@@ -224,7 +224,7 @@ void StartupController::DrawBootStatus(const char *title,
 // Halts the app on a fatal boot status, displaying the error message and waiting for user input to exit, ensuring that users are informed of critical issues during startup.
 int StartupController::HaltOnFatalBootStatus()
 {
-  halt(app_.ts, -1);
+  halt(app_.ts.get(), -1);
   return 2;
 }
 
