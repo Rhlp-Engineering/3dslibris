@@ -75,9 +75,10 @@ class StartupController;
 class MainLoopController;
 
 #define APP_BROWSER_BUTTON_COUNT 4
-#define APP_URL "http://github.com/rhaleblian/dslibris"
 
-enum class AppMode : u8 {
+// Forward declarations for controller classes to avoid circular dependencies in headers.
+enum class AppMode : u8
+{
   Book = 0,
   Browser = 1,
   Prefs = 2,
@@ -91,13 +92,15 @@ enum class AppMode : u8 {
   Opening = 10,
 };
 
-enum app_job_type_t {
+enum app_job_type_t
+{
   APP_JOB_INDEX_METADATA,
   APP_JOB_EXTRACT_COVER,
   APP_JOB_RESOLVE_TOC
 };
 
-struct app_job_t {
+struct app_job_t
+{
   app_job_type_t type;
   Book *book;
 };
@@ -108,28 +111,29 @@ struct app_job_t {
 //! initialization,
 //! interaction loop, drawing everything but text, and logging.
 
-class App : public IStatusReporter {
+class App : public IStatusReporter
+{
 public:
-  static App* GetInstance();
-  static void SetInstance(App* instance);
+  static App *GetInstance();
+  static void SetInstance(App *instance);
 
   App();
   ~App();
 
-  Text *ts;
-  Prefs *prefs;        //! User-configurable settings.
-  std::string fontdir; //! Directory to search for font files
-  bool melonds;        //! Are we running in melonDS?
+  std::unique_ptr<Text> ts;
+  std::unique_ptr<Prefs> prefs; //! User-configurable settings.
+  std::string fontdir;          //! Directory to search for font files
 
   //! key functions are remappable to support screen flipping.
-  struct {
+  struct
+  {
     u32 up, down, left, right, l, r, a, b, x, y, start, select;
     u32 downrepeat;
   } key;
 
   std::vector<Button *> buttons;
   Button buttonprev, buttonnext, buttonprefs; //! Buttons on browser bottom.
-  std::string bookdir; //! Search here for XHTML.
+  std::string bookdir;                        //! Search here for XHTML.
   std::vector<Book *> books;
   //! reopen book from last session on startup?
   bool reopen;
@@ -143,9 +147,9 @@ public:
 
   Button prefsButtons[PREFS_BUTTON_COUNT];
 
-  class FontMenu *fontmenu; //! Font selection menu.
-  class BookmarkMenu *bookmarkmenu;
-  class ChapterMenu *chaptermenu;
+  std::unique_ptr<FontMenu> fontmenu; //! Font selection menu.
+  std::unique_ptr<BookmarkMenu> bookmarkmenu;
+  std::unique_ptr<ChapterMenu> chaptermenu;
 
   // app.cpp
   void PrintStatus(const char *msg) override;
@@ -274,8 +278,9 @@ public:
   size_t PauseBrowserJobs();
 
 private:
-  static App* s_instance_;
-  struct BrowserState {
+  static App *s_instance_;
+  struct BrowserState
+  {
     Book *selected_book;
     int page_start;
     bool view_dirty;
@@ -283,14 +288,16 @@ private:
     u64 last_interaction_ms;
   };
 
-  struct PrefsViewState {
+  struct PrefsViewState
+  {
     int selected_index;
     bool view_dirty;
     bool from_book;
     bool layout_notice_pending;
   };
 
-  struct OpeningState {
+  struct OpeningState
+  {
     bool pending;
     Book *book;
     unsigned int session_id;
@@ -301,12 +308,13 @@ private:
     u64 started_at_ms;
 
     OpeningState()
-        : pending(false), book(NULL), session_id(0), needs_relayout(false),
+        : pending(false), book(nullptr), session_id(0), needs_relayout(false),
           old_page_count(0), old_position(0), old_bookmarks(),
           started_at_ms(0) {}
   };
 
-  struct DeferredRelayoutState {
+  struct DeferredRelayoutState
+  {
     bool pending;
     Book *book;
     int old_page_count;
@@ -315,13 +323,14 @@ private:
     int initial_position;
 
     DeferredRelayoutState()
-        : pending(false), book(NULL), old_page_count(0), old_position(0),
+        : pending(false), book(nullptr), old_page_count(0), old_position(0),
           old_bookmarks(), initial_position(0) {}
   };
 
   static bool IsFontMode(AppMode mode);
 
-  struct NavigationState {
+  struct NavigationState
+  {
     AppMode mode;
     BrowserState browser;
     PrefsViewState prefs;
@@ -330,7 +339,8 @@ private:
         : mode(AppMode::Browser), browser(), prefs() {}
   };
 
-  struct ReaderRuntimeState {
+  struct ReaderRuntimeState
+  {
     OpeningState opening;
     DeferredRelayoutState deferred_relayout;
     Book *bookcurrent;
@@ -344,7 +354,7 @@ private:
     u64 mobi_deferred_ready_at_ms;
 
     ReaderRuntimeState()
-        : opening(), deferred_relayout(), bookcurrent(NULL),
+        : opening(), deferred_relayout(), bookcurrent(nullptr),
           current_book_session_id(0), next_book_session_id(1),
           layout_revision(0),
           pdf_touch_drag_active(false), pdf_touch_last_x(-1),

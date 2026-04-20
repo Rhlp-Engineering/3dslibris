@@ -1,3 +1,17 @@
+/*
+    3dslibris - main_loop_controller.cpp
+    Adapted from dslibris for Nintendo 3DS.
+
+    Original attribution (dslibris): Ray Haleblian, GPLv2+.
+    Modified for Nintendo 3DS by Rigle.
+
+    Summary:
+    - Main loop controller for the 3DS port, driving the per-frame app update cycle.
+    - Dispatches behavior by AppMode, including browser, reader, opening, prefs, and menus.
+    - Handles applet suspend/resume flow, pending boot reopen, and browser warmup/background jobs.
+    - Presents updated frames only when the UI has dirty content.
+*/
+
 #include "app/main_loop_controller.h"
 
 #include <3ds.h>
@@ -10,39 +24,47 @@
 
 MainLoopController::MainLoopController(App &app) : app_(app) {}
 
-int MainLoopController::RunMainLoop() {
+int MainLoopController::RunMainLoop()
+{
 #ifdef DSLIBRIS_DEBUG
   AppMode last_mode = app_.GetMode();
   int mode_log_budget = 64;
   int heap_log_countdown = 0;
 #endif
-  while (aptMainLoop()) {
-    gspWaitForVBlank();
-    hidScanInput();
+  while (aptMainLoop())
+  {                     // Main loop runs until aptMainLoop returns false (app exit).
+    gspWaitForVBlank(); // Sync with display refresh to avoid tearing and control frame timing.
+    hidScanInput();     // Update input state for this frame, must be called before reading keys.
 
-    if (app_.IsAppletSuspended()) {
+    if (app_.IsAppletSuspended())
+    {
       app_.HandleAppletSuspend();
       continue;
     }
     app_.HandleAppletResume();
 
-    if (app_.HasPendingBootReopen()) {
+    if (app_.HasPendingBootReopen())
+    {
       app_.SetPendingBootReopen(false);
       app_.OpenBook();
     }
 
-    if (app_.GetMode() == AppMode::Browser) {
-      if (!debug_runtime::BrowserWarmupDisabled()) {
+    // Allow browser warmup jobs to run during idle periods in the browser, based on timing and input state.
+    if (app_.GetMode() == AppMode::Browser)
+    {
+      if (!debug_runtime::BrowserWarmupDisabled())
+      {
         bool allow_jobs = browser_warmup_utils::IsBrowserWarmupIdle(
             osGetTime(), app_.GetBrowserLastInteractionMs(),
             app_.IsBrowserWaitingInputRelease());
         if (allow_jobs)
-          app_.ProcessJobs(3);
+          app_.ProcessJobs(3); // Process background jobs with a small time budget during idle periods to warm up the browser without impacting responsiveness.
       }
     }
 
 #ifdef DSLIBRIS_DEBUG
-    if (mode_log_budget > 0 && app_.GetMode() != last_mode) {
+    if (mode_log_budget > 0 && app_.GetMode() != last_mode)
+    {
       app_.PrintStatus("MAIN mode transition");
       app_.PrintStatus(std::string("MAIN mode now=") +
                        std::to_string((int)app_.GetMode()));
@@ -50,15 +72,17 @@ int MainLoopController::RunMainLoop() {
       mode_log_budget -= 2;
     }
 #endif
-
-    switch (app_.GetMode()) {
+    // Dispatch frame processing based on the current app mode, handling input and updates for each mode. After processing, present the frame if it was marked dirty.
+    switch (app_.GetMode())
+    {
     case AppMode::Book:
       app_.UpdateStatus();
       app_.HandleEventInBook();
       break;
 
     case AppMode::Opening:
-      if (!app_.IsOpeningPending()) {
+      if (!app_.IsOpeningPending())
+      {
         app_.UpdateStatus();
       }
       app_.HandleEventInOpening();
@@ -66,14 +90,16 @@ int MainLoopController::RunMainLoop() {
 
     case AppMode::Browser:
       app_.browser_handleevent();
-      if (app_.GetMode() != AppMode::Browser) {
+      if (app_.GetMode() != AppMode::Browser)
+      {
         DBG_LOGF(&app_, "MAIN browser frame aborted after handleevent mode=%d",
                  (int)app_.GetMode());
         break;
       }
       if (!debug_runtime::BrowserWarmupDisabled())
         app_.TickBrowserWarmup();
-      if (app_.GetMode() != AppMode::Browser) {
+      if (app_.GetMode() != AppMode::Browser)
+      {
         DBG_LOGF(&app_, "MAIN browser frame aborted after warmup mode=%d",
                  (int)app_.GetMode());
         break;
@@ -82,7 +108,8 @@ int MainLoopController::RunMainLoop() {
       if (app_.IsBrowserDirty())
         app_.browser_draw();
 #ifdef DSLIBRIS_DEBUG
-      if (--heap_log_countdown <= 0) {
+      if (--heap_log_countdown <= 0)
+      {
         heap_log_countdown = 300; // ~5 seconds at 60fps
         app_.PrintStatus(std::string("MEM heap_free=") +
                          std::to_string((int)osGetMemRegionFree(MEMREGION_ALL)));

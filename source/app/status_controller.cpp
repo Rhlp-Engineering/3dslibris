@@ -1,3 +1,17 @@
+/*
+    3dslibris - status_controller.cpp
+    Adapted from dslibris for Nintendo 3DS.
+
+    Original attribution (dslibris): Ray Haleblian, GPLv2+.
+    Modified for Nintendo 3DS by Rigle.
+
+    Summary:
+    - Updates the in-reader status HUD for Book and Opening modes.
+    - Supports a minimal fixed-layout HUD for PDF/CBZ and a progress HUD for reflowable books.
+    - Avoids unnecessary redraws by caching the last displayed time/progress token and
+      only repainting when the visible status changes or a redraw is forced.
+*/
+
 #include "app/status_controller.h"
 
 #include <algorithm>
@@ -10,67 +24,87 @@
 #include "settings/prefs.h"
 #include "ui/text.h"
 
-namespace {
+namespace
+{
 
-static bool UsesFixedLayoutMinimalHud(const Book *book) {
-  return book && (book->IsPdf() || book->IsCbz());
-}
-
+  // Helper function to determine if the current book uses a fixed layout and should show a minimal HUD.
+  static bool UsesFixedLayoutMinimalHud(const Book *book)
+  {
+    return book && (book->IsPdf() || book->IsCbz());
+  }
+  // TODO: Route HUD status labels like "opening" through a central UI string
+  // table if the app later adds localization or more status variants.
+  static const char *kOpeningStatusLabel = "opening";
 } // namespace
 
 StatusController::StatusController(App &app)
     : app_(app), last_minute_(-1), last_display_token_(-1),
-      progress_lock_book_(NULL), progress_pagecount_lock_(0), force_redraw_(true) {}
+      progress_lock_book_(nullptr), progress_pagecount_lock_(0),
+      force_redraw_(true) {}
 
 void StatusController::RequestStatusRedraw() { force_redraw_ = true; }
 
-void StatusController::UpdateStatus() {
-  if (app_.GetMode() != AppMode::Book && app_.GetMode() != AppMode::Opening)
+// Updates the status HUD based on the current app mode, time, and book progress. Avoids unnecessary redraws by caching the last displayed state.
+void StatusController::UpdateStatus()
+{
+  const AppMode mode = app_.GetMode();
+  if (mode != AppMode::Book && mode != AppMode::Opening)
     return;
   u16 *screen = app_.ts->GetScreen();
   time_t unixTime = time(NULL);
+  // TODO: Move clock formatting into a small shared helper if status/date/time
+  // rendering grows further (12h/24h logic currently lives inline here).
   struct tm *timeStruct = localtime(&unixTime);
   int minute_of_day = -1;
-  if (timeStruct) {
+  if (timeStruct)
+  {
     minute_of_day = timeStruct->tm_hour * 60 + timeStruct->tm_min;
   }
 
   Book *current_book = app_.GetCurrentBook();
   app_flow_utils::StatusSnapshot snapshot = {};
-  if (app_.GetMode() == AppMode::Book) {
+  if (mode == AppMode::Book)
+  {
     snapshot = app_flow_utils::ComputeStatusSnapshot(
         {current_book, current_book ? (int)current_book->GetPosition() : 0,
          current_book ? (int)current_book->GetPageCount() : 0,
          current_book ? current_book->HasDeferredMobiParse() : false,
          progress_lock_book_, progress_pagecount_lock_});
-    progress_lock_book_ = (Book *)snapshot.next_locked_book;
+    progress_lock_book_ = (Book *)snapshot.next_locked_book; // TODO: avoid C-style cast here by changing snapshot to use Book* directly.
     progress_pagecount_lock_ = snapshot.next_locked_pagecount;
-  } else {
-    progress_lock_book_ = NULL;
+  }
+  else
+  {
+    progress_lock_book_ = nullptr;
     progress_pagecount_lock_ = 0;
     snapshot.percent_tenths = -1;
     snapshot.percent_value = 0.0f;
     snapshot.draw_page_count = 0;
     snapshot.has_progress = false;
-    snapshot.next_locked_book = NULL;
+    snapshot.next_locked_book = nullptr;
     snapshot.next_locked_pagecount = 0;
   }
 
   if (!force_redraw_ && minute_of_day == last_minute_ &&
-      ((app_.GetMode() == AppMode::Book &&
-        UsesFixedLayoutMinimalHud(current_book))
+      ((mode == AppMode::Book && UsesFixedLayoutMinimalHud(current_book))
            ? (current_book ? (int)current_book->GetPosition() : -1)
-           : snapshot.percent_tenths) == last_display_token_) {
+           : snapshot.percent_tenths) == last_display_token_)
+  {
     return;
   }
 
   char tmsg[24];
-  if (!timeStruct) {
+  if (!timeStruct)
+  {
     snprintf(tmsg, sizeof(tmsg), "--:--");
-  } else if (app_.prefs->time24h) {
+  }
+  else if (app_.prefs->time24h)
+  {
     snprintf(tmsg, sizeof(tmsg), "%02d:%02d", timeStruct->tm_hour,
              timeStruct->tm_min);
-  } else {
+  }
+  else
+  {
     int h = timeStruct->tm_hour % 12;
     if (h == 0)
       h = 12;
@@ -81,8 +115,9 @@ void StatusController::UpdateStatus() {
   int style = app_.ts->GetStyle();
   app_.ts->SetStyle(TEXT_STYLE_BROWSER); // smaller, readable font
 
-  if (app_.GetMode() == AppMode::Book &&
-      UsesFixedLayoutMinimalHud(current_book)) {
+  if (mode == AppMode::Book &&
+      UsesFixedLayoutMinimalHud(current_book))
+  {
     const status_layout_utils::FixedLayoutBottomHudLayout hud_layout =
         status_layout_utils::ComputeFixedLayoutBottomHudLayout(
             320, app_.ts->GetHeight());
@@ -96,7 +131,8 @@ void StatusController::UpdateStatus() {
     app_.ts->SetPen(time_x, hud_layout.time_y);
     app_.ts->PrintString(tmsg);
 
-    if (current_book && current_book->GetPageCount() > 0) {
+    if (current_book && current_book->GetPageCount() > 0)
+    {
       char page_msg[32];
       snprintf(page_msg, sizeof(page_msg), "%d/%d",
                (int)current_book->GetPosition() + 1,
@@ -110,7 +146,9 @@ void StatusController::UpdateStatus() {
       app_.ts->SetPen(page_x, hud_layout.page_y);
       app_.ts->PrintString(page_msg);
     }
-  } else {
+  }
+  else
+  {
     app_.ts->SetScreen(app_.ts->screenleft);
     int savedBottomMargin = app_.ts->margin.bottom;
     app_.ts->margin.bottom = 0;
@@ -127,13 +165,15 @@ void StatusController::UpdateStatus() {
     int clockWidth = app_.ts->GetStringWidth(tmsg, TEXT_STYLE_BROWSER);
 
     int pX = 232;
-    if (app_.GetMode() == AppMode::Opening) {
-      const char *opening_msg = "opening";
-      int pw = app_.ts->GetStringWidth(opening_msg, TEXT_STYLE_BROWSER);
+    if (mode == AppMode::Opening)
+    {
+      int pw = app_.ts->GetStringWidth(kOpeningStatusLabel, TEXT_STYLE_BROWSER);
       pX = 232 - pw;
       app_.ts->SetPen(pX, textY);
-      app_.ts->PrintString(opening_msg);
-    } else if (snapshot.has_progress) {
+      app_.ts->PrintString(kOpeningStatusLabel);
+    }
+    else if (snapshot.has_progress)
+    {
       char pmsg[32];
       snprintf(pmsg, sizeof(pmsg), "%.1f%%", snapshot.percent_value);
       int pw = app_.ts->GetStringWidth(pmsg, TEXT_STYLE_BROWSER);
@@ -143,17 +183,20 @@ void StatusController::UpdateStatus() {
 
       int barStart = 8 + clockWidth + 12;
       int barEnd = pX - 12;
-      if (barEnd > barStart + 10) {
+      if (barEnd > barStart + 10)
+      {
         int barY = hud_layout.progress_bar_y;
         int barHeight = hud_layout.progress_bar_height;
         app_.ts->DrawRect(barStart, barY, barEnd, barY + barHeight, fgColor);
 
         if (snapshot.draw_page_count > 1 && current_book &&
-            current_book->GetPosition() > 0) {
+            current_book->GetPosition() > 0)
+        {
           int fillW = (int)(((float)(barEnd - barStart - 4) *
                              current_book->GetPosition()) /
                             (snapshot.draw_page_count - 1));
-          if (fillW > 0) {
+          if (fillW > 0)
+          {
             app_.ts->FillRect(barStart + 2, barY + 2, barStart + 2 + fillW,
                               barY + barHeight - 2, fgColor);
           }
@@ -166,7 +209,7 @@ void StatusController::UpdateStatus() {
   app_.ts->SetScreen(screen);
   last_minute_ = minute_of_day;
   last_display_token_ =
-      (app_.GetMode() == AppMode::Book && UsesFixedLayoutMinimalHud(current_book))
+      (mode == AppMode::Book && UsesFixedLayoutMinimalHud(current_book))
           ? (current_book ? (int)current_book->GetPosition() : -1)
           : snapshot.percent_tenths;
   force_redraw_ = false;

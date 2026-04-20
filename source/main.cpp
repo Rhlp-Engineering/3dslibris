@@ -30,28 +30,32 @@
 #include "path_utils.h"
 #include "version.h"
 
-static void PresentCurrentFrameToBothBuffers(Text *presenter) {
+static void PresentCurrentFrameToBothBuffers(Text *presenter)
+{
   // Re-blit before each swap so both physical backbuffers receive the same
   // software-rendered frame. Swapping twice without re-blitting would simply
   // alternate between a fresh fatal screen and a stale previous frame.
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < 2; i++)
+  {
     if (presenter)
       presenter->BlitToFramebuffer(); // Blit to backbuffer before each swap.
-    gfxFlushBuffers(); // Ensure the backbuffer is updated before swapping.
-    gfxSwapBuffers(); // Swap front and back buffers to present the frame.
-    gspWaitForVBlank(); // Wait for vertical blank to avoid tearing and sync with display refresh.
+    gfxFlushBuffers();                // Ensure the backbuffer is updated before swapping.
+    gfxSwapBuffers();                 // Swap front and back buffers to present the frame.
+    gspWaitForVBlank();               // Wait for vertical blank to avoid tearing and sync with display refresh.
   }
 }
 
 //! \param vblanks blanking intervals to wait, -1 for forever, default = -1
-int halt(Text *presenter, int vblanks) {
+int halt(Text *presenter, int vblanks)
+{
   // Present the current frame to both buffers so we don't alternate between a
   // stale previous frame and the latest fatal/console screen.
   PresentCurrentFrameToBothBuffers(presenter);
 
   int timer = vblanks;
-  while (aptMainLoop()) {
-    hidScanInput(); // Updates the state of the input, must be called before reading keys.
+  while (aptMainLoop())
+  {
+    hidScanInput();            // Updates the state of the input, must be called before reading keys.
     u32 kDown = hidKeysDown(); // Gets the keys that were just pressed in this frame (edge-triggered).
     if (kDown & KEY_START)
       break;
@@ -70,12 +74,14 @@ int halt(Text *presenter, int vblanks) {
 
 // Overload for convenience when no presenter is available (e.g. early init failure).
 //! \param vblanks blanking intervals to wait, -1 for forever, default = -1
-int halt(Text *presenter, const char *msg, int vblanks) {
+int halt(Text *presenter, const char *msg, int vblanks)
+{
   printf("%s\n", msg);
   return halt(presenter, vblanks);
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
   // Initialize 3DS services
   gfxInitDefault();
   // Use console on bottom screen for init messages.
@@ -84,9 +90,10 @@ int main(int argc, char **argv) {
 
   bool is_new_3ds = false;
   APT_CheckNew3DS(&is_new_3ds);
-  if (is_new_3ds) {
+  if (is_new_3ds)
+  {
     osSetSpeedupEnable(true);
-    //APT_SetAppCpuTimeLimit(30); // Optional: increase CPU time limit for more demanding tasks. Disabled to test.
+    // APT_SetAppCpuTimeLimit(30); // Optional: increase CPU time limit for more demanding tasks. Disabled to test.
   }
 
   printf("================================\n");
@@ -126,10 +133,12 @@ int main(int argc, char **argv) {
     romfsExit();
 
   // If Run() returned early (error), wait for user
-  if (result != 0) {
+  if (result != 0)
+  {
     printf("\nPress START to exit.\n");
     PresentCurrentFrameToBothBuffers(NULL);
-    while (aptMainLoop()) {
+    while (aptMainLoop())
+    {
       hidScanInput();
       if (hidKeysDown() & KEY_START)
         break;

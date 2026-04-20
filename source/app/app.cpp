@@ -49,56 +49,63 @@
 #define ORIENTATION_DIAG 0
 #endif
 
-namespace {} // end anonymous namespace
+namespace
+{
+} // end anonymous namespace
 #include "color_utils.h"
 
-App* App::s_instance_ = nullptr;
+// Singleton instance management for App class, allowing global access to the app instance from other modules.
+App *App::s_instance_ = nullptr;
 
-App* App::GetInstance() { return s_instance_; }
+App *App::GetInstance() { return s_instance_; }
+void App::SetInstance(App *instance) { s_instance_ = instance; }
 
-void App::SetInstance(App* instance) { s_instance_ = instance; }
+namespace
+{
 
-namespace {
-
-static std::string ResolveDefaultFontDir() {
-  return std::string(paths::kFontDir);
-}
+  static std::string ResolveDefaultFontDir()
+  {
+    return std::string(paths::kFontDir);
+  }
 
 #if ORIENTATION_DIAG
-static int g_orientation_touch_diag_budget = 0;
+  static int g_orientation_touch_diag_budget = 0;
 #endif
 
-[[gnu::unused]] static const char *AppletHookName(APT_HookType hook) {
-  switch (hook) {
-  case APTHOOK_ONSUSPEND:
-    return "suspend";
-  case APTHOOK_ONRESTORE:
-    return "restore";
-  case APTHOOK_ONWAKEUP:
-    return "wakeup";
-  case APTHOOK_ONEXIT:
-    return "exit";
-  default:
-    return "unknown";
+  [[gnu::unused]] static const char *AppletHookName(APT_HookType hook)
+  {
+    switch (hook)
+    {
+    case APTHOOK_ONSUSPEND:
+      return "suspend";
+    case APTHOOK_ONRESTORE:
+      return "restore";
+    case APTHOOK_ONWAKEUP:
+      return "wakeup";
+    case APTHOOK_ONEXIT:
+      return "exit";
+    default:
+      return "unknown";
+    }
   }
-}
 
 } // namespace
 
-App::App() {
-  melonds = false;
-
+App::App()
+{
+  // Initialize paths and state.
   fontdir = ResolveDefaultFontDir();
   bookdir = std::string(paths::kBookDir);
-  reader_state_.bookcurrent = NULL;
-  reopen = true;
+  reader_state_.bookcurrent = nullptr;
+  reopen = true; // Reopen last book on startup by default.
   nav_.mode = AppMode::Browser;
   cache = false;
-  orientation = false;
+  orientation = false; // Turned Left by default.
   paraspacing = 1;
   paraindent = 0;
   colorMode = 0;
 
+  // Default key mappings
   key.down = KEY_DOWN;
   key.up = KEY_UP;
   key.left = KEY_LEFT;
@@ -112,23 +119,31 @@ App::App() {
   key.x = KEY_X;
   key.y = KEY_Y;
 
-  nav_.browser.selected_book = NULL;
+  // TODO: add new3ds-specific keys (c-stick) to prefs and remappable key config.
+
+  // Initialize browser navigation state.
+  nav_.browser.selected_book = nullptr;
   nav_.browser.page_start = 0;
   nav_.browser.view_dirty = false;
   nav_.browser.wait_input_release = false;
   nav_.browser.last_interaction_ms = 0;
 
-  prefs = new Prefs(this);
-  library_controller_.reset(new LibraryController(*this));
-  reader_controller_.reset(new ReaderController(*this));
-  settings_controller_.reset(new SettingsController(*this));
-  status_controller_.reset(new StatusController(*this));
-  startup_controller_.reset(new StartupController(*this));
-  main_loop_controller_.reset(new MainLoopController(*this));
+  // Initialize controllers and other components.
+  prefs = std::make_unique<Prefs>(this);
+  library_controller_ = std::make_unique<LibraryController>(*this);
+  reader_controller_ = std::make_unique<ReaderController>(*this);
+  settings_controller_ = std::make_unique<SettingsController>(*this);
+  status_controller_ = std::make_unique<StatusController>(*this);
+  startup_controller_ = std::make_unique<StartupController>(*this);
+  main_loop_controller_ = std::make_unique<MainLoopController>(*this);
+
+  // Initialize prefs view state.
   nav_.prefs.selected_index = -1;
   nav_.prefs.view_dirty = false;
   nav_.prefs.from_book = false;
   nav_.prefs.layout_notice_pending = false;
+
+  // Initialize reader runtime state.
   reader_state_.opening = OpeningState();
   reader_state_.layout_revision = 0;
   reader_state_.pdf_touch_drag_active = false;
@@ -136,9 +151,13 @@ App::App() {
   reader_state_.pdf_touch_last_y = -1;
   reader_state_.pdf_deferred_ready_at_ms = 0;
   reader_state_.mobi_deferred_ready_at_ms = 0;
-  status_log_file_ = NULL;
+
+  // Initialize status log.
+  status_log_file_ = nullptr;
   status_log_write_count_ = 0;
-  LightLock_Init(&status_log_lock_);
+  LightLock_Init(&status_log_lock_); // Protects status log file access.
+
+  // Initialize 3DS-specific state and hooks.
   pending_boot_reopen_ = false;
   is_new_3ds_ = false;
   is_homebrew_ = false;
@@ -148,7 +167,7 @@ App::App() {
   apt_hook_installed_ = false;
   APT_CheckNew3DS(&is_new_3ds_);
   is_homebrew_ = envIsHomebrew();
-  aptHook(&apt_hook_cookie_, App::AptHookCallback, this);
+  aptHook(&apt_hook_cookie_, App::AptHookCallback, this); // Install APT hook for handling app lifecycle events (suspend, resume, etc.).
   apt_hook_installed_ = true;
 
 #ifdef DSLIBRIS_DEBUG
@@ -157,41 +176,56 @@ App::App() {
   debug_log::SetCategories(DBG_CAT_ALL);
 #endif
 
-  ts = new Text();
+  // Initialize UI components.
+  ts = std::make_unique<Text>();
   ts->app = this;
 
-  fontmenu = new FontMenu(this);
-  bookmarkmenu = new BookmarkMenu(this);
-  chaptermenu = new ChapterMenu(this);
+  fontmenu = std::make_unique<FontMenu>(this);
+  bookmarkmenu = std::make_unique<BookmarkMenu>(this);
+  chaptermenu = std::make_unique<ChapterMenu>(this);
+
 #ifdef DSLIBRIS_DEBUG
+  // Log environment details for debugging purposes.
   DBG_LOGF(this, "ENV runtime=%s device=%s",
            is_homebrew_ ? "3dsx/homebrew" : "cia/title",
            is_new_3ds_ ? "new3ds" : "old3ds");
-  if (debug_runtime::BackgroundWorkersDisabled()) {
-    DBG_LOG(this, "DEBUG mode: background workers disabled");
-    DBG_LOG(this, "BROWSER warmup: disabled in debug");
+  if (debug_runtime::BackgroundWorkersDisabled())
+  {
+    DBG_LOG(this, "SAFE mode: background workers disabled");
+  }
+  if (debug_runtime::BrowserWarmupDisabled())
+  {
+    DBG_LOG(this, "BROWSER warmup: disabled");
   }
 #endif
 }
 
-App::~App() {
-  if (apt_hook_installed_) {
+/* TODO: refactor app lifecycle management to better handle 3DS-specific events and states,
+ such as app suspension, resumption, and homebrew vs CIA differences.
+ This may involve more granular state tracking and event handling in the main loop and controllers.
+ */
+App::~App()
+{
+  if (apt_hook_installed_)
+  { // Clean up APT hook on app exit.
     aptUnhook(&apt_hook_cookie_);
     apt_hook_installed_ = false;
   }
 #ifdef DSLIBRIS_DEBUG
   PrintStatus("APP ~App: start");
 #endif
-  LightLock_Lock(&status_log_lock_);
-  if (status_log_file_) {
+  LightLock_Lock(&status_log_lock_); // Ensure exclusive access to status log during cleanup.
+  if (status_log_file_)
+  {
     fflush(status_log_file_);
     fclose(status_log_file_);
-    status_log_file_ = NULL;
+    status_log_file_ = nullptr;
   }
   LightLock_Unlock(&status_log_lock_);
 #ifdef DSLIBRIS_DEBUG
   PrintStatus("APP ~App: deleting books");
 #endif
+  // Delete all book instances to free resources.
   for (std::vector<Book *>::iterator it = books.begin(); it != books.end();
        it++)
     delete *it;
@@ -199,26 +233,18 @@ App::~App() {
 #ifdef DSLIBRIS_DEBUG
   PrintStatus("APP ~App: deleting buttons");
 #endif
+  // Delete all UI buttons.
   for (size_t i = 0; i < buttons.size(); i++)
     delete buttons[i];
   buttons.clear();
 #ifdef DSLIBRIS_DEBUG
-  PrintStatus("APP ~App: deleting menus");
-#endif
-  delete fontmenu;
-  delete bookmarkmenu;
-  delete chaptermenu;
-  if (ts)
-    delete ts;
-  if (prefs)
-    delete prefs;
-#ifdef DSLIBRIS_DEBUG
   PrintStatus("APP ~App: done");
 #endif
-  UiButtonSkin_Exit();
+  UiButtonSkin_Exit(); // Clean up button skin resources.
 }
 
-bool App::IsFontMode(AppMode mode) {
+bool App::IsFontMode(AppMode mode)
+{
   return mode == AppMode::PrefsFont || mode == AppMode::PrefsFontBold ||
          mode == AppMode::PrefsFontItalic ||
          mode == AppMode::PrefsFontBoldItalic;
@@ -238,10 +264,12 @@ void App::SetCurrentBook(Book *book) { reader_state_.bookcurrent = book; }
 
 int App::BookCount() const { return (int)books.size(); }
 
-int App::GetSelectedBookIndex() const {
+int App::GetSelectedBookIndex() const
+{
   if (!nav_.browser.selected_book)
     return -1;
-  for (size_t i = 0; i < books.size(); i++) {
+  for (size_t i = 0; i < books.size(); i++)
+  {
     if (books[i] == nav_.browser.selected_book)
       return (int)i;
   }
@@ -250,25 +278,30 @@ int App::GetSelectedBookIndex() const {
 
 int App::GetBrowserPageStart() const { return nav_.browser.page_start; }
 
-void App::SetBrowserPageStart(int page_start) {
+void App::SetBrowserPageStart(int page_start)
+{
   if (page_start < 0)
     page_start = 0;
   nav_.browser.page_start = page_start;
 }
 
-u64 App::GetBrowserLastInteractionMs() const {
+u64 App::GetBrowserLastInteractionMs() const
+{
   return nav_.browser.last_interaction_ms;
 }
 
-void App::SetBrowserLastInteractionMs(u64 ms) {
+void App::SetBrowserLastInteractionMs(u64 ms)
+{
   nav_.browser.last_interaction_ms = ms;
 }
 
-bool App::IsBrowserWaitingInputRelease() const {
+bool App::IsBrowserWaitingInputRelease() const
+{
   return nav_.browser.wait_input_release;
 }
 
-void App::SetBrowserWaitingInputRelease(bool wait_input_release) {
+void App::SetBrowserWaitingInputRelease(bool wait_input_release)
+{
   nav_.browser.wait_input_release = wait_input_release;
 }
 
@@ -278,19 +311,23 @@ void App::MarkBrowserDirty() { nav_.browser.view_dirty = true; }
 
 int App::GetPrefsSelectedIndex() const { return nav_.prefs.selected_index; }
 
-void App::SetPrefsSelectedIndex(int selected_index) {
+void App::SetPrefsSelectedIndex(int selected_index)
+{
   nav_.prefs.selected_index = selected_index;
 }
 
-void App::SetBookSettingsContext(bool from_book) {
+void App::SetBookSettingsContext(bool from_book)
+{
   nav_.prefs.from_book = from_book;
 }
 
-bool App::IsPrefsLayoutNoticePending() const {
+bool App::IsPrefsLayoutNoticePending() const
+{
   return nav_.prefs.layout_notice_pending;
 }
 
-void App::SetPrefsLayoutNoticePending(bool pending) {
+void App::SetPrefsLayoutNoticePending(bool pending)
+{
   nav_.prefs.layout_notice_pending = pending;
 }
 
@@ -304,10 +341,12 @@ bool App::IsBrowserDirty() const { return nav_.browser.view_dirty; }
 
 void App::PersistPrefs() { prefs->Write(); }
 
-void App::RunFontMenuFrame(u32 keys) {
+void App::RunFontMenuFrame(u32 keys)
+{
 #ifdef DSLIBRIS_DEBUG
   static int s_font_frame_budget = 48;
-  if (s_font_frame_budget > 0) {
+  if (s_font_frame_budget > 0) // Log key state and dirty status for the font menu frame.
+  {
     DBG_LOGF(this,
              "FONT frame keys=0x%08lx dirty=%d screen=%p right=%p left=%p ts_dirty=%d",
              (unsigned long)keys, fontmenu->isDirty() ? 1 : 0,
@@ -317,14 +356,16 @@ void App::RunFontMenuFrame(u32 keys) {
   }
 #endif
   // Ensure first entry into font submenu is visible before any new key edge.
-  if (fontmenu->isDirty()) {
+  if (fontmenu->isDirty())
+  {
     ts->SetScreen(ts->screenright);
     fontmenu->draw();
     // Defensive: ensure framebuffer conversion sees this submenu redraw.
     ts->MarkScreenDirty(ts->screenright);
 #ifdef DSLIBRIS_DEBUG
     static int s_font_predraw_budget = 16;
-    if (s_font_predraw_budget > 0) {
+    if (s_font_predraw_budget > 0)
+    {
       DBG_LOGF(this,
                "FONT frame pre-draw done ts_dirty=%d screen=%p right=%p left=%p",
                ts->HasDirtyScreens() ? 1 : 0, (void *)ts->GetScreen(),
@@ -338,13 +379,15 @@ void App::RunFontMenuFrame(u32 keys) {
     return;
 
   fontmenu->HandleInput(keys);
-  if (fontmenu->isDirty()) {
+  if (fontmenu->isDirty())
+  {
     ts->SetScreen(ts->screenright);
     fontmenu->draw();
     ts->MarkScreenDirty(ts->screenright);
 #ifdef DSLIBRIS_DEBUG
     static int s_font_draw_after_input_budget = 24;
-    if (s_font_draw_after_input_budget > 0) {
+    if (s_font_draw_after_input_budget > 0)
+    {
       DBG_LOGF(this, "FONT frame draw-after-input ts_dirty=%d",
                ts->HasDirtyScreens() ? 1 : 0);
       s_font_draw_after_input_budget--;
@@ -353,22 +396,26 @@ void App::RunFontMenuFrame(u32 keys) {
   }
 }
 
-void App::RunBookmarksMenuFrame(u32 keys) {
+void App::RunBookmarksMenuFrame(u32 keys)
+{
   bookmarkmenu->HandleInput(keys);
   if (bookmarkmenu->IsDirty())
     bookmarkmenu->Draw();
 }
 
-void App::RunChaptersMenuFrame(u32 keys) {
+void App::RunChaptersMenuFrame(u32 keys)
+{
 #ifdef DSLIBRIS_DEBUG
   static int s_chapters_frame_budget = 24;
-  if (s_chapters_frame_budget > 0) {
+  if (s_chapters_frame_budget > 0)
+  {
     DBG_LOGF(this, "INDEX frame keys=0x%08lx dirty=%d", (unsigned long)keys,
              chaptermenu && chaptermenu->IsDirty() ? 1 : 0);
     s_chapters_frame_budget--;
   }
   static int s_chapters_input_budget = 64;
-  if (s_chapters_input_budget > 0 && (keys != 0 || hidKeysHeld() != 0)) {
+  if (s_chapters_input_budget > 0 && (keys != 0 || hidKeysHeld() != 0))
+  {
     DBG_LOGF(this, "INDEX input down=0x%08lx held=0x%08lx",
              (unsigned long)keys, (unsigned long)hidKeysHeld());
     s_chapters_input_budget--;
@@ -376,12 +423,14 @@ void App::RunChaptersMenuFrame(u32 keys) {
 #endif
   // Draw first when invalidated so the index becomes visible even before any
   // new key edge arrives.
-  if (chaptermenu->IsDirty()) {
+  if (chaptermenu->IsDirty())
+  {
     chaptermenu->Draw();
     ts->MarkScreenDirty(ts->screenright);
 #ifdef DSLIBRIS_DEBUG
     static int s_chapters_predraw_budget = 16;
-    if (s_chapters_predraw_budget > 0) {
+    if (s_chapters_predraw_budget > 0)
+    {
       DBG_LOG(this, "INDEX frame pre-draw");
       s_chapters_predraw_budget--;
     }
@@ -401,7 +450,8 @@ void App::RunChaptersMenuFrame(u32 keys) {
     static int s_chapters_dirty_budget = 64;
     const bool dirty_before = chaptermenu->IsDirty();
     (void)dirty_before;
-    if (s_chapters_dirty_budget > 0) {
+    if (s_chapters_dirty_budget > 0)
+    {
       DBG_LOGF(this, "INDEX frame state dirty_after_input=%d", dirty_after_input ? 1 : 0);
       s_chapters_dirty_budget--;
     }
@@ -411,14 +461,16 @@ void App::RunChaptersMenuFrame(u32 keys) {
     chaptermenu->Draw();
 #ifdef DSLIBRIS_DEBUG
   static int s_chapters_draw_budget = 32;
-  if (s_chapters_draw_budget > 0 && dirty_after_input) {
+  if (s_chapters_draw_budget > 0 && dirty_after_input)
+  {
     DBG_LOG(this, "INDEX frame draw");
     s_chapters_draw_budget--;
   }
 #endif
 }
 
-bool App::PresentIfDirty() {
+bool App::PresentIfDirty()
+{
   if (applet_suspended_)
     return false;
 #ifdef DSLIBRIS_DEBUG
@@ -432,7 +484,8 @@ bool App::PresentIfDirty() {
   // Raise this manually if the issue shifts to swap/present behavior.
   static int s_present_budget = 0;
   if (s_present_budget > 0 && (had_dirty || IsFontMode(nav_.mode) ||
-                               nav_.mode == AppMode::Chapters)) {
+                               nav_.mode == AppMode::Chapters))
+  {
     DBG_LOGF(this, "PRESENT mode=%d had_dirty=%d wrote=%d right_dirty=%d left_dirty=%d",
              (int)nav_.mode, had_dirty ? 1 : 0, wrote ? 1 : 0,
              right_dirty ? 1 : 0, left_dirty ? 1 : 0);
@@ -441,14 +494,16 @@ bool App::PresentIfDirty() {
   static int s_present_miss_budget = 12;
   if (s_present_miss_budget > 0 && had_dirty && !wrote &&
       (nav_.mode == AppMode::Book || nav_.mode == AppMode::Opening ||
-       nav_.mode == AppMode::Chapters || nav_.mode == AppMode::Prefs)) {
+       nav_.mode == AppMode::Chapters || nav_.mode == AppMode::Prefs))
+  {
     DBG_LOGF(this,
              "PRESENT dirty-but-no-copy mode=%d right_dirty=%d left_dirty=%d",
              (int)nav_.mode, right_dirty ? 1 : 0, left_dirty ? 1 : 0);
     s_present_miss_budget--;
   }
 #endif
-  if (wrote) {
+  if (wrote)
+  {
     gfxFlushBuffers();
     gfxSwapBuffers();
     return true;
@@ -460,7 +515,8 @@ int App::StartupFindBooks() { return library_controller_->FindBooks(); }
 
 void App::StartupPrepareLibrary() { library_controller_->PrepareLibrary(); }
 
-void App::StartupInitUiAndBrowser() {
+void App::StartupInitUiAndBrowser()
+{
   PrefsInit();
   browser_init();
   SetBrowserDirty(true);
@@ -480,109 +536,133 @@ Book *App::GetOpeningBook() const { return reader_state_.opening.book; }
 
 void App::SetOpeningBook(Book *book) { reader_state_.opening.book = book; }
 
-unsigned int App::GetOpeningSessionId() const {
+unsigned int App::GetOpeningSessionId() const
+{
   return reader_state_.opening.session_id;
 }
 
-void App::SetOpeningSessionId(unsigned int session_id) {
+void App::SetOpeningSessionId(unsigned int session_id)
+{
   reader_state_.opening.session_id = session_id;
 }
 
-bool App::IsOpeningNeedsRelayout() const {
+bool App::IsOpeningNeedsRelayout() const
+{
   return reader_state_.opening.needs_relayout;
 }
 
-void App::SetOpeningNeedsRelayout(bool needs_relayout) {
+void App::SetOpeningNeedsRelayout(bool needs_relayout)
+{
   reader_state_.opening.needs_relayout = needs_relayout;
 }
 
 int App::GetOpeningOldPageCount() const { return reader_state_.opening.old_page_count; }
 
-void App::SetOpeningOldPageCount(int old_page_count) {
+void App::SetOpeningOldPageCount(int old_page_count)
+{
   reader_state_.opening.old_page_count = old_page_count;
 }
 
 int App::GetOpeningOldPosition() const { return reader_state_.opening.old_position; }
 
-void App::SetOpeningOldPosition(int old_position) {
+void App::SetOpeningOldPosition(int old_position)
+{
   reader_state_.opening.old_position = old_position;
 }
 
-std::list<int> &App::MutableOpeningOldBookmarks() {
+std::list<int> &App::MutableOpeningOldBookmarks()
+{
   return reader_state_.opening.old_bookmarks;
 }
 
 u64 App::GetOpeningStartedAtMs() const { return reader_state_.opening.started_at_ms; }
 
-void App::SetOpeningStartedAtMs(u64 started_at_ms) {
+void App::SetOpeningStartedAtMs(u64 started_at_ms)
+{
   reader_state_.opening.started_at_ms = started_at_ms;
 }
 
-unsigned int App::GetCurrentBookSessionId() const {
+unsigned int App::GetCurrentBookSessionId() const
+{
   return reader_state_.current_book_session_id;
 }
 
-void App::SetCurrentBookSessionId(unsigned int session_id) {
+void App::SetCurrentBookSessionId(unsigned int session_id)
+{
   reader_state_.current_book_session_id = session_id;
 }
 
-unsigned int App::AllocateBookSessionId() {
+unsigned int App::AllocateBookSessionId()
+{
   return reader_state_.next_book_session_id++;
 }
 
-bool App::IsDeferredRelayoutPending() const {
+bool App::IsDeferredRelayoutPending() const
+{
   return reader_state_.deferred_relayout.pending;
 }
 
-void App::SetDeferredRelayoutPending(bool pending) {
+void App::SetDeferredRelayoutPending(bool pending)
+{
   reader_state_.deferred_relayout.pending = pending;
 }
 
-Book *App::GetDeferredRelayoutBook() const {
+Book *App::GetDeferredRelayoutBook() const
+{
   return reader_state_.deferred_relayout.book;
 }
 
-void App::SetDeferredRelayoutBook(Book *book) {
+void App::SetDeferredRelayoutBook(Book *book)
+{
   reader_state_.deferred_relayout.book = book;
 }
 
-int App::GetDeferredRelayoutOldPageCount() const {
+int App::GetDeferredRelayoutOldPageCount() const
+{
   return reader_state_.deferred_relayout.old_page_count;
 }
 
-void App::SetDeferredRelayoutOldPageCount(int old_page_count) {
+void App::SetDeferredRelayoutOldPageCount(int old_page_count)
+{
   reader_state_.deferred_relayout.old_page_count = old_page_count;
 }
 
-int App::GetDeferredRelayoutOldPosition() const {
+int App::GetDeferredRelayoutOldPosition() const
+{
   return reader_state_.deferred_relayout.old_position;
 }
 
-void App::SetDeferredRelayoutOldPosition(int old_position) {
+void App::SetDeferredRelayoutOldPosition(int old_position)
+{
   reader_state_.deferred_relayout.old_position = old_position;
 }
 
-std::list<int> &App::MutableDeferredRelayoutOldBookmarks() {
+std::list<int> &App::MutableDeferredRelayoutOldBookmarks()
+{
   return reader_state_.deferred_relayout.old_bookmarks;
 }
 
-int App::GetDeferredRelayoutInitialPosition() const {
+int App::GetDeferredRelayoutInitialPosition() const
+{
   return reader_state_.deferred_relayout.initial_position;
 }
 
-void App::SetDeferredRelayoutInitialPosition(int initial_position) {
+void App::SetDeferredRelayoutInitialPosition(int initial_position)
+{
   reader_state_.deferred_relayout.initial_position = initial_position;
 }
 
 unsigned int App::GetLayoutRevision() const { return reader_state_.layout_revision; }
 
-void App::SetLayoutRevision(unsigned int layout_revision) {
+void App::SetLayoutRevision(unsigned int layout_revision)
+{
   reader_state_.layout_revision = layout_revision;
 }
 
 bool App::IsPdfTouchDragActive() const { return reader_state_.pdf_touch_drag_active; }
 
-void App::SetPdfTouchDragActive(bool active) {
+void App::SetPdfTouchDragActive(bool active)
+{
   reader_state_.pdf_touch_drag_active = active;
 }
 
@@ -594,19 +674,23 @@ int App::GetPdfTouchLastY() const { return reader_state_.pdf_touch_last_y; }
 
 void App::SetPdfTouchLastY(int y) { reader_state_.pdf_touch_last_y = y; }
 
-u64 App::GetPdfDeferredReadyAtMs() const {
+u64 App::GetPdfDeferredReadyAtMs() const
+{
   return reader_state_.pdf_deferred_ready_at_ms;
 }
 
-void App::SetPdfDeferredReadyAtMs(u64 ready_at_ms) {
+void App::SetPdfDeferredReadyAtMs(u64 ready_at_ms)
+{
   reader_state_.pdf_deferred_ready_at_ms = ready_at_ms;
 }
 
-u64 App::GetMobiDeferredReadyAtMs() const {
+u64 App::GetMobiDeferredReadyAtMs() const
+{
   return reader_state_.mobi_deferred_ready_at_ms;
 }
 
-void App::SetMobiDeferredReadyAtMs(u64 ready_at_ms) {
+void App::SetMobiDeferredReadyAtMs(u64 ready_at_ms)
+{
   reader_state_.mobi_deferred_ready_at_ms = ready_at_ms;
 }
 
@@ -616,17 +700,21 @@ bool App::IsHomebrewEnvironment() const { return is_homebrew_; }
 
 bool App::IsAppletSuspended() const { return applet_suspended_; }
 
-bool App::ShouldAbortWork() const {
+bool App::ShouldAbortWork() const
+{
   return applet_suspended_ || nav_.mode == AppMode::Quit;
 }
 
-void App::AptHookCallback(APT_HookType hook, void *param) {
+void App::AptHookCallback(APT_HookType hook, void *param)
+{
   App *app = static_cast<App *>(param);
   if (app)
     app->HandleAppletHook(hook);
 }
 
-void App::HandleAppletHook(APT_HookType hook) {
+// Handle app lifecycle events from the APT hook, such as suspend, resume, and exit.
+void App::HandleAppletHook(APT_HookType hook)
+{
 #ifdef DSLIBRIS_DEBUG
   DBG_LOGF(this,
            "APPLET hook=%s mode=%d current_session=%u opening_session=%u",
@@ -634,7 +722,8 @@ void App::HandleAppletHook(APT_HookType hook) {
            reader_state_.current_book_session_id,
            reader_state_.opening.session_id);
 #endif
-  switch (hook) {
+  switch (hook)
+  {
   case APTHOOK_ONSUSPEND:
     applet_suspended_ = true;
     applet_resume_pending_ = false;
@@ -654,7 +743,9 @@ void App::HandleAppletHook(APT_HookType hook) {
   }
 }
 
-void App::HandleAppletSuspend() {
+// Handle app suspension: pause ongoing work, mark browser state, and notify reader controller.
+void App::HandleAppletSuspend()
+{
   if (applet_suspend_handled_)
     return;
   applet_suspend_handled_ = true;
@@ -671,7 +762,9 @@ void App::HandleAppletSuspend() {
 #endif
 }
 
-void App::HandleAppletResume() {
+// Handle app resumption: refresh browser state, mark views dirty, and notify reader controller.
+void App::HandleAppletResume()
+{
   if (!applet_resume_pending_)
     return;
   applet_resume_pending_ = false;
@@ -691,7 +784,9 @@ void App::HandleAppletResume() {
 #endif
 }
 
-int App::Run(void) {
+// Main app run loop: execute startup sequence and then enter the main loop controller.
+int App::Run(void)
+{
   const int startup = startup_controller_->RunBootSequence();
   if (startup == 1)
     return 1;
@@ -703,16 +798,20 @@ int App::Run(void) {
 // 3DS touch input — map physical touch to our logical buffer coordinates.
 // The transform must be the inverse of Text::BlitToFramebuffer() for the
 // currently active orientation.
-touchPosition App::TouchRead() {
+touchPosition App::TouchRead()
+{
   touchPosition raw;
-  hidTouchRead(&raw);
+  hidTouchRead(&raw); // Get raw touch coordinates from the 3DS hardware.
   touchPosition mapped;
 
-  if (!orientation) {
+  if (!orientation)
+  {
     // Default "Turned Left" orientation (historical mapping), X un-mirrored.
     mapped.px = raw.py;       // -> sx
     mapped.py = 319 - raw.px; // -> sy
-  } else {
+  }
+  else
+  {
     // "Turned Right" orientation (opposite page rotation), X un-mirrored.
     mapped.px = 239 - raw.py; // -> sx
     mapped.py = raw.px;       // -> sy
@@ -722,7 +821,8 @@ touchPosition App::TouchRead() {
   mapped.py = (u16)std::max(0, std::min(319, (int)mapped.py));
 
 #if ORIENTATION_DIAG
-  if (g_orientation_touch_diag_budget > 0) {
+  if (g_orientation_touch_diag_budget > 0)
+  {
     char dmsg[160];
     snprintf(dmsg, sizeof(dmsg),
              "ORIENT touch raw=(%u,%u) mapped=(%u,%u) turned_right=%d",
@@ -736,7 +836,9 @@ touchPosition App::TouchRead() {
   return mapped;
 }
 
-void App::DrawBottomGradientBackground() {
+// Draw a smooth gradient background on the bottom screen, with a subtle vignette and dithering to reduce banding.
+void App::DrawBottomGradientBackground()
+{
   if (!ts || !ts->screenright)
     return;
 
@@ -750,20 +852,25 @@ void App::DrawBottomGradientBackground() {
   static int cachedW = 0;
   static int cachedH = 0;
 
-  if (gradient.empty() || cachedW != w || cachedH != h) {
+  if (gradient.empty() || cachedW != w || cachedH != h)
+  {
     gradient.resize((size_t)w * (size_t)h);
     cachedW = w;
     cachedH = h;
     static const u8 kBayer4x4[4][4] = {
+        // 4x4 Bayer matrix for ordered dithering, values from 0 to 15.
         {0, 8, 2, 10},
         {12, 4, 14, 6},
         {3, 11, 1, 9},
         {15, 7, 13, 5},
     };
 
-    for (int y = 0; y < h; y++) {
+    // Generate the gradient with a vertical color transition, horizontal vignette, and dithering/noise to reduce banding.
+    for (int y = 0; y < h; y++)
+    {
       const float tY = (h > 1) ? ((float)y / (float)(h - 1)) : 0.0f;
-      for (int x = 0; x < w; x++) {
+      for (int x = 0; x < w; x++)
+      {
         const float dx =
             (w > 1)
                 ? (((float)x - (float)(w - 1) * 0.5f) / ((float)(w - 1) * 0.5f))
@@ -795,14 +902,17 @@ void App::DrawBottomGradientBackground() {
     }
   }
 
-  for (int y = 0; y < h; y++) {
+  for (int y = 0; y < h; y++)
+  {
     u16 *dst = ts->screenright + (size_t)y * (size_t)stride;
     const u16 *src = gradient.data() + (size_t)y * (size_t)w;
     memcpy(dst, src, (size_t)w * sizeof(u16));
   }
 }
 
-void App::ShowFontView(AppMode app_font_mode) {
+// Show the font selection menu, initializing it with the specified font mode (regular, bold, italic, etc.).
+void App::ShowFontView(AppMode app_font_mode)
+{
   nav_.mode = AppMode::PrefsFont;
   ts->SetScreen(ts->screenright);
   ts->MarkScreenDirty(ts->screenright);
@@ -816,7 +926,9 @@ void App::ShowFontView(AppMode app_font_mode) {
   fontmenu->Open(app_font_mode);
 }
 
-void App::ShowLibraryView() {
+// Show the library view (book browser), resetting shared bottom buttons and marking the view dirty for redraw.
+void App::ShowLibraryView()
+{
   // Reset shared bottom buttons immediately; prefs view reuses/moves them.
   buttonprev.Move(2, 296);
   buttonprev.Resize(66, 22);
@@ -827,6 +939,7 @@ void App::ShowLibraryView() {
   buttonprefs.Move(72, 296);
   buttonprefs.Resize(96, 22);
   buttonprefs.Label("settings");
+
   nav_.mode = AppMode::Browser;
   ts->SetScreen(ts->screenright);
   nav_.browser.wait_input_release = true;
@@ -835,11 +948,13 @@ void App::ShowLibraryView() {
   nav_.prefs.layout_notice_pending = false;
 }
 
-void App::ShowSettingsView(bool from_book) {
+void App::ShowSettingsView(bool from_book)
+{
   settings_controller_->ShowSettingsView(from_book);
 }
 
-void App::MarkBookLayoutDirty() {
+void App::MarkBookLayoutDirty()
+{
   // Bump the global layout generation so already-paginated books are reopened
   // before they are reused.
   reader_state_.layout_revision++;
@@ -850,7 +965,8 @@ void App::MarkBookLayoutDirty() {
     nav_.prefs.layout_notice_pending = true;
 }
 
-bool App::BookNeedsRelayout(Book *book) const {
+bool App::BookNeedsRelayout(Book *book) const
+{
   if (!book || !book->UsesTextLayoutSettings())
     return false;
   return book && app_flow_utils::NeedsBookRelayout(
@@ -858,18 +974,22 @@ bool App::BookNeedsRelayout(Book *book) const {
                      reader_state_.layout_revision, book->NeedsMobiRenderRefresh());
 }
 
-void App::ShowBookmarksView() {
+void App::ShowBookmarksView()
+{
   nav_.mode = AppMode::Bookmarks;
   ts->SetScreen(ts->screenright);
   bookmarkmenu->Init();
 }
 
-void App::ShowChaptersView() {
+// Show the chapters/index view, deciding whether to open it based on the current book's format, TOC quality, and chapter availability. If chapters are unavailable, show a status message and redirect to settings.
+void App::ShowChaptersView()
+{
   DBG_LOG(this, "INDEX show begin");
   Book *book = reader_state_.bookcurrent;
   format_t format = FORMAT_UNDEF;
   bool toc_quality_known = false;
-  if (book) {
+  if (book)
+  {
     format = book->format;
     toc_quality_known = book->GetTocQuality() != TOC_QUALITY_UNKNOWN;
     DBG_LOGF(this,
@@ -877,12 +997,14 @@ void App::ShowChaptersView() {
              (int)nav_.mode, (void *)book, (int)format,
              (unsigned)book->GetChapters().size(), (int)book->GetTocQuality(),
              book->tocResolveTried ? 1 : 0);
-  } else {
+  }
+  else
+  {
     DBG_LOGF(this, "INDEX request mode=%d book=null", (int)nav_.mode);
   }
   app_flow_utils::ChaptersViewDecision decision =
       app_flow_utils::DecideChaptersView(
-          book != NULL, format, toc_quality_known,
+          book != nullptr, format, toc_quality_known,
           book ? book->tocResolveTried : false,
           book ? book->GetChapters().size() : 0);
   DBG_LOGF(this, "INDEX decision open=%d queue=%d reason=%d",
@@ -893,16 +1015,21 @@ void App::ShowChaptersView() {
   if (decision.queue_toc_resolve && book &&
       book->GetChapters().empty())
     QueueTocResolve(book);
-  if (!decision.open_chapters) {
-    if (decision.reason == app_flow_utils::ChaptersViewReason::NoCurrentBook) {
+  if (!decision.open_chapters)
+  {
+    if (decision.reason == app_flow_utils::ChaptersViewReason::NoCurrentBook)
+    {
       PrintStatus("Index unavailable: no selected book");
-    } else {
+    }
+    else
+    {
       PrintStatus("Index unavailable: no chapters");
     }
     ShowSettingsView(true);
     return;
   }
-  if (!book || book->GetChapters().empty()) {
+  if (!book || book->GetChapters().empty())
+  {
     PrintStatus("Index unavailable: no chapters");
     ShowSettingsView(true);
     return;
@@ -923,7 +1050,9 @@ void App::ShowChaptersView() {
            (unsigned)book->GetChapters().size(), (unsigned)book->GetPageCount());
 }
 
-void App::ShowCurrentBookView() {
+// Show the current book view (reader), ensuring a book is selected and marking the screen dirty for redraw.
+void App::ShowCurrentBookView()
+{
   if (!reader_state_.bookcurrent)
     return;
   nav_.mode = AppMode::Book;
@@ -936,10 +1065,13 @@ void App::RequestStatusRedraw() { status_controller_->RequestStatusRedraw(); }
 
 void App::UpdateStatus() { status_controller_->UpdateStatus(); }
 
-void App::SetOrientation(bool turned_right) {
+// Set the screen orientation (turned right or left) and update touch input mapping, button layout, and mark screens dirty for redraw.
+void App::SetOrientation(bool turned_right)
+{
   // Keep both input remap and software render orientation in sync.
   orientation = turned_right;
-  if (ts) {
+  if (ts)
+  {
     ts->SetOrientation(turned_right);
     ts->MarkAllScreensDirty();
   }
@@ -947,14 +1079,17 @@ void App::SetOrientation(bool turned_right) {
   nav_.browser.view_dirty = true;
   nav_.prefs.view_dirty = true;
 
-  if (turned_right) {
+  if (turned_right)
+  {
     key.down = KEY_UP;
     key.up = KEY_DOWN;
     key.left = KEY_RIGHT;
     key.right = KEY_LEFT;
     key.l = KEY_R;
     key.r = KEY_L;
-  } else {
+  }
+  else
+  {
     key.down = KEY_DOWN;
     key.up = KEY_UP;
     key.left = KEY_LEFT;
@@ -969,7 +1104,9 @@ void App::SetOrientation(bool turned_right) {
 #endif
 }
 
-void App::InitScreens() {
+// Initialize the top and bottom screens with double buffering and the correct pixel format, then clear the software buffers for both screens.
+void App::InitScreens()
+{
   // consoleInit() set the bottom screen to single-buffered and may have
   // changed the pixel format.  Take full control back before the main loop.
   gfxSetDoubleBuffering(GFX_TOP, true);
@@ -984,19 +1121,22 @@ void App::InitScreens() {
   ts->ClearScreen();
 }
 
-void App::PrintStatus(const char *msg) {
+void App::PrintStatus(const char *msg)
+{
   if (!msg)
     return;
 
   LightLock_Lock(&status_log_lock_);
 
-  if (!status_log_file_) {
+  if (!status_log_file_)
+  {
     status_log_file_ = fopen(paths::kLogFile, "a");
     if (status_log_file_)
       setvbuf(status_log_file_, NULL, _IOFBF, 4096);
   }
 
-  if (status_log_file_) {
+  if (status_log_file_)
+  {
     time_t rawtime;
     struct tm *info;
     char buffer[80];

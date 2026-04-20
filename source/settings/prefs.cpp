@@ -294,9 +294,6 @@ void Prefs::Apply() {
 //! Write settings to prefs file.
 //! \return Error code.
 int Prefs::Write() {
-  if (app->melonds)
-    return 0;
-
   int err = 0;
   int colorMode = 0;
 

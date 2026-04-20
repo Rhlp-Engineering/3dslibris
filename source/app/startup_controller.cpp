@@ -1,3 +1,19 @@
+/*
+    3dslibris - startup_controller.cpp
+    Adapted from dslibris for Nintendo 3DS.
+
+    Original attribution (dslibris): Ray Haleblian, GPLv2+.
+    Modified for Nintendo 3DS by Rigle.
+
+    Summary:
+    - Runs the 3DS boot sequence: text/screen init, runtime asset validation,
+      book discovery, prefs load, library preparation, and initial UI setup.
+    - Accepts required assets from either sdmc:/ or romfs:/ and shows fatal
+      boot guidance when the runtime installation is incomplete.
+    - Applies persisted runtime state and schedules reopening of the last book
+      after boot when appropriate.
+*/
+
 #include "app/startup_controller.h"
 
 #include <algorithm>
@@ -14,118 +30,151 @@
 #include "ui/text.h"
 #include "version.h"
 
-namespace {
+namespace
+{
 
-static bool PathExistsAndType(const char *path, bool want_dir) {
-  if (!path || !*path)
-    return false;
-  struct stat st;
-  if (stat(path, &st) != 0)
-    return false;
-  if (want_dir)
-    return S_ISDIR(st.st_mode);
-  return S_ISREG(st.st_mode);
-}
+  // Helper function to check if the SD card and necessary files are present, and print instructions if not.
+  static bool PathExistsAndType(const char *path, bool want_dir)
+  {
+    if (!path || !*path)
+      return false;
+    struct stat st;
+    if (stat(path, &st) != 0)
+      return false;
+    if (want_dir)
+      return S_ISDIR(st.st_mode);
+    return S_ISREG(st.st_mode);
+  }
 
-static bool FileReadable(const char *path) {
-  if (!path || !*path)
-    return false;
-  FILE *fp = fopen(path, "rb");
-  if (!fp)
-    return false;
-  fclose(fp);
-  return true;
-}
+  // Checks if the specified file is readable, used for verifying the presence of necessary files.
+  static bool FileReadable(const char *path)
+  {
+    if (!path || !*path)
+      return false;
+    FILE *fp = fopen(path, "rb");
+    if (!fp)
+      return false;
+    fclose(fp);
+    return true;
+  }
 
-static bool RuntimePathExistsEither(const char *sdmc_path,
-                                    const char *romfs_path, bool want_dir) {
-  if (want_dir)
-    return PathExistsAndType(sdmc_path, true) || PathExistsAndType(romfs_path, true);
-  return FileReadable(sdmc_path) || FileReadable(romfs_path);
-}
+  // Checks if a resource exists in either the SD card or the ROMFS, allowing for flexible asset loading.
+  static bool RuntimePathExistsEither(const char *sdmc_path,
+                                      const char *romfs_path, bool want_dir)
+  {
+    if (want_dir)
+    {
+      return PathExistsAndType(sdmc_path, true) ||
+             PathExistsAndType(romfs_path, true);
+    }
+    return FileReadable(sdmc_path) || FileReadable(romfs_path);
+  }
 
-static bool FontDirLooksUsable(const std::string &dir) {
-  if (dir.empty())
-    return false;
-  static const char *kProbeFont = "LiberationSerif-Regular.ttf";
-  std::string probe = dir + "/" + kProbeFont;
-  return FileReadable(probe.c_str());
-}
+  // Checks if the default font directory is usable by verifying the presence of a known font file, ensuring that the app can load fonts properly.
+  static bool FontDirLooksUsable(const std::string &dir)
+  {
+    if (dir.empty())
+      return false;
+    static const char *kProbeFont = "LiberationSerif-Regular.ttf";
+    std::string probe = dir + "/" + kProbeFont;
+    return FileReadable(probe.c_str());
+  }
 
-static std::string ResolveDefaultFontDir() {
-  static const char *kSdmcFontDir = paths::kFontDir;
-  static const char *kRomfsFontDir = "romfs:/3ds/3dslibris/font";
-  if (FontDirLooksUsable(kSdmcFontDir))
+  // Resolves the default font directory, preferring the SD card but falling back to ROMFS if necessary, ensuring that the app can find fonts regardless of installation method.
+  // TODO: Deduplicate default font directory resolution with the equivalent
+  // startup/app bootstrap logic so sdmc:/ vs romfs:/ fallback behavior lives
+  // in a single shared helper.
+  static std::string ResolveDefaultFontDir()
+  {
+    static const char *kSdmcFontDir = paths::kFontDir;
+    static const char *kRomfsFontDir = "romfs:/3ds/3dslibris/font"; // TODO: unify with paths::kDefaultFonts entries.
+    if (FontDirLooksUsable(kSdmcFontDir))
+      return std::string(kSdmcFontDir);
+    if (FontDirLooksUsable(kRomfsFontDir))
+      return std::string(kRomfsFontDir);
     return std::string(kSdmcFontDir);
-  if (FontDirLooksUsable(kRomfsFontDir))
-    return std::string(kRomfsFontDir);
-  return std::string(kSdmcFontDir);
-}
-
-static void NormalizeRuntimeAssetPaths(App *app) {
-  if (!app)
-    return;
-  if (!FontDirLooksUsable(app->fontdir))
-    app->fontdir = ResolveDefaultFontDir();
-}
-
-static void CollectMissingRuntimeFiles(std::vector<std::string> *missing) {
-  if (!missing)
-    return;
-  missing->clear();
-
-  if (!RuntimePathExistsEither(paths::kBookDir, paths::kRomfsBookDir, true))
-    missing->push_back("book/ (sdmc or romfs)");
-
-  struct RuntimeFallbackFile {
-    const char *sdmc_path;
-    const char *romfs_path;
-    const char *label;
-  };
-  static const RuntimeFallbackFile kBundled[] = {
-      {paths::kDefaultFonts[0][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Regular.ttf", paths::kDefaultFonts[0][0]},
-      {paths::kDefaultFonts[1][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Bold.ttf", paths::kDefaultFonts[1][0]},
-      {paths::kDefaultFonts[2][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Italic.ttf", paths::kDefaultFonts[2][0]},
-      {paths::kDefaultFonts[3][1], "romfs:/3ds/3dslibris/font/LiberationSerif-BoldItalic.ttf", paths::kDefaultFonts[3][0]},
-      {paths::kDefaultFonts[4][1], "romfs:/3ds/3dslibris/font/LiberationSans-Regular.ttf", paths::kDefaultFonts[4][0]},
-  };
-
-  for (size_t i = 0; i < sizeof(kBundled) / sizeof(kBundled[0]); i++) {
-    if (!RuntimePathExistsEither(kBundled[i].sdmc_path, kBundled[i].romfs_path,
-                                 false))
-      missing->push_back(kBundled[i].label);
   }
-}
 
-static void PrintInstallHelpToConsole(const std::vector<std::string> &missing) {
-  printf("\n[FAIL] Incomplete SD install for 3dslibris.\n\n");
-  printf("Download and extract:\n");
-  printf("  3dslibris-sdmc.zip\n");
-  printf("from GitHub Releases into the SD root:\n");
-  printf("  sdmc:/\n\n");
-  printf("Expected layout:\n");
-  printf("  sdmc:/3ds/3dslibris/3dslibris.3dsx\n");
-  printf("  sdmc:/3ds/3dslibris/book/\n");
-  printf("  sdmc:/3ds/3dslibris/font/\n");
-  printf("  sdmc:/3ds/3dslibris/resources/\n\n");
-  if (!missing.empty()) {
-    printf("Missing files:\n");
-    size_t shown = std::min<size_t>(missing.size(), 8);
-    for (size_t i = 0; i < shown; i++)
-      printf("  %s\n", missing[i].c_str());
-    if (missing.size() > shown)
-      printf("  ... and %u more\n", (unsigned)(missing.size() - shown));
-    printf("\n");
+  // Normalizes runtime asset paths, ensuring that the app can find necessary resources even if the SD card installation is incomplete, and providing a fallback mechanism for fonts.
+  static void NormalizeRuntimeAssetPaths(App *app)
+  {
+    if (!app)
+      return;
+    if (!FontDirLooksUsable(app->fontdir))
+      app->fontdir = ResolveDefaultFontDir();
   }
-}
+
+  // Collects any missing runtime files and prints instructions to the console if the SD card installation is incomplete, guiding the user to properly set up the app.
+  // TODO: Move required runtime asset definitions (fonts/resources/book dir)
+  // into a shared manifest/helper to avoid drift between boot validation and
+  // the runtime fallback paths actually used by the app.
+  static void CollectMissingRuntimeFiles(std::vector<std::string> *missing)
+  {
+    if (!missing)
+      return;
+    missing->clear();
+
+    if (!RuntimePathExistsEither(paths::kBookDir, paths::kRomfsBookDir, true))
+      missing->push_back("book/ (sdmc or romfs)");
+
+    struct RuntimeFallbackFile
+    {
+      const char *sdmc_path;
+      const char *romfs_path;
+      const char *label;
+    };
+    static const RuntimeFallbackFile kBundled[] = {
+        {paths::kDefaultFonts[0][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Regular.ttf", paths::kDefaultFonts[0][0]},
+        {paths::kDefaultFonts[1][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Bold.ttf", paths::kDefaultFonts[1][0]},
+        {paths::kDefaultFonts[2][1], "romfs:/3ds/3dslibris/font/LiberationSerif-Italic.ttf", paths::kDefaultFonts[2][0]},
+        {paths::kDefaultFonts[3][1], "romfs:/3ds/3dslibris/font/LiberationSerif-BoldItalic.ttf", paths::kDefaultFonts[3][0]},
+        {paths::kDefaultFonts[4][1], "romfs:/3ds/3dslibris/font/LiberationSans-Regular.ttf", paths::kDefaultFonts[4][0]},
+    };
+
+    for (size_t i = 0; i < sizeof(kBundled) / sizeof(kBundled[0]); i++)
+    {
+      if (!RuntimePathExistsEither(kBundled[i].sdmc_path, kBundled[i].romfs_path,
+                                   false))
+        missing->push_back(kBundled[i].label);
+    }
+  }
+
+  // Prints instructions to the console for how to properly install the app on the SD card, including which files are missing, to help users resolve installation issues.
+  static void PrintInstallHelpToConsole(const std::vector<std::string> &missing)
+  {
+    printf("\n[FAIL] Incomplete SD install for 3dslibris.\n\n");
+    printf("Download and extract:\n");
+    printf("  3dslibris-sdmc.zip\n");
+    printf("from GitHub Releases into the SD root:\n");
+    printf("  sdmc:/\n\n");
+    printf("Expected layout:\n");
+    printf("  sdmc:/3ds/3dslibris/3dslibris.3dsx\n");
+    printf("  sdmc:/3ds/3dslibris/book/\n");
+    printf("  sdmc:/3ds/3dslibris/font/\n");
+    printf("  sdmc:/3ds/3dslibris/resources/\n\n");
+    if (!missing.empty())
+    {
+      printf("Missing files:\n");
+      size_t shown = std::min<size_t>(missing.size(), 8);
+      for (size_t i = 0; i < shown; i++)
+        printf("  %s\n", missing[i].c_str());
+      if (missing.size() > shown)
+        printf("  ... and %u more\n", (unsigned)(missing.size() - shown));
+      printf("\n");
+    }
+  }
 
 } // namespace
 
 StartupController::StartupController(App &app) : app_(app) {}
 
+// Runs the boot sequence, including loading fonts, checking for necessary files, and preparing the library. Returns a code indicating success or failure of the boot process.
 void StartupController::DrawBootStatus(const char *title,
                                        const std::vector<std::string> &lines,
-                                       bool fatal) {
+                                       bool fatal)
+{
+  // Preserve the caller's Text state; boot UI temporarily overrides style,
+  // screen target, and pixel size and must restore them before returning.
   int savedStyle = app_.ts->GetStyle();
   int savedColorMode = app_.ts->GetColorMode();
   u16 *savedScreen = app_.ts->GetScreen();
@@ -146,14 +195,16 @@ void StartupController::DrawBootStatus(const char *title,
   app_.ts->SetPen(14, 20);
   app_.ts->PrintString(title && *title ? title : "Booting");
   app_.ts->SetPixelSize(10);
-  for (size_t i = 0; i < lines.size(); i++) {
+  for (size_t i = 0; i < lines.size(); i++)
+  {
     app_.ts->SetPen(14, 84 + (int)i * 18);
     app_.ts->PrintString(lines[i].c_str());
   }
 
   if (!fatal)
     app_.ts->DrawRect(14, 138, 226, 152, 0xBDF7);
-  else {
+  else
+  {
     app_.ts->SetPen(14, 216);
     app_.ts->PrintString("Press START to exit");
   }
@@ -163,25 +214,31 @@ void StartupController::DrawBootStatus(const char *title,
   app_.ts->SetScreen(savedScreen);
   app_.ts->SetPixelSize(savedPixelSize);
 
-  if (app_.ts->BlitToFramebuffer()) {
+  if (app_.ts->BlitToFramebuffer())
+  {
     gfxFlushBuffers();
     gfxSwapBuffers();
   }
 }
 
-int StartupController::HaltOnFatalBootStatus() {
+// Halts the app on a fatal boot status, displaying the error message and waiting for user input to exit, ensuring that users are informed of critical issues during startup.
+int StartupController::HaltOnFatalBootStatus()
+{
   halt(app_.ts, -1);
   return 2;
 }
 
-int StartupController::RunBootSequence() {
+// Runs the boot sequence, including loading fonts, checking for necessary files, and preparing the library. Returns a code indicating success or failure of the boot process.
+int StartupController::RunBootSequence()
+{
   const int ok = 0;
 
   printf("Loading fonts...\n");
 #ifdef DSLIBRIS_DEBUG
   DBG_LOGF(&app_, "DBG BUILD SIG: %s %s", __DATE__, __TIME__);
 #endif
-  if (app_.ts->Init() != ok) {
+  if (app_.ts->Init() != ok)
+  {
     std::vector<std::string> missing;
     CollectMissingRuntimeFiles(&missing);
     PrintInstallHelpToConsole(missing);
@@ -194,7 +251,8 @@ int StartupController::RunBootSequence() {
 
   std::vector<std::string> missing_runtime;
   CollectMissingRuntimeFiles(&missing_runtime);
-  if (!missing_runtime.empty()) {
+  if (!missing_runtime.empty())
+  {
     app_.PrintStatus("error: incomplete sdmc install");
     std::vector<std::string> lines;
     lines.push_back("Download 3dslibris-sdmc.zip");
@@ -202,7 +260,8 @@ int StartupController::RunBootSequence() {
     lines.push_back("Expected path: sdmc:/3ds/3dslibris/");
     lines.push_back("Missing files from the SD package");
     lines.push_back(missing_runtime[0]);
-    if (missing_runtime.size() > 1) {
+    if (missing_runtime.size() > 1)
+    {
       char extra[48];
       snprintf(extra, sizeof(extra), "+%u more",
                (unsigned)(missing_runtime.size() - 1));
@@ -216,7 +275,8 @@ int StartupController::RunBootSequence() {
 #ifdef DSLIBRIS_DEBUG
   u64 t_scan_ms = osGetTime();
 #endif
-  if (app_.StartupFindBooks() != ok) {
+  if (app_.StartupFindBooks() != ok)
+  {
     app_.PrintStatus("error: no book directory");
     DrawBootStatus("Incomplete installation",
                    {"Download 3dslibris-sdmc.zip",
@@ -226,7 +286,10 @@ int StartupController::RunBootSequence() {
                    true);
     return HaltOnFatalBootStatus();
   }
-  if (app_.BookCount() == 0) {
+  if (app_.BookCount() == 0)
+  {
+    // TODO: Consider allowing boot into an empty library view with onboarding
+    // text instead of treating "no books found" as a fatal boot condition.
     app_.PrintStatus("error: no epub files found");
     DrawBootStatus("No books found",
                    {"Copy your EPUB/FB2/TXT/RTF/ODT files",
@@ -241,7 +304,8 @@ int StartupController::RunBootSequence() {
 #endif
 
   const int prefs_read_err = app_.prefs->Read();
-  if (prefs_read_err != 0) {
+  if (prefs_read_err != 0)
+  {
     char msg[96];
     snprintf(msg, sizeof(msg), "warning: prefs read failed (err=%d)",
              prefs_read_err);
@@ -265,9 +329,11 @@ int StartupController::RunBootSequence() {
 
   DBG_LOG(&app_, VERSION);
 
-  if (app_.reopen && app_.GetCurrentBook()) {
-    app_.SetSelectedBook(app_.GetCurrentBook());
-    const char *title = app_.GetCurrentBook()->GetTitle();
+  Book *current_book = app_.GetCurrentBook();
+  if (app_.reopen && current_book)
+  {
+    app_.SetSelectedBook(current_book);
+    const char *title = current_book->GetTitle();
     DrawBootStatus("Booting",
                    {"Opening last book...",
                     (title && *title) ? title : "(untitled)"},

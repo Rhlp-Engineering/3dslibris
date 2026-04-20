@@ -53,6 +53,7 @@ static const int kOpeningTitleMaxWidth = 216;
 static const int kOpeningTitleMaxLines = 3;
 static const int kOpeningTitleLineHeight = 16;
 
+// Returns a human-readable name for the book, for debug logging. 
 [[gnu::unused]] static const char *SafeBookName(Book *book) {
   if (!book)
     return "(null)";
@@ -63,6 +64,7 @@ static const int kOpeningTitleLineHeight = 16;
   return "(untitled)";
 }
 
+// Returns a copy of the bookmarks list with u16 values converted to int for easier handling in some contexts.
 std::list<int> CopyBookmarksAsInts(const std::list<u16> &bookmarks) {
   std::list<int> out;
   for (u16 bookmark : bookmarks)
@@ -70,6 +72,7 @@ std::list<int> CopyBookmarksAsInts(const std::list<u16> &bookmarks) {
   return out;
 }
 
+// Applies a list of bookmarks (as ints) to the book's bookmarks list (as u16), replacing any existing bookmarks.
 void ApplyRemappedBookmarks(Book *book, const std::list<int> &bookmarks) {
   if (!book)
     return;
