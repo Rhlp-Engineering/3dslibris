@@ -2,6 +2,10 @@ name: release
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEVKITPRO: /opt/devkitpro
+  DEVKITARM: /opt/devkitpro/devkitARM
+  DOCKER_PLATFORM: linux/amd64
+  DOCKER_IMAGE: 3dslibris-cia:release
 
 on:
   push:
@@ -14,9 +18,7 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    env:
-      DEVKITPRO: /opt/devkitpro
-      DEVKITARM: /opt/devkitpro/devkitARM
+
     steps:
       - uses: actions/checkout@v5
 
@@ -58,8 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           docker build \
+            --platform "$DOCKER_PLATFORM" \
             -f docker/Dockerfile.cia \
-            -t 3dslibris/devkitarm-cia:ci \
+            -t "$DOCKER_IMAGE" \
             .
 
       - name: Build 3DSX, CIA, debug CIA, and SD package
@@ -68,11 +71,13 @@ jobs:
           uid="$(id -u)"
           gid="$(id -g)"
           docker run --rm \
+            --platform "$DOCKER_PLATFORM" \
             --user "${uid}:${gid}" \
-            -v "$PWD:/project" -w /project \
+            -v "$PWD:/project" \
+            -w /project \
             -e DEVKITPRO="$DEVKITPRO" \
             -e DEVKITARM="$DEVKITARM" \
-            3dslibris/devkitarm-cia:ci \
+            "$DOCKER_IMAGE" \
             sh -lc 'make clean && make -j2 && make zip-sdmc && make debug-3dsx && make cia && make debug-cia && make source-release'
 
       - name: Verify release outputs
