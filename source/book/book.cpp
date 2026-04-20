@@ -712,14 +712,14 @@ void Book::Close()
     *it = nullptr;
     ++it;
   }
-  pages.clear();
+  { std::vector<Page *>().swap(pages); }
   DBG_LOGF(r, "BOOK close: reset-reflow book=%s", filename.c_str());
   ResetReflowWorkerState();
   DBG_LOGF(r, "BOOK close: reset-cbz book=%s", filename.c_str());
   ResetCbzState();
   DBG_LOGF(r, "BOOK close: reset-mupdf book=%s", filename.c_str());
   ResetMuPdfState();
-  chapters.clear();
+  { std::vector<ChapterEntry>().swap(chapters); }
   ClearChapterAnchors();
   ClearChapterDocStartPages();
   ClearInlineImages();
