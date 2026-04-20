@@ -124,6 +124,7 @@ static void ToggleBrowserViewSetting(App *app) {
   }
   app->prefs->Write();
   app->MarkBrowserDirty();
+  app->LoadVisibleBrowserCoverCaches();
 }
 
 static bool CanOpenBookIndexInCurrentContext(App *app) {

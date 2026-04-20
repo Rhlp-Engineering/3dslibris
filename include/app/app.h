@@ -279,6 +279,7 @@ public:
   void ShowChaptersView();
   bool BookNeedsRelayout(Book *book) const;
   size_t PauseBrowserJobs();
+  void LoadVisibleBrowserCoverCaches();
 
 private:
   static App *s_instance_;
@@ -395,7 +396,6 @@ private:
   void UnloadNonVisibleBrowserCoverCaches();
   void browser_nextpage();
   void browser_prevpage();
-  void LoadVisibleBrowserCoverCaches();
   void PrioritizeSelectedBookJobs(Book *selected_book);
   bool HasQueuedJob(app_job_type_t type, Book *book) const;
   void EnqueueJob(app_job_type_t type, Book *book);
