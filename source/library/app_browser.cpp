@@ -325,7 +325,8 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
                cache_path.c_str());
     }
 #endif
-    if (debug_runtime::BackgroundWorkersDisabled() && !book_path.empty() &&
+    if (debug_runtime::BackgroundWorkersDisabled() &&
+        debug_runtime::BrowserWarmupDisabled() && !book_path.empty() &&
         !book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
       int src_rc = -1;
       if (book->format == FORMAT_EPUB) {
