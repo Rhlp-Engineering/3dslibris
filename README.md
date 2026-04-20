@@ -206,10 +206,11 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 Fixed-layout notes:
 - Zoom now includes one extra tier beyond the previous maximum, mainly to help readability on old3DS.
 - Page changes reset the fixed-layout viewport to a sane default before deferred redraw/refinement continues.
+- Reading direction (`Left to right` / `Right to left`) is toggled per-book from `BOOK` settings. Right-to-left mode is useful for manga and RTL scripts.
 
 ## Settings menus
 - `GENERAL` settings are opened from the library and contain global preferences such as font configuration, font size, paragraph spacing, screen orientation, clock format, color mode, and library view.
-- `BOOK` settings are opened while reading and contain only book/document-specific actions such as `go to page`, `index`, `bookmarks`, and format-specific toggles like the MOBI `line wrap fix` when applicable.
+- `BOOK` settings are opened while reading and contain only book/document-specific actions such as `go to page`, `index`, `bookmarks`, and format-specific toggles like the MOBI `line wrap fix` or the fixed-layout `reading direction` when applicable.
 - During the `opening book ...` screen, `B`, `Start`, or `Select` now cancel the in-flight open and return to the library instead of leaving the app stuck waiting forever.
 - `go to page` opens a slider popup with the current page number.
 - The old per-book `clock format` entry is gone; clock format now remains only in `GENERAL` settings where it belongs.
