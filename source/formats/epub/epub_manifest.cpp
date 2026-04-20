@@ -33,8 +33,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "book/epub_css_class_map.h"
 #include "book/page.h"
 #include "debug_log.h"
+#include "formats/common/book_error.h"
 #include "formats/common/html_entity_utils.h"
 #include "formats/common/xml_parse_utils.h"
+#include "shared/open_cancel_poll.h"
 #include "formats/epub/epub_cover.h"
 #include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_package_toc_utils.h"
@@ -131,10 +133,26 @@ std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
 void LoadCssClassMapForDoc(const std::string &archive_path,
                            const std::string &xhtml_path,
                            IStatusReporter *reporter,
+                           epub_data_t *epd,
                            epub_css_class_map::CssClassMap *out) {
   out->clear();
   if (archive_path.empty() || xhtml_path.empty())
     return;
+
+  if (epd) {
+    std::map<std::string, std::string>::const_iterator href_it =
+        epd->css_href_by_doc.find(xhtml_path);
+    if (href_it != epd->css_href_by_doc.end()) {
+      if (href_it->second.empty())
+        return;
+      std::map<std::string, epub_css_class_map::CssClassMap>::const_iterator
+          css_it = epd->css_class_map_by_path.find(href_it->second);
+      if (css_it != epd->css_class_map_by_path.end()) {
+        *out = css_it->second;
+        return;
+      }
+    }
+  }
 
   unzFile scan_uf = unzOpen(archive_path.c_str());
   if (!scan_uf)
@@ -150,6 +168,8 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
 
   std::string css_href = ExtractLinkStylesheetHref(xhtml_text);
   if (css_href.empty()) {
+    if (epd)
+      epd->css_href_by_doc[xhtml_path] = "";
     unzClose(scan_uf);
     return;
   }
@@ -160,6 +180,16 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
     xhtml_folder = xhtml_path.substr(0, slash);
 
   std::string css_path = NormalizePath(xhtml_folder + "/" + css_href);
+  if (epd) {
+    epd->css_href_by_doc[xhtml_path] = css_path;
+    std::map<std::string, epub_css_class_map::CssClassMap>::const_iterator
+        css_it = epd->css_class_map_by_path.find(css_path);
+    if (css_it != epd->css_class_map_by_path.end()) {
+      *out = css_it->second;
+      unzClose(scan_uf);
+      return;
+    }
+  }
 
   std::string css_text;
   epub_zip_utils::ZipEntryIndex css_index;
@@ -168,7 +198,19 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   if (!ok || css_text.empty())
     return;
 
-  epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(), out);
+  epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(),
+                                           out);
+  if (epd)
+    epd->css_class_map_by_path[css_path] = *out;
+}
+
+void NormalizeHtmlEntityChunkForXml(const std::string &chunk, bool final,
+                                    void *transform_ctx, std::string *out) {
+  html_entity_utils::ChunkedEntityNormalizerState *state =
+      static_cast<html_entity_utils::ChunkedEntityNormalizerState *>(
+          transform_ctx);
+  html_entity_utils::NormalizeHtmlNamedEntitiesForXmlChunk(chunk, final, state,
+                                                           out);
 }
 
 } // namespace
@@ -187,6 +229,8 @@ void epub_data_init(epub_data_t *d) {
   d->tocid = "";
   d->navid = "";
   d->parsed_doc_title = "";
+  d->css_href_by_doc.clear();
+  d->css_class_map_by_path.clear();
   d->metadataonly = false;
   d->book = nullptr;
 }
@@ -203,6 +247,8 @@ void epub_data_delete(epub_data_t *d) {
   for (auto *ctx : d->ctx)
     delete ctx;
   d->ctx.clear();
+  d->css_href_by_doc.clear();
+  d->css_class_map_by_path.clear();
 }
 
 void epub_container_start(void *data, const char *el, const char **attr) {
@@ -336,9 +382,29 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
   xml_parse_utils::XmlParserOptions options;
   if (epd->type == PARSE_CONTAINER) {
     options.user_data = epd;
+    options.abort_parse = [](void *user_data) {
+      Book *book = static_cast<Book *>(user_data);
+      return book &&
+             (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                     "epub-container-parse") ||
+              (book->GetStatusReporter() &&
+               book->GetStatusReporter()->ShouldAbortWork()) ||
+              book->IsOpenAbortRequested());
+    };
+    options.abort_user_data = epd->book;
     options.start_element = epub_container_start;
   } else if (epd->type == PARSE_ROOTFILE) {
     options.user_data = epd;
+    options.abort_parse = [](void *user_data) {
+      Book *book = static_cast<Book *>(user_data);
+      return book &&
+             (open_cancel_poll::Poll(book, book->GetStatusReporter(),
+                                     "epub-rootfile-parse") ||
+              (book->GetStatusReporter() &&
+               book->GetStatusReporter()->ShouldAbortWork()) ||
+              book->IsOpenAbortRequested());
+    };
+    options.abort_user_data = epd->book;
     options.start_element = epub_rootfile_start;
     options.end_element = epub_rootfile_end;
     options.character_data = epub_rootfile_char;
@@ -348,7 +414,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     pd.docpath = epd->docpath;
     if (!epd->archive_path.empty())
       LoadCssClassMapForDoc(epd->archive_path, epd->docpath, deps.reporter,
-                            &pd.css_class_map);
+                            epd, &pd.css_class_map);
     log_content_layout = deps.reporter && epd->book;
     if (log_content_layout) {
       t_content_begin = osGetTime();
@@ -359,6 +425,16 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
       layout_before = text_layout_utils::GetPerfStats();
     }
     options.user_data = &pd;
+    options.abort_parse = [](void *user_data) {
+      parsedata_t *parsedata = static_cast<parsedata_t *>(user_data);
+      return parsedata &&
+             ((parsedata->book &&
+               open_cancel_poll::Poll(parsedata->book, parsedata->reporter,
+                                      "epub-content-parse")) ||
+              (parsedata->book && parsedata->book->IsOpenAbortRequested()) ||
+              (parsedata->reporter && parsedata->reporter->ShouldAbortWork()));
+    };
+    options.abort_user_data = &pd;
     options.start_element = xml::book::start;
     options.end_element = xml::book::end;
     options.character_data = xml::book::chardata;
@@ -369,11 +445,10 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
 
   xml_parse_utils::XmlParseResult parse_result;
   if (epd->type == PARSE_CONTENT) {
-    std::string xml;
-    if (!ReadOpenZipEntryText(uf, &xml, epub_limits::kContentMaxBytes))
-      return XML_ERROR_NO_MEMORY;
-    parse_result = xml_parse_utils::ParseXmlString(
-        html_entity_utils::NormalizeHtmlNamedEntitiesForXml(xml), options);
+    html_entity_utils::ChunkedEntityNormalizerState normalize_state;
+    parse_result = xml_parse_utils::ParseXmlZipEntryTransformed(
+        uf, options, parser_limits::kXmlStreamBufferSize,
+        NormalizeHtmlEntityChunkForXml, &normalize_state);
   } else {
     parse_result =
         xml_parse_utils::ParseXmlZipEntry(uf, options,
@@ -411,7 +486,9 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
   }
 #endif
   if (!parse_result.ok)
-    rc = (int)parse_result.error_code;
+    rc = (parse_result.error_code == XML_ERROR_ABORTED)
+             ? BOOK_ERR_CANCELLED
+             : (int)parse_result.error_code;
   if (epd->type == PARSE_CONTENT) {
     epd->parsed_doc_title = Trim(pd.doc_heading);
     if (epd->parsed_doc_title.empty())
@@ -484,15 +561,22 @@ int LoadEpubPackageForParse(
     return 2;
 
   rc = unzOpenCurrentFile(uf);
+  if (rc != UNZ_OK)
+    return rc;
   epub_data_init(parsedata);
   parsedata->book = book;
   parsedata->type = PARSE_CONTAINER;
-  rc = epub_parse_currentfile(uf, parsedata, deps);
-  rc = unzCloseCurrentFile(uf);
+  {
+    const int parse_rc = epub_parse_currentfile(uf, parsedata, deps);
+    const int close_rc = unzCloseCurrentFile(uf);
+    rc = (parse_rc != 0) ? parse_rc : close_rc;
+  }
 #ifdef DSLIBRIS_DEBUG
   if (t_after_container)
     *t_after_container = osGetTime();
 #endif
+  if (rc != 0)
+    return rc;
 
   folder->clear();
   size_t pos = parsedata->rootfile.find_last_of("/", parsedata->rootfile.length());
@@ -502,11 +586,14 @@ int LoadEpubPackageForParse(
   rc = unzLocateFile(uf, parsedata->rootfile.c_str(), 0);
   if (rc == UNZ_OK) {
     rc = unzOpenCurrentFile(uf);
+    if (rc != UNZ_OK)
+      return rc;
     epub_data_init(parsedata);
     parsedata->book = book;
     parsedata->type = PARSE_ROOTFILE;
-    epub_parse_currentfile(uf, parsedata, deps);
-    rc = unzCloseCurrentFile(uf);
+    const int parse_rc = epub_parse_currentfile(uf, parsedata, deps);
+    const int close_rc = unzCloseCurrentFile(uf);
+    rc = (parse_rc != 0) ? parse_rc : close_rc;
   }
 #ifdef DSLIBRIS_DEBUG
   if (t_after_rootfile)

@@ -520,7 +520,6 @@ bool Book::EnsureInlineImageMetadata(u16 image_id, InlineImageMetadata *out) {
 
   InlineImageEntry &entry = inline_images[image_id];
   if (!entry.metadata_probed) {
-    entry.metadata_probed = true;
     entry.metadata_ok = false;
     entry.source_width = 0;
     entry.source_height = 0;
@@ -533,6 +532,8 @@ bool Book::EnsureInlineImageMetadata(u16 image_id, InlineImageMetadata *out) {
 
     if (image_path.compare(0, 4, "fb2:") == 0 ||
         image_path.compare(0, 14, "mobi:recindex:") == 0) {
+      // For embedded formats, mark probed immediately (no zip to open).
+      entry.metadata_probed = true;
       if (LoadInlineImageSource(image_id, &compressed, &resolved_path) &&
           !compressed.empty()) {
         already_loaded_full = true;
@@ -545,18 +546,23 @@ bool Book::EnsureInlineImageMetadata(u16 image_id, InlineImageMetadata *out) {
         uf = unzOpen(epubpath.c_str());
         close_uf = true;
       }
-      if (uf) {
-        if (ReadZipEntryBinaryPrefix(uf, &inline_image_zip_index_built,
-                                     &inline_image_zip_offsets, image_path,
-                                     &compressed, kEpubInlineImageProbeBytes)) {
-          need_full_load = LooksLikeSvgWrapper(image_path, compressed);
-          if (!need_full_load) {
-            resolved_path = image_path;
-          }
-        }
-        if (close_uf)
-          unzClose(uf);
+      if (!uf) {
+        // Zip open failed (likely transient memory pressure).
+        // Leave metadata_probed=false so we retry next frame.
+        return false;
       }
+      // Mark probed only after zip was successfully opened.
+      entry.metadata_probed = true;
+      if (ReadZipEntryBinaryPrefix(uf, &inline_image_zip_index_built,
+                                   &inline_image_zip_offsets, image_path,
+                                   &compressed, kEpubInlineImageProbeBytes)) {
+        need_full_load = LooksLikeSvgWrapper(image_path, compressed);
+        if (!need_full_load) {
+          resolved_path = image_path;
+        }
+      }
+      if (close_uf)
+        unzClose(uf);
     }
 
     if (!already_loaded_full && need_full_load &&

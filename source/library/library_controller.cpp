@@ -118,8 +118,8 @@ static void AppendBookFromFilename(App *app, const std::string &source_dir,
   if (io_name != raw_name)
     LogFilenameStage(app, "d_name_io_fix", io_name.c_str());
   BookContext ctx;
-  ctx.text = app->ts;
-  ctx.prefs = app->prefs;
+  ctx.text = app->ts.get();
+  ctx.prefs = app->prefs.get();
   ctx.paragraph_spacing = &app->paraspacing;
   ctx.paragraph_indent = &app->paraindent;
   ctx.orientation = &app->orientation;
@@ -218,7 +218,7 @@ int LibraryController::FindBooks() {
 void LibraryController::PrepareLibrary() {
   std::sort(app_.books.begin(), app_.books.end(), &BookTitleLessThan);
   for (auto &book : app_.books)
-    book->GetBookmarks()->sort();
+    book->GetBookmarks().sort();
 }
 
 void App::browser_draw() { library_controller_->browser_draw(); }

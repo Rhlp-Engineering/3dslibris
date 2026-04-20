@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "debug_log.h"
 #include "formats/epub/epub_manifest.h"
 #include "formats/epub/epub_page_cache.h"
+#include "shared/debug_runtime_mode.h"
 #include "shared/status_reporter.h"
 #include <3ds.h>
 
@@ -34,9 +35,10 @@ typedef BookParseDeps EpubDeps;
 int FinalizeEpubParse(unzFile uf, epub_data_t *parsedata, Book *book,
                       const std::string &name, const EpubDeps &deps,
                       int rc, bool save_cache) {
-  if (save_cache) {
+  if (save_cache && rc == 0) {
     if (reflow_cache_save_utils::ShouldDeferAsyncOpenCacheSave(
-            true, book && book->IsAsyncReflowOpenPending())) {
+            true, book && book->IsAsyncReflowOpenPending()) ||
+        debug_runtime::ForceSynchronousBookOpen()) {
       book->SetPendingEpubPageCacheSaveWithParams(
           deps.ts ? (int)deps.ts->GetPixelSize() : 0,
           deps.ts ? (int)deps.ts->linespacing : 0,
@@ -49,6 +51,8 @@ int FinalizeEpubParse(unzFile uf, epub_data_t *parsedata, Book *book,
           deps.regular_font_path.empty()
               ? NULL
               : deps.regular_font_path.c_str());
+      if (deps.reporter && debug_runtime::ForceSynchronousBookOpen())
+        DBG_LOG(deps.reporter, "EPUB: cache save deferred after sync open");
     } else {
       epub_page_cache::Save(book, name.c_str(),
                             deps.ts ? (int)deps.ts->GetPixelSize() : 0,

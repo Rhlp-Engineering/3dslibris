@@ -25,21 +25,21 @@ static const int kBookPrefsButtonsWithLineWrapFix[] = {
 
 } // namespace
 
-unsigned char VisiblePrefsButtonCount(bool from_book, bool include_line_wrap_fix) {
+unsigned char VisiblePrefsButtonCount(bool from_book, bool include_book_option) {
   if (!from_book)
     return (unsigned char)(sizeof(kGeneralPrefsButtons) / sizeof(kGeneralPrefsButtons[0]));
-  if (include_line_wrap_fix) {
+  if (include_book_option) {
     return (unsigned char)(sizeof(kBookPrefsButtonsWithLineWrapFix) /
                            sizeof(kBookPrefsButtonsWithLineWrapFix[0]));
   }
   return (unsigned char)(sizeof(kBookPrefsButtons) / sizeof(kBookPrefsButtons[0]));
 }
 
-int PrefsButtonForVisibleSlot(bool from_book, bool include_line_wrap_fix,
+int PrefsButtonForVisibleSlot(bool from_book, bool include_book_option,
                               unsigned char slot) {
   if (!from_book)
     return kGeneralPrefsButtons[slot];
-  if (include_line_wrap_fix)
+  if (include_book_option)
     return kBookPrefsButtonsWithLineWrapFix[slot];
   return kBookPrefsButtons[slot];
 }

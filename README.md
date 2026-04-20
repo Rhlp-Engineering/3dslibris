@@ -27,7 +27,7 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 - Releases also include `3dslibris-debug.3dsx`, which enables verbose diagnostic logging in `3dslibris.log`
 - Releases also include `3dslibris-debug.cia` for the same debug-oriented build on installed-title setups
 - Supported install paths: `.3dsx` plus `3dslibris-sdmc.zip`, or `3dslibris.cia` with books stored on SD and optional bundled books in RomFS.
-- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and the per-book `go to page` slider from `2.3.0`, while tightening reader stability and EPUB compatibility.
+- Main reading focus in `2.3.1`: this release keeps the `GENERAL` / `BOOK` settings split and `go to page` slider from `2.3.0`, while concentrating on real-hardware stability fixes for browser rendering, metadata warmup, EPUB parsing, suspend/open lifecycle, and switching between books.
 
 ## Install
 
@@ -94,9 +94,9 @@ Generated install package targets:
   - First open can be slow on large books (decompress + parse + pagination)
   - Subsequent opens are accelerated by persistent page cache
   - TOC quality is heuristic for many files (can be approximate)
-  - Inline MOBI images now reuse the same smart `inline / band / page` layout pipeline used by EPUB/FB2, with better caption flow on mixed photo spreads
   - Includes an optional per-book `line wrap fix` for badly converted files that hard-wrap prose line by line, while preserving embedded image markers during cleanup
   - Empty or corrupt books are reported with a readable error instead of a raw numeric code
+  - On unstable files / runtimes, the reader can fall back to a conservative safe-open path that prefers successful open over full feature fidelity
 - `PDF`
   - Viewer-only path with MuPDF-backed rendering
   - Top screen shows a zoomed page region; bottom screen shows the full-page preview and viewport box
@@ -119,7 +119,8 @@ Generated install package targets:
 - EPUB SVG support is limited to common wrapper patterns that reference raster images; arbitrary SVG drawing is not rendered as vector graphics.
 - After changing font size, paragraph spacing, orientation, reading fonts, or other EPUB layout settings, reopen the current book if a cached layout is still visible.
 - MOBI TOC extraction depends on file structure and may omit or merge entries in some books.
-- MOBI inline images depend on recoverable image references in the source markup, including the zero-padded `recindex` values commonly found in Kindle-generated books; malformed files can still miss some images.
+- In the current safe MOBI fallback path, inline MOBI images can be disabled completely to keep `.cia` / new3DS opening stable.
+- In the current safe MOBI fallback path, structured MOBI TOC/index can be unavailable when the reader cannot trust the HTML-to-text position map.
 - Some malformed MOBI sources still contain encoding or OCR artifacts that cannot be repaired reliably on the reader side.
 - After changing font size, paragraph spacing, orientation, reading fonts, or the per-book MOBI `line wrap fix`, reopen the current book to apply the new layout.
 - Reading position and existing bookmarks are remapped approximately after that reopen and can shift a few pages from their original location.
@@ -206,10 +207,12 @@ sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 Fixed-layout notes:
 - Zoom now includes one extra tier beyond the previous maximum, mainly to help readability on old3DS.
 - Page changes reset the fixed-layout viewport to a sane default before deferred redraw/refinement continues.
+- Reading direction (`Left to right` / `Right to left`) is toggled per-book from `BOOK` settings. Right-to-left mode is useful for manga and RTL scripts.
 
 ## Settings menus
 - `GENERAL` settings are opened from the library and contain global preferences such as font configuration, font size, paragraph spacing, screen orientation, clock format, color mode, and library view.
-- `BOOK` settings are opened while reading and contain only book/document-specific actions such as `go to page`, `index`, `bookmarks`, and format-specific toggles like the MOBI `line wrap fix` when applicable.
+- `BOOK` settings are opened while reading and contain only book/document-specific actions such as `go to page`, `index`, `bookmarks`, and format-specific toggles like the MOBI `line wrap fix` or the fixed-layout `reading direction` when applicable.
+- During the `opening book ...` screen, `B`, `Start`, or `Select` now cancel the in-flight open and return to the library instead of leaving the app stuck waiting forever.
 - `go to page` opens a slider popup with the current page number.
 - The old per-book `clock format` entry is gone; clock format now remains only in `GENERAL` settings where it belongs.
 - In the `go to page` popup:
@@ -218,6 +221,13 @@ Fixed-layout notes:
   - `Up/Down` or `L/R`: move by 10 pages
   - `A`: confirm jump
   - `B` / `Select` / `Start`: cancel
+
+## 2.3.1 patch focus
+- Hardens the book-opening lifecycle used by `START -> library -> open another book`, including cancellation of stale open sessions and safer suspend/resume behavior while a book is still opening.
+- Fixes browser-side issues seen on hardware in `2.3.0`, including `list view` metadata/title warmup stalling after only a few entries and `gallery view` marquee corruption on the selected title.
+- Improves EPUB robustness by handling more named HTML entities found in real books and by propagating cancellation/error states more cleanly through the open pipeline.
+- Stabilizes problematic `PDF`, `CBZ`, and `MOBI` opens by preferring safer render/open paths over aggressive background or rich-layout behavior when those paths proved unreliable.
+- Keeps the reading view clear of leftover browser artifacts when entering a book.
 
 ## Documentation
 - Contribution guide: [CONTRIBUTING.md](CONTRIBUTING.md)

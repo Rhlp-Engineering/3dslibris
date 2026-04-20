@@ -3,7 +3,10 @@
 #include "formats/mupdf/mupdf_view.h"
 
 #include "book/page.h"
+#include "debug_log.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
+#include "settings/prefs.h"
+#include "shared/debug_runtime_mode.h"
 #include "ui/text.h"
 
 namespace {
@@ -36,6 +39,61 @@ static void EnsureMuPdfPageMetrics(Book::MuPdfState *mupdf_state,
     mupdf_state->page_height_cache[page_index] = page_height;
     mupdf_state->page_metrics_valid[page_index] = 1;
   }
+}
+
+static void DrawMuPdfLoadFailure(Book *book, Text *ts, int page_index) {
+  if (!book || !ts)
+    return;
+
+  const int saved_style = ts->GetStyle();
+  const int saved_color = ts->GetColorMode();
+  u16 *saved_screen = ts->GetScreen();
+  const int saved_bottom_margin = ts->margin.bottom;
+
+  ts->SetStyle(TEXT_STYLE_BROWSER);
+  ts->SetColorMode(0);
+  ts->margin.bottom = 0;
+
+  ts->SetScreen(ts->screenleft);
+  ts->ClearScreen();
+  ts->SetPen(14, 28);
+  ts->PrintString("PDF page unavailable");
+  ts->SetPen(14, 52);
+  char page_msg[48];
+  snprintf(page_msg, sizeof(page_msg), "page %d", page_index + 1);
+  ts->PrintString(page_msg);
+
+  ts->SetScreen(ts->screenright);
+  ts->ClearScreen();
+  book->DrawBottomGradientBackground();
+  ts->SetPen(12, 28);
+  ts->PrintString("MuPDF preview failed");
+  ts->SetPen(12, 48);
+  ts->PrintString("use L/R or B to leave");
+
+  ts->SetStyle(saved_style);
+  ts->SetColorMode(saved_color);
+  ts->SetScreen(saved_screen);
+  ts->margin.bottom = saved_bottom_margin;
+}
+
+static void ResetMuPdfDeferredCachesForSynchronousRender(
+    Book::MuPdfState *mupdf_state) {
+  if (!mupdf_state)
+    return;
+  CancelMuPdfIncrementalRenderState(mupdf_state);
+  ResetBitmapCache(&mupdf_state->current_interactive_tile);
+  ResetBitmapCache(&mupdf_state->current_final_zoom);
+  if (mupdf_state->cached_display_list && mupdf_state->ctx) {
+    fz_drop_display_list(mupdf_state->ctx, mupdf_state->cached_display_list);
+    mupdf_state->cached_display_list = NULL;
+  }
+  mupdf_state->cached_display_list_page = -1;
+  if (mupdf_state->ctx) {
+    ResetAdjacentSlot(&mupdf_state->prev_slot, mupdf_state->ctx);
+    ResetAdjacentSlot(&mupdf_state->next_slot, mupdf_state->ctx);
+  }
+  mupdf_state->final_cache_pending = false;
 }
 
 } // namespace
@@ -236,8 +294,15 @@ pdf_view_utils::NormalizedRect ComputeCurrentMuPdfViewport(
 MuPdfDeferredStage GetNextMuPdfDeferredStage(
     const Book::MuPdfState *mupdf_state, int page_index,
     const pdf_view_utils::NormalizedRect &viewport) {
+  (void)viewport;
   if (!mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
     return MuPdfDeferredStage::None;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
+    return MuPdfDeferredStage::None;
+
+  if (!BitmapCacheValid(mupdf_state->current_preview, page_index)) {
+    return MuPdfDeferredStage::Preview;
+  }
 
   if (!BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)) {
     return MuPdfDeferredStage::Interactive;
@@ -433,6 +498,10 @@ bool Book::ChangeMuPdfZoom(int delta) {
   if (next == mupdf_state->zoom_index)
     return false;
   mupdf_state->zoom_index = next;
+  if (debug_runtime::ForceSynchronousMuPdfRender()) {
+    ResetMuPdfDeferredCachesForSynchronousRender(mupdf_state);
+    return true;
+  }
   if (app_flow_utils::MuPdfWantsFinalQualityRender(
           mupdf_state->document_kind) &&
       (mupdf_state->current_final_zoom.page != position ||
@@ -490,8 +559,12 @@ void Book::SetMuPdfViewportInteraction(bool active) {
 void Book::ResetMuPdfViewport() {
   if (!IsPdf() || !mupdf_state)
     return;
+  const fixed_layout_viewport_utils::PageTurnDirection direction =
+      (GetPrefs() && GetPrefs()->fixed_layout_rtl)
+          ? fixed_layout_viewport_utils::PAGE_TURN_RIGHT_TO_LEFT
+          : fixed_layout_viewport_utils::PAGE_TURN_LEFT_TO_RIGHT;
   const fixed_layout_viewport_utils::ViewportCenter center =
-      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter(direction);
   mupdf_state->viewport_center_x = center.x;
   mupdf_state->viewport_center_y = center.y;
   mupdf_state->viewport_interaction_active = false;
@@ -522,6 +595,8 @@ bool Book::JumpMuPdfChapter(int delta) {
 bool Book::HasPendingMuPdfDeferredWork() const {
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
     return false;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
+    return false;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
   const pdf_view_utils::NormalizedRect viewport =
@@ -538,12 +613,16 @@ void Book::CancelMuPdfIncrementalRender() {
 u32 Book::GetMuPdfDeferredDelayMs() const {
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
     return 0;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
+    return 0;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
   const pdf_view_utils::NormalizedRect viewport =
       ComputeCurrentMuPdfViewport(mupdf_state);
 
   switch (GetNextMuPdfDeferredStage(mupdf_state, page_index, viewport)) {
+  case MuPdfDeferredStage::Preview:
+    return 0;
   case MuPdfDeferredStage::Interactive:
     return kPdfInteractiveDeferredDelayMs;
   case MuPdfDeferredStage::Final:
@@ -566,18 +645,50 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
   position = page_index;
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: enter page=%d page_count=%u zoom=%d doc_kind=%d",
+               page_index, (unsigned)mupdf_state->page_count,
+               mupdf_state->zoom_index, (int)mupdf_state->document_kind);
 
   if (mupdf_state->current_preview.page != page_index)
     ResetBitmapCache(&mupdf_state->current_preview);
-  if (mupdf_state->current_interactive_tile.page != page_index)
+  if (mupdf_state->current_interactive_tile.page != page_index ||
+      mupdf_state->current_interactive_tile.zoom_index != mupdf_state->zoom_index)
     ResetBitmapCache(&mupdf_state->current_interactive_tile);
   if (mupdf_state->current_final_zoom.page != page_index)
     ResetBitmapCache(&mupdf_state->current_final_zoom);
 
   EnsureMuPdfPageMetrics(mupdf_state, page_index);
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: after-metrics page=%d size=(%.2f,%.2f)",
+               page_index, (double)mupdf_state->page_width,
+               (double)mupdf_state->page_height);
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: preview-cache-begin page=%d", page_index);
 
-  if (!EnsureCurrentMuPdfPreviewCache(mupdf_state, page_index))
+  if (!EnsureCurrentMuPdfPreviewCache(mupdf_state, page_index)) {
+    IStatusReporter *reporter = GetStatusReporter();
+    if (reporter) {
+      DBG_LOGF_CAT(reporter, DBG_LEVEL_WARN, DBG_CAT_RENDER,
+                   "MuPDF preview failed page=%d page_count=%u doc_kind=%d",
+                   page_index, (unsigned)mupdf_state->page_count,
+                   (int)mupdf_state->document_kind);
+    }
+    DrawMuPdfLoadFailure(this, ts, page_index);
     return;
+  }
+
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: preview-cache-done page=%d bmp=%dx%d", page_index,
+               mupdf_state->current_preview.bitmap_width,
+               mupdf_state->current_preview.bitmap_height);
+
+  // In synchronous mode, render the interactive tile immediately after preview.
+  // This gives proper zoom-aware resolution without background threads.
+  if (debug_runtime::ForceSynchronousMuPdfRender() &&
+      !BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)) {
+    EnsureCurrentMuPdfInteractiveTile(mupdf_state, page_index);
+  }
 
   pdf_view_utils::NormalizedRect viewport = ComputeCurrentMuPdfViewport(mupdf_state);
   mupdf_state->viewport_center_x = viewport.left + viewport.width * 0.5f;
@@ -613,6 +724,11 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
 
   ts->SetScreen(ts->screenleft);
   ts->ClearScreen();
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: left-screen-blit-begin page=%d final=%d interactive=%d incremental=%d",
+               page_index, has_final_cache ? 1 : 0,
+               has_interactive_tile ? 1 : 0,
+               mupdf_state->incremental.active ? 1 : 0);
 
   if (has_final_cache) {
     BlitBitmapCacheViewport(ts, ts->screenleft, kPdfZoomScreenHeight,
@@ -734,6 +850,8 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   ts->SetColorMode(saved_color);
   ts->SetScreen(saved_screen);
   ts->margin.bottom = saved_bottom_margin;
+  DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF draw: end page=%d", page_index);
 }
 
 void Book::PrefetchAdjacentMuPdfPage() {
@@ -746,7 +864,10 @@ void Book::PrefetchAdjacentMuPdfPage() {
 }
 
 bool Book::PumpDeferredMuPdfWork(u32 budget_ms) {
+  (void)budget_ms;
   if (!IsPdf() || !mupdf_state || !mupdf_state->ctx || !mupdf_state->doc)
+    return false;
+  if (debug_runtime::ForceSynchronousMuPdfRender())
     return false;
 
   const int page_index = ClampMuPdfPageIndex(position, mupdf_state->page_count);
@@ -754,6 +875,13 @@ bool Book::PumpDeferredMuPdfWork(u32 budget_ms) {
   bool worked = false;
   if (!HasPendingMuPdfDeferredWork())
     return false;
+
+  if (!BitmapCacheValid(mupdf_state->current_preview, page_index)) {
+    if (EnsureCurrentMuPdfPreviewCache(mupdf_state, page_index))
+      worked = true;
+    if (budget_ms > 0 && osGetTime() - start_ms >= budget_ms)
+      return worked;
+  }
 
   if (!BitmapCacheValid(mupdf_state->current_interactive_tile, page_index)) {
     if (EnsureCurrentMuPdfInteractiveTile(mupdf_state, page_index))

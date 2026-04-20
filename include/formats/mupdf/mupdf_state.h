@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shared/app_flow_utils.h"
+#include "shared/status_reporter.h"
 
 #include <vector>
 
@@ -39,12 +40,17 @@ struct Book::MuPdfState {
     int strips_total;
     int partial_width;
     int partial_height;
+    // Cached page bounds (PDF units) and scale used for all strips.
+    // Avoids redundant fz_load_page on each strip call.
+    float bounds_x0, bounds_y0, bounds_x1, bounds_y1;
+    float render_scale;
     std::vector<u16> partial_pixels;
 
     IncrementalRenderState()
         : active(false), target_page(-1), target_zoom_index(-1),
           strips_completed(0), strips_total(8), partial_width(0),
-          partial_height(0) {}
+          partial_height(0), bounds_x0(0.0f), bounds_y0(0.0f),
+          bounds_x1(0.0f), bounds_y1(0.0f), render_scale(1.0f) {}
   };
 
   struct MuPdfWorker {
@@ -52,6 +58,7 @@ struct Book::MuPdfState {
 
     int job_page_index;
     float job_scale;
+    float job_bounds_x0, job_bounds_y0, job_bounds_x1, job_bounds_y1;
     fz_display_list *job_display_list;
     int job_strip_y0;
     int job_strip_y1;
@@ -72,6 +79,8 @@ struct Book::MuPdfState {
 
     MuPdfWorker()
         : worker_ctx(NULL), job_page_index(-1), job_scale(1.0f),
+          job_bounds_x0(0.0f), job_bounds_y0(0.0f),
+          job_bounds_x1(0.0f), job_bounds_y1(0.0f),
           job_display_list(NULL), job_strip_y0(0), job_strip_y1(0),
           job_full_width(0), job_full_height(0), job_pixel_buf(NULL),
           job_result(false), shutdown_requested(false), job_pending(false),
@@ -107,6 +116,7 @@ struct Book::MuPdfState {
   IncrementalRenderState incremental;
   MuPdfWorker *worker;
   bool worker_init_attempted;
+  IStatusReporter *reporter;
 
   MuPdfState()
       : ctx(NULL), doc(NULL), outline(NULL), page_count(0),
@@ -119,5 +129,5 @@ struct Book::MuPdfState {
         current_preview(), current_interactive_tile(), current_final_zoom(),
         final_cache_pending(false), cached_display_list(NULL),
         cached_display_list_page(-1), prev_slot(), next_slot(), incremental(),
-        worker(NULL), worker_init_attempted(false) {}
+        worker(NULL), worker_init_attempted(false), reporter(NULL) {}
 };

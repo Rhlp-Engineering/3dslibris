@@ -162,7 +162,7 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
     }
 
     if (p->book) {
-      p->book->GetBookmarks()->push_back(position - 1);
+      p->book->GetBookmarks().push_back(position - 1);
     }
   } else if (!strcmp(name, "margin")) {
     for (i = 0; attr[i]; i += 2) {
@@ -188,6 +188,9 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
       if (!strcmp(attr[i], "browserView")) {
         p->prefs->browser_view_mode =
             browser_view_utils::ParsePrefValue(attr[i + 1]);
+      }
+      if (!strcmp(attr[i], "fixedLayoutRtl")) {
+        p->prefs->fixed_layout_rtl = atoi(attr[i + 1]) != 0;
       }
     }
   }
@@ -264,7 +267,7 @@ int Prefs::Read() {
   parse_init(&pdata);
   pdata.prefs = this;
   pdata.reporter = app;
-  pdata.ts = app->ts;
+  pdata.ts = app->ts.get();
 
   xml_parse_utils::XmlParserOptions options;
   options.start_element = xml::prefs::start;
@@ -291,9 +294,6 @@ void Prefs::Apply() {
 //! Write settings to prefs file.
 //! \return Error code.
 int Prefs::Write() {
-  if (app->melonds)
-    return 0;
-
   int err = 0;
   int colorMode = 0;
 
@@ -306,9 +306,10 @@ int Prefs::Write() {
 
   fprintf(fp, "<dslibris format=\"2\">\n");
   fprintf(fp,
-          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" />\n",
+          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" fixedLayoutRtl=\"%d\" />\n",
           swapshoulder, time24h,
-          browser_view_utils::ToPrefValue(browser_view_mode));
+          browser_view_utils::ToPrefValue(browser_view_mode),
+          fixed_layout_rtl ? 1 : 0);
   fprintf(fp, "\t<screen colorMode=\"%d\" flip=\"%d\" />\n", colorMode,
           app->orientation);
   fprintf(fp,
@@ -383,8 +384,8 @@ int Prefs::Write() {
     if (app->GetCurrentBook() == app->books[i])
       fprintf(fp, " current=\"1\"");
     fprintf(fp, ">\n");
-    std::list<u16> *bookmarks = book->GetBookmarks();
-    for (std::list<u16>::iterator j = bookmarks->begin(); j != bookmarks->end();
+    std::list<u16> &bookmarks = book->GetBookmarks();
+    for (std::list<u16>::iterator j = bookmarks.begin(); j != bookmarks.end();
          j++) {
       fprintf(fp, "\t\t\t<bookmark page=\"%d\" word=\"%d\" />\n", *j + 1, 0);
     }
@@ -406,4 +407,5 @@ void Prefs::Init() {
   swapshoulder = false;
   time24h = true;
   browser_view_mode = BROWSER_VIEW_GALLERY;
+  fixed_layout_rtl = false;
 }

@@ -52,6 +52,17 @@ void TestWarmupRejectsWrappedClock() {
               browser_warmup_utils::IsBrowserWarmupIdle(50, 100, false));
 }
 
+void TestVisibleBrowserEntryCount() {
+  ExpectTrue("list full page visible count",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 0, 12) == 7);
+  ExpectTrue("list tail visible count",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 7, 12) == 5);
+  ExpectTrue("negative page start rejected",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, -1, 12) == 0);
+  ExpectTrue("empty tail rejected",
+             browser_warmup_utils::VisibleBrowserEntryCount(7, 12, 12) == 0);
+}
+
 void TestSelectedCoverWarmupUsesShortIdle() {
   ExpectTrue("selected cover uses short idle",
              browser_warmup_utils::ShouldQueueCoverWarmup(
@@ -105,6 +116,27 @@ void TestOld3dsCoverRetryBackoff() {
              browser_warmup_utils::CoverRetryDelayMs(true, true, 0, true) == 0);
 }
 
+void TestWarmupCompletionState() {
+  ExpectTrue("metadata unsupported treated done",
+             browser_warmup_utils::MetadataWarmupDone(false, false));
+  ExpectFalse("metadata pending when supported",
+              browser_warmup_utils::MetadataWarmupDone(true, false));
+  ExpectTrue("cover unsupported treated done",
+             browser_warmup_utils::CoverWarmupDone(false, false, 0, 3));
+  ExpectTrue("cover done by pixels",
+             browser_warmup_utils::CoverWarmupDone(true, true, 0, 3));
+  ExpectTrue("cover done by capped attempts",
+             browser_warmup_utils::CoverWarmupDone(true, false, 3, 3));
+  ExpectFalse("cover pending before attempts exhausted",
+              browser_warmup_utils::CoverWarmupDone(true, false, 1, 3));
+  ExpectTrue("book warmup done when both sides resolved",
+             browser_warmup_utils::BookWarmupDone(true, true, true, false, 3,
+                                                  3));
+  ExpectFalse("book warmup pending when metadata missing",
+              browser_warmup_utils::BookWarmupDone(true, false, true, false, 3,
+                                                   3));
+}
+
 } // namespace
 
 int main() {
@@ -112,10 +144,12 @@ int main() {
   TestWarmupRequiresIdleDelay();
   TestHeavyWarmupRequiresLongerIdleDelay();
   TestWarmupRejectsWrappedClock();
+  TestVisibleBrowserEntryCount();
   TestSelectedCoverWarmupUsesShortIdle();
   TestNonSelectedCoverWarmupUsesHeavyIdle();
   TestOld3dsWarmupQueueLimit();
   TestOld3dsCoverMemoryGuard();
   TestOld3dsCoverRetryBackoff();
+  TestWarmupCompletionState();
   return 0;
 }

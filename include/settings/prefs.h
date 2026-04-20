@@ -27,6 +27,7 @@ public:
   bool swapshoulder;
   bool time24h;
   BrowserViewMode browser_view_mode;
+  bool fixed_layout_rtl;
 
 private:
   App *app;

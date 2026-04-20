@@ -27,11 +27,11 @@ void BookmarkMenu::BuildEntries(std::vector<std::string> &labels,
   if (!book)
     return;
 
-  std::list<u16> *bookmarks = book->GetBookmarks();
-  labels.reserve(bookmarks->size());
-  pages.reserve(bookmarks->size());
+  std::list<u16> &bookmarks = book->GetBookmarks();
+  labels.reserve(bookmarks.size());
+  pages.reserve(bookmarks.size());
 
-  for (auto pg : *bookmarks) {
+  for (auto pg : bookmarks) {
     char label[64];
     snprintf(label, sizeof(label), "Page %d", pg + 1);
     labels.push_back(std::string(label));

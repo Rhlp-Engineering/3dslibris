@@ -2,7 +2,9 @@
 
 #include "formats/mupdf/mupdf_worker.h"
 
+#include "debug_log.h"
 #include "formats/mupdf/mupdf_view.h"
+#include "shared/debug_runtime_mode.h"
 
 
 void CancelMuPdfIncrementalRenderState(Book::MuPdfState *mupdf_state) {
@@ -87,24 +89,35 @@ bool EnsureMuPdfDisplayListForPage(Book::MuPdfState *mupdf_state,
 bool EnsureCurrentMuPdfPreviewCache(Book::MuPdfState *mupdf_state, int page_index) {
   if (!mupdf_state)
     return false;
+  DBG_LOGF_CAT(mupdf_state->reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF preview: enter page=%d cached=%d current_page=%d",
+               page_index,
+               BitmapCacheValid(mupdf_state->current_preview, page_index) ? 1
+                                                                          : 0,
+               mupdf_state->current_preview.page);
   PromoteMuPdfAdjacentSlotIfMatching(mupdf_state, page_index);
   if (BitmapCacheValid(mupdf_state->current_preview, page_index))
     return true;
 
-  fz_display_list *display_list = NULL;
-  if (!EnsureMuPdfDisplayListForPage(mupdf_state, page_index, &display_list))
-    return false;
-
   RenderedMuPdfBitmap rendered;
-  fz_display_list *new_list = NULL;
   float page_width = mupdf_state->page_width;
   float page_height = mupdf_state->page_height;
+  const float preview_scale = ComputeMuPdfPreviewScale(page_width, page_height);
+  DBG_LOGF_CAT(
+      mupdf_state->reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+      "MUPDF preview: render-begin page=%d scale=%.4f page_size=(%.2f,%.2f)",
+      page_index, (double)preview_scale, (double)page_width,
+      (double)page_height);
   if (!RenderMuPdfBitmap(mupdf_state->ctx, mupdf_state->doc, page_index,
-                       ComputeMuPdfPreviewScale(page_width, page_height),
-                       &rendered, &page_width, &page_height, NULL,
-                       display_list, display_list ? NULL : &new_list)) {
+                         preview_scale, &rendered, &page_width, &page_height,
+                         NULL, NULL, NULL, mupdf_state->reporter)) {
+    DBG_LOGF_CAT(mupdf_state->reporter, DBG_LEVEL_WARN, DBG_CAT_RENDER,
+                 "MUPDF preview: render-failed page=%d", page_index);
     return false;
   }
+  DBG_LOGF_CAT(mupdf_state->reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+               "MUPDF preview: render-done page=%d bmp=%dx%d", page_index,
+               rendered.width, rendered.height);
 
   float left = 0.0f, top = 0.0f, width = 1.0f, height = 1.0f;
   ComputeBitmapContentBoundsNormalized(rendered, &left, &top, &width, &height);
@@ -112,10 +125,10 @@ bool EnsureCurrentMuPdfPreviewCache(Book::MuPdfState *mupdf_state, int page_inde
                    width, height, &rendered);
   mupdf_state->page_width = page_width;
   mupdf_state->page_height = page_height;
-  if (new_list && !display_list) {
-    mupdf_state->cached_display_list = new_list;
-    mupdf_state->cached_display_list_page = page_index;
-  }
+  DBG_LOGF_CAT(
+      mupdf_state->reporter, DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
+      "MUPDF preview: cache-store-done page=%d content=(%.3f,%.3f %.3f x %.3f)",
+      page_index, (double)left, (double)top, (double)width, (double)height);
   return true;
 }
 
@@ -143,7 +156,8 @@ bool EnsureCurrentMuPdfInteractiveTile(Book::MuPdfState *mupdf_state,
                                mupdf_state->document_kind,
                                mupdf_state->zoom_index),
                        &rendered, &page_width, &page_height, NULL,
-                       display_list, display_list ? NULL : &new_list);
+                       display_list, display_list ? NULL : &new_list,
+                       mupdf_state->reporter);
   if (!render_ok) {
     return false;
   }
@@ -159,34 +173,31 @@ bool EnsureCurrentMuPdfInteractiveTile(Book::MuPdfState *mupdf_state,
   return true;
 }
 
-static bool RenderMuPdfBitmapStrip(fz_context *ctx, fz_document *doc,
-                                  int page_index, float scale,
-                                  fz_display_list *reuse_list,
+static bool RenderMuPdfBitmapStrip(fz_context *ctx,
+                                  float bounds_x0, float bounds_y0,
+                                  float bounds_x1, float bounds_y1,
+                                  float scale, fz_display_list *reuse_list,
                                   int strip_y0_px, int strip_y1_px,
                                   int full_width_px, int full_height_px,
                                   std::vector<u16> *partial_pixels) {
-  if (!ctx || !doc || !partial_pixels || !reuse_list)
+  if (!ctx || !partial_pixels || !reuse_list)
+    return false;
+  if (!(bounds_x1 > bounds_x0 && bounds_y1 > bounds_y0))
     return false;
   if (strip_y0_px < 0 || strip_y1_px <= strip_y0_px ||
       strip_y1_px > full_height_px || full_width_px <= 0)
     return false;
 
-  fz_page *page = NULL;
+  const fz_rect page_bounds = fz_make_rect(bounds_x0, bounds_y0, bounds_x1, bounds_y1);
   fz_pixmap *pixmap = NULL;
   fz_device *device = NULL;
   bool ok = false;
 
-  fz_var(page);
   fz_var(pixmap);
   fz_var(device);
 
   fz_try(ctx) {
-    page = fz_load_page(ctx, doc, page_index);
-    fz_rect bounds = fz_bound_page(ctx, page);
-    if (!(bounds.x1 > bounds.x0 && bounds.y1 > bounds.y0))
-      fz_throw(ctx, FZ_ERROR_FORMAT, "empty pdf page bounds");
-
-    const fz_matrix ctm = MakeMuPdfRenderMatrix(bounds, scale);
+    const fz_matrix ctm = MakeMuPdfRenderMatrix(page_bounds, scale);
 
     const fz_irect bbox = fz_make_irect(0, strip_y0_px, full_width_px, strip_y1_px);
     pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 0);
@@ -229,7 +240,6 @@ static bool RenderMuPdfBitmapStrip(fz_context *ctx, fz_document *doc,
   fz_always(ctx) {
     fz_drop_device(ctx, device);
     fz_drop_pixmap(ctx, pixmap);
-    fz_drop_page(ctx, page);
   }
   fz_catch(ctx) { ok = false; }
   return ok;
@@ -250,8 +260,9 @@ static void MuPdfWorkerThreadFunc(void *arg) {
       continue;
 
     w->job_result = RenderMuPdfBitmapStrip(
-        w->worker_ctx, mupdf_state->doc,
-        w->job_page_index, w->job_scale, w->job_display_list,
+        w->worker_ctx,
+        w->job_bounds_x0, w->job_bounds_y0, w->job_bounds_x1, w->job_bounds_y1,
+        w->job_scale, w->job_display_list,
         w->job_strip_y0, w->job_strip_y1,
         w->job_full_width, w->job_full_height,
         w->job_pixel_buf);
@@ -262,6 +273,16 @@ static void MuPdfWorkerThreadFunc(void *arg) {
 }
 
 void InitMuPdfWorker(Book::MuPdfState *mupdf_state) {
+  if (debug_runtime::ForceSynchronousMuPdfRender() ||
+      (mupdf_state &&
+       !app_flow_utils::MuPdfWantsFinalQualityRender(
+           mupdf_state->document_kind) &&
+       !app_flow_utils::MuPdfShouldPrefetchAdjacent(
+           mupdf_state->document_kind))) {
+    if (mupdf_state)
+      mupdf_state->worker_init_attempted = true;
+    return;
+  }
   if (!mupdf_state || !mupdf_state->is_new_3ds || !mupdf_state->ctx)
     return;
   mupdf_state->worker_init_attempted = true;
@@ -284,7 +305,7 @@ void InitMuPdfWorker(Book::MuPdfState *mupdf_state) {
 
   mupdf_state->worker = w;
   w->thread_handle = threadCreate(MuPdfWorkerThreadFunc, mupdf_state,
-                                   32 * 1024, prio + 1, 1, false);
+                                   256 * 1024, prio + 1, 1, false);
   if (!w->thread_handle) {
     fz_drop_context(w->worker_ctx);
     w->worker_ctx = NULL;
@@ -372,17 +393,17 @@ bool PumpMuPdfIncrementalStripWorker(Book::MuPdfState *mupdf_state,
     return false;
 
   const int s = inc.strips_completed;
-  const float scale = ComputeMuPdfFinalScale(mupdf_state->document_kind,
-                                             mupdf_state->page_width,
-                                             mupdf_state->page_height,
-                                             mupdf_state->max_zoom_index);
   const int y0 = (s * inc.partial_height) / inc.strips_total;
   const int y1 = (s == inc.strips_total - 1)
                      ? inc.partial_height
                      : ((s + 1) * inc.partial_height) / inc.strips_total;
 
   w->job_page_index   = page_index;
-  w->job_scale        = scale;
+  w->job_scale        = inc.render_scale;
+  w->job_bounds_x0    = inc.bounds_x0;
+  w->job_bounds_y0    = inc.bounds_y0;
+  w->job_bounds_x1    = inc.bounds_x1;
+  w->job_bounds_y1    = inc.bounds_y1;
   w->job_display_list = display_list;
   w->job_strip_y0     = y0;
   w->job_strip_y1     = y1;
@@ -460,6 +481,11 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
     inc.strips_total = mupdf_state->is_new_3ds ? kPdfStripsNew3DS : kPdfStripsOld3DS;
     inc.partial_width = full_w;
     inc.partial_height = full_h;
+    inc.bounds_x0 = bounds.x0;
+    inc.bounds_y0 = bounds.y0;
+    inc.bounds_x1 = bounds.x1;
+    inc.bounds_y1 = bounds.y1;
+    inc.render_scale = scale;
     inc.partial_pixels.assign((size_t)full_w * (size_t)full_h, kPdfPaper);
 
   }
@@ -480,18 +506,15 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
     return false;
 
   const int s = inc.strips_completed;
-  const float scale = ComputeMuPdfFinalScale(mupdf_state->document_kind,
-                                             mupdf_state->page_width,
-                                             mupdf_state->page_height,
-                                             mupdf_state->max_zoom_index);
-
   const int strip_y0 = (s * inc.partial_height) / inc.strips_total;
   const int strip_y1 = (s == inc.strips_total - 1)
                            ? inc.partial_height
                            : ((s + 1) * inc.partial_height) / inc.strips_total;
 
-  const bool ok = RenderMuPdfBitmapStrip(mupdf_state->ctx, mupdf_state->doc,
-                                        page_index, scale, display_list,
+  const bool ok = RenderMuPdfBitmapStrip(mupdf_state->ctx,
+                                        inc.bounds_x0, inc.bounds_y0,
+                                        inc.bounds_x1, inc.bounds_y1,
+                                        inc.render_scale, display_list,
                                         strip_y0, strip_y1,
                                         inc.partial_width, inc.partial_height,
                                         &inc.partial_pixels);
@@ -558,7 +581,7 @@ bool PrepareAdjacentMuPdfSlot(Book::MuPdfState *mupdf_state, int current_page,
   if (!RenderMuPdfBitmap(mupdf_state->ctx, mupdf_state->doc, page_index,
                        ComputeMuPdfPreviewScale(page_width, page_height),
                        &preview, &page_width, &page_height, NULL, NULL,
-                       &display_list) ||
+                       &display_list, mupdf_state->reporter) ||
       !display_list) {
     ResetAdjacentSlot(slot, mupdf_state->ctx);
     return false;
@@ -579,7 +602,7 @@ bool PrepareAdjacentMuPdfSlot(Book::MuPdfState *mupdf_state, int current_page,
                                  mupdf_state->document_kind,
                                  mupdf_state->zoom_index),
                          &interactive, &page_width, &page_height, NULL,
-                         display_list, NULL);
+                         display_list, NULL, mupdf_state->reporter);
     if (!render_ok) {
       ResetAdjacentSlot(slot, mupdf_state->ctx);
       return false;

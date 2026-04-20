@@ -18,6 +18,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 
 #include <expat.h>
@@ -27,6 +28,7 @@
 #include "book/book.h"
 #include "formats/common/book_error.h"
 #include "shared/app_flow_utils.h"
+#include "shared/debug_runtime_mode.h"
 #include "reader/deferred_relayout_utils.h"
 #include "reader/book_switch_utils.h"
 #include "reader/fixed_layout_input_utils.h"
@@ -51,7 +53,8 @@ static const int kOpeningTitleMaxWidth = 216;
 static const int kOpeningTitleMaxLines = 3;
 static const int kOpeningTitleLineHeight = 16;
 
-const char *SafeBookName(Book *book) {
+// Returns a human-readable name for the book, for debug logging.
+[[gnu::unused]] static const char *SafeBookName(Book *book) {
   if (!book)
     return "(null)";
   if (book->GetFileName() && *book->GetFileName())
@@ -61,6 +64,7 @@ const char *SafeBookName(Book *book) {
   return "(untitled)";
 }
 
+// Returns a copy of the bookmarks list with u16 values converted to int for easier handling in some contexts.
 std::list<int> CopyBookmarksAsInts(const std::list<u16> &bookmarks) {
   std::list<int> out;
   for (u16 bookmark : bookmarks)
@@ -68,15 +72,17 @@ std::list<int> CopyBookmarksAsInts(const std::list<u16> &bookmarks) {
   return out;
 }
 
+// Applies a list of bookmarks (as ints) to the book's bookmarks list (as u16), replacing any existing bookmarks.
 void ApplyRemappedBookmarks(Book *book, const std::list<int> &bookmarks) {
   if (!book)
     return;
-  std::list<u16> *dst = book->GetBookmarks();
-  dst->clear();
+  std::list<u16> &dst = book->GetBookmarks();
+  dst.clear();
   for (int bookmark : bookmarks)
-    dst->push_back((u16)bookmark);
+    dst.push_back((u16)bookmark);
 }
 
+// State struct for tracking whether an open/reopen book operation requires a relayout and what the previous page/bookmark state was.
 struct OpenBookRelayoutState {
   bool needs_relayout;
   int old_page_count;
@@ -191,7 +197,7 @@ void DrawBookPage(Book *book, Text *ts) {
 
 void ResetBookRenderState(App *app, bool clear_glyph_cache,
                           const char *reason) {
-  if (!app || !app->ts)
+  if (!app || !app->ts.get())
     return;
   if (clear_glyph_cache)
     app->ts->ClearCache();
@@ -204,6 +210,8 @@ void ResetBookRenderState(App *app, bool clear_glyph_cache,
 bool SetBookPage(Book *book, Text *ts, u16 page) {
   if (!book || !ts || page >= book->GetPageCount())
     return false;
+  if (book->IsCbz())
+    book->ResetCbzFailureState();
   if (book->IsFixedLayout())
     book->CancelFixedLayoutDeferredWork();
   book->SetPosition(page);
@@ -228,6 +236,7 @@ bool TurnBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 pagecount,
   return SetBookPage(book, ts, *pagecurrent);
 }
 
+// Pumps deferred MOBI parsing work for the book, with a specified time and page budget, and outputs whether any progress was made or if the status should be considered dirty (needing redraw).
 bool PumpDeferredMobi(Book *book, u32 budget_ms, u16 page_budget,
                       u16 *pagecount, bool *status_dirty,
                       bool *deferred_pumped) {
@@ -249,6 +258,8 @@ bool PumpDeferredMobi(Book *book, u32 budget_ms, u16 page_budget,
   return (after != before) || done;
 }
 
+// Advances the book page by one, pumping deferred MOBI parsing if needed and within the specified budgets. 
+// Returns true if the page was advanced or if the status was marked dirty due to progress, false if no advancement was possible.
 bool AdvanceBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 *pagecount,
                      bool *status_dirty, bool *deferred_pumped) {
   if (!book || !ts || !pagecurrent || !pagecount || !status_dirty ||
@@ -262,17 +273,23 @@ bool AdvanceBookPage(Book *book, Text *ts, u16 *pagecurrent, u16 *pagecount,
   if (!book->HasDeferredMobiParse())
     return false;
   PumpDeferredMobi(book, 80, 18, pagecount, status_dirty, deferred_pumped);
-  if (TurnBookPage(book, ts, pagecurrent, *pagecount, 1)) {
+  if (TurnBookPage(book, ts, pagecurrent, *pagecount, 1)) { // Try again after pumping in case new pages were parsed.
     *status_dirty = true;
     return true;
   }
   return false;
 }
 
+// Attempts to reuse the currently selected book by resetting transient state and redrawing the current page, returning whether the reuse was successful.
 bool ReuseParsedBook(App *app) {
   Book *selected = app ? app->GetSelectedBook() : NULL;
   if (!selected)
     return false;
+  if (selected->IsCbz()) {
+    selected->ResetCbzFailureState();
+    selected->ResetCbzTransientViewState(true);
+    DBG_LOG(app, "BOOK reopen: state reset complete");
+  }
   app->SetCurrentBook(selected);
   if (app->GetMode() == AppMode::Browser) {
     if (app->orientation) {
@@ -285,7 +302,7 @@ bool ReuseParsedBook(App *app) {
   Book *current = app->GetCurrentBook();
   if (current->GetPosition() >= current->GetPageCount())
     current->SetPosition(0);
-  DrawBookPage(current, app->ts);
+  DrawBookPage(current, app->ts.get());
   return true;
 }
 
@@ -296,7 +313,7 @@ OpenBookRelayoutState CaptureRelayoutState(Book *book, bool needs_relayout) {
 
   state.old_page_count = book->GetPageCount();
   state.old_position = book->GetPosition();
-  state.old_bookmarks = CopyBookmarksAsInts(*book->GetBookmarks());
+  state.old_bookmarks = CopyBookmarksAsInts(book->GetBookmarks());
   book->Close();
   return state;
 }
@@ -325,7 +342,7 @@ void DrawOpeningSplash(App *app) {
     name = selected->GetTitle();
   if (name && *name) {
     std::vector<std::string> lines = BuildOpeningTitleLines(
-        app->ts, name, kOpeningTitleMaxWidth, kOpeningTitleMaxLines,
+        app->ts.get(), name, kOpeningTitleMaxWidth, kOpeningTitleMaxLines,
         TEXT_STYLE_BROWSER);
     for (size_t i = 0; i < lines.size(); ++i) {
       app->ts->SetPen(12, (u16)(50 + (int)i * kOpeningTitleLineHeight));
@@ -383,6 +400,9 @@ u8 OpenSelectedBook(App *app, unsigned int session_id) {
     return 254;
 
   DetachCurrentBookForSwitch(app, selected, session_id, "sync-open");
+  selected->SetOpenSessionId(session_id);
+  if (debug_runtime::ForceSynchronousBookOpen())
+    DBG_LOG(app, "BOOK open path: synchronous");
   DBG_LOGF(app, "BOOK open begin session=%u book=%s", session_id,
            SafeBookName(selected));
   if (int err = selected->Open()) {
@@ -400,6 +420,16 @@ u8 OpenSelectedBook(App *app, unsigned int session_id) {
   DBG_LOGF(app, "BOOK open success session=%u book=%s", session_id,
            SafeBookName(selected));
   return 0;
+}
+
+void CloseFailedOpenBook(App *app, Book *book, unsigned int session_id,
+                         const char *reason) {
+  if (!book)
+    return;
+  DBG_LOGF(app, "BOOK open cleanup: session=%u reason=%s pages=%d book=%s",
+           session_id, reason ? reason : "", book->GetPageCount(),
+           SafeBookName(book));
+  book->Close();
 }
 
 void EnsureBookMode(App *app, const char *log_message) {
@@ -426,15 +456,42 @@ void ReaderController::ClearDeferredRelayoutState() {
 
 void ReaderController::OnAppletSuspended() {
   Book *bookcurrent_ = app_.GetCurrentBook();
+  Book *opening_book = app_.GetOpeningBook();
   app_.SetPdfTouchDragActive(false);
   app_.SetPdfTouchLastX(-1);
   app_.SetPdfTouchLastY(-1);
   app_.SetPdfDeferredReadyAtMs(0);
   app_.SetMobiDeferredReadyAtMs(0);
-  if (!bookcurrent_)
+  if (bookcurrent_) {
+    bookcurrent_->SetFixedLayoutViewportInteraction(false);
+    bookcurrent_->CancelFixedLayoutDeferredWork();
+  }
+  if (!opening_book)
     return;
-  bookcurrent_->SetFixedLayoutViewportInteraction(false);
-  bookcurrent_->CancelFixedLayoutDeferredWork();
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(&app_,
+           "BOOK suspend: cancel opening session=%u book=%s async=%u mobi=%u",
+           app_.GetOpeningSessionId(),
+           opening_book->GetFileName() ? opening_book->GetFileName() : "",
+           opening_book->IsAsyncReflowOpenPending() ? 1u : 0u,
+           opening_book->HasDeferredMobiParse() ? 1u : 0u);
+#endif
+  opening_book->CancelFixedLayoutDeferredWork();
+  opening_book->RequestAbortOpen();
+  opening_book->CancelDeferredMobiParse();
+  opening_book->CancelAsyncReflowOpen();
+  app_.SetOpeningPending(false);
+  app_.SetOpeningBook(NULL);
+  app_.SetOpeningSessionId(0);
+  app_.SetOpeningNeedsRelayout(false);
+  app_.SetOpeningOldPageCount(0);
+  app_.SetOpeningOldPosition(0);
+  app_.MutableOpeningOldBookmarks().clear();
+  app_.SetOpeningStartedAtMs(0);
+  if (app_.GetMode() == AppMode::Opening) {
+    app_.SetMode(AppMode::Browser);
+    app_.SetBrowserDirty(true);
+  }
 }
 
 void ReaderController::OnAppletResumed() {
@@ -480,8 +537,34 @@ bool ReaderController::MaybeFinalizeDeferredRelayout(Book *book, int page_count)
 }
 
 void ReaderController::HandleEventInOpening() {
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
+  const u32 keys = hidKeysDown();
+
+  if (keys & (app_.key.b | app_.key.start | app_.key.select)) {
+    Book *cancel_book = app_.GetOpeningBook();
+    if (cancel_book) {
+#ifdef DSLIBRIS_DEBUG
+      DBG_LOGF(&app_, "BOOK open cancel: session=%u book=%s",
+               app_.GetOpeningSessionId(),
+               cancel_book->GetFileName() ? cancel_book->GetFileName() : "");
+#endif
+      cancel_book->RequestAbortOpen();
+      cancel_book->CancelDeferredMobiParse();
+      cancel_book->CancelAsyncReflowOpen();
+    }
+    app_.SetOpeningPending(false);
+    app_.SetOpeningBook(NULL);
+    app_.SetOpeningSessionId(0);
+    app_.SetOpeningNeedsRelayout(false);
+    app_.SetOpeningOldPageCount(0);
+    app_.SetOpeningOldPosition(0);
+    app_.MutableOpeningOldBookmarks().clear();
+    app_.SetOpeningStartedAtMs(0);
+    app_.SetMode(AppMode::Browser);
+    app_.SetBrowserDirty(true);
+    return;
+  }
 
   if (!app_.IsOpeningPending() || !app_.GetOpeningBook()) {
     ResetOpeningState(&app_);
@@ -496,11 +579,17 @@ void ReaderController::HandleEventInOpening() {
     return;
 
   const u8 err = opening_book->ConsumeAsyncReflowOpenResult();
-  const u64 elapsed_ms =
-      app_.GetOpeningStartedAtMs() ? (osGetTime() - app_.GetOpeningStartedAtMs()) : 0;
-  DBG_LOGF(&app_, "REFLOW: async open complete rc=%u ms=%llu book=%s",
-           (unsigned)err, (unsigned long long)elapsed_ms,
-           opening_book->GetFileName() ? opening_book->GetFileName() : "");
+#ifdef DSLIBRIS_DEBUG
+  {
+    const u64 elapsed_ms =
+        app_.GetOpeningStartedAtMs() ? (osGetTime() - app_.GetOpeningStartedAtMs()) : 0;
+    DBG_LOGF(&app_,
+             "REFLOW: async open complete session=%u rc=%u ms=%llu book=%s",
+             app_.GetOpeningSessionId(), (unsigned)err,
+             (unsigned long long)elapsed_ms,
+             opening_book->GetFileName() ? opening_book->GetFileName() : "");
+  }
+#endif
 
   OpenBookRelayoutState relayout_state = {
       app_.IsOpeningNeedsRelayout(), app_.GetOpeningOldPageCount(),
@@ -509,11 +598,19 @@ void ReaderController::HandleEventInOpening() {
   ResetOpeningState(&app_);
 
   if (err) {
+    CloseFailedOpenBook(&app_, opening_book, opening_session_id,
+                        err == BOOK_ERR_CANCELLED ? "cancelled"
+                                                  : "async-open-failed");
     app_.SetCurrentBook(nullptr);
     app_.SetCurrentBookSessionId(0);
     app_.SetPdfDeferredReadyAtMs(0);
     app_.SetMobiDeferredReadyAtMs(0);
     ClearDeferredRelayoutState();
+    if (err == BOOK_ERR_CANCELLED) {
+      app_.SetMode(AppMode::Browser);
+      app_.SetBrowserDirty(true);
+      return;
+    }
     if (const char *desc = DescribeBookOpenError(err)) {
       app_.PrintStatus(desc);
     } else {
@@ -526,11 +623,21 @@ void ReaderController::HandleEventInOpening() {
     return;
   }
 
-  if (opening_session_id == 0) {
+  const int pageCount = opening_book->GetPageCount();
+  if (!ShouldAttachOpeningResult(opening_session_id,
+                                 opening_book->GetOpenSessionId(),
+                                 opening_book->IsOpenAbortRequested(),
+                                 pageCount)) {
+    const char *cause = DescribeOpeningFailureCause(
+        opening_session_id, opening_book->GetOpenSessionId(),
+        opening_book->IsOpenAbortRequested(), pageCount);
     DBG_LOGF(&app_,
-             "BOOK open stale-complete session=%u book=%s -> closing result",
-             opening_session_id, SafeBookName(opening_book));
-    opening_book->Close();
+             "BOOK attach denied: cause=%s session=%u book_session=%u pages=%d book=%s",
+             cause, opening_session_id, opening_book->GetOpenSessionId(),
+             pageCount, SafeBookName(opening_book));
+    if (strcmp(cause, "aborted") != 0)
+      app_.PrintStatus("error: book has no parsed pages");
+    CloseFailedOpenBook(&app_, opening_book, opening_session_id, cause);
     app_.SetCurrentBook(nullptr);
     app_.SetCurrentBookSessionId(0);
     app_.SetMode(AppMode::Browser);
@@ -544,19 +651,7 @@ void ReaderController::HandleEventInOpening() {
   bookcurrent_->SetLayoutRevision(app_.GetLayoutRevision());
   DBG_LOGF(&app_, "BOOK open attach session=%u book=%s", opening_session_id,
            SafeBookName(bookcurrent_));
-
-  int pageCount = bookcurrent_->GetPageCount();
   DBG_LOGF(&app_, "Generated %d pages", pageCount);
-
-  if (pageCount <= 0) {
-    app_.PrintStatus("error: book has no parsed pages");
-    bookcurrent_->Close();
-    app_.SetCurrentBook(nullptr);
-    app_.SetCurrentBookSessionId(0);
-    app_.SetMode(AppMode::Browser);
-    app_.SetBrowserDirty(true);
-    return;
-  }
 
   deferred_relayout_utils::OpenRelayoutPlan open_plan =
       deferred_relayout_utils::BuildOpenRelayoutPlan(
@@ -599,8 +694,8 @@ void ReaderController::HandleEventInOpening() {
 
 void ReaderController::HandleEventInBook() {
   Book *bookcurrent_ = app_.GetCurrentBook();
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
   decltype(App::key) &key = app_.key;
   auto touch_read = [&]() { return app_.TouchRead(); };
   auto request_status_redraw = [&]() { app_.RequestStatusRedraw(); };
@@ -795,7 +890,7 @@ void ReaderController::HandleEventInBook() {
   } else if (keys & (key.right | key.left)) {
     // Navigate bookmarks.
     app_flow_utils::BookmarkJumpResult jump = app_flow_utils::FindBookmarkJumpTarget(
-        *bookcurrent_->GetBookmarks(), bookcurrent_->GetPosition(),
+        bookcurrent_->GetBookmarks(), bookcurrent_->GetPosition(),
         (keys & key.left) ? app_flow_utils::BookmarkJumpDirection::Next
                           : app_flow_utils::BookmarkJumpDirection::Previous);
 
@@ -834,27 +929,27 @@ void ReaderController::HandleEventInBook() {
 
 void ReaderController::ToggleBookmark() {
   Book *bookcurrent_ = app_.GetCurrentBook();
-  Text *ts = app_.ts;
+  Text *ts = app_.ts.get();
 
   if (!bookcurrent_ || !bookcurrent_->SupportsBookmarks())
     return;
   // Toggle bookmark for the current page.
-  std::list<u16> *bookmarks = bookcurrent_->GetBookmarks();
+  std::list<u16> &bookmarks = bookcurrent_->GetBookmarks();
   u16 pagecurrent = bookcurrent_->GetPosition();
 
   bool found = false;
-  for (std::list<u16>::iterator i = bookmarks->begin(); i != bookmarks->end();
+  for (std::list<u16>::iterator i = bookmarks.begin(); i != bookmarks.end();
        i++) {
     if (*i == pagecurrent) {
-      bookmarks->erase(i);
+      bookmarks.erase(i);
       found = true;
       break;
     }
   }
 
   if (!found) {
-    bookmarks->push_back(pagecurrent);
-    bookmarks->sort();
+    bookmarks.push_back(pagecurrent);
+    bookmarks.sort();
   }
 
   DrawBookPage(bookcurrent_, ts);
@@ -895,8 +990,8 @@ int ReaderController::GetBookIndex(Book *b) {
 }
 
 u8 ReaderController::OpenBook() {
-  Prefs *prefs = app_.prefs;
-  Text *ts = app_.ts;
+  Prefs *prefs = app_.prefs.get();
+  Text *ts = app_.ts.get();
   Book *selected_book = app_.GetSelectedBook();
   Book *bookcurrent_ = app_.GetCurrentBook();
 
@@ -904,10 +999,6 @@ u8 ReaderController::OpenBook() {
 
   if (!selected_book)
     return 254;
-
-  DBG_LOG(&app_, "opening book ...");
-  if (selected_book->GetTitle())
-    DBG_LOG(&app_, selected_book->GetTitle());
 
   const bool needs_relayout = app_.BookNeedsRelayout(selected_book);
   const bool switching_books =
@@ -921,10 +1012,14 @@ u8 ReaderController::OpenBook() {
            "BOOK switch: request session=%u current_session=%u current=%s selected=%s needs_relayout=%u async=%u",
            session_id, app_.GetCurrentBookSessionId(), SafeBookName(bookcurrent_),
            SafeBookName(selected_book), needs_relayout ? 1u : 0u,
-           selected_book->SupportsAsyncReflowOpen() ? 1u : 0u);
+           (selected_book->SupportsAsyncReflowOpen() &&
+            !debug_runtime::ForceSynchronousBookOpen())
+               ? 1u
+               : 0u);
 
   // Fast path: selected book is already parsed and resident.
-  if (selected_book->GetPageCount() > 0 && !needs_relayout) {
+  if (selected_book->GetPageCount() > 0 && !needs_relayout &&
+      !selected_book->IsOpenAbortRequested()) {
     ReuseParsedBook(&app_);
     app_.SetCurrentBookSessionId(session_id);
     if (app_.GetDeferredRelayoutBook() != app_.GetCurrentBook())
@@ -953,7 +1048,11 @@ u8 ReaderController::OpenBook() {
   // While parsing a new book, avoid displaying stale browser highlight state.
   DrawOpeningSplash(&app_);
 
-  if (selected_book->SupportsAsyncReflowOpen()) {
+  if (selected_book->SupportsAsyncReflowOpen() &&
+      !debug_runtime::ForceSynchronousBookOpen()) {
+    if (switching_books) {
+      app_.PauseBrowserJobs();
+    }
     DetachCurrentBookForSwitch(&app_, selected_book, session_id, "async-open");
     if (selected_book->StartAsyncReflowOpen(session_id)) {
       app_.SetOpeningPending(true);
@@ -964,7 +1063,8 @@ u8 ReaderController::OpenBook() {
       app_.SetOpeningOldPosition(relayout_state.old_position);
       app_.MutableOpeningOldBookmarks() = relayout_state.old_bookmarks;
       app_.SetOpeningStartedAtMs(osGetTime());
-      DBG_LOGF(&app_, "REFLOW: async open submitted book=%s",
+      DBG_LOGF(&app_, "REFLOW: async open submitted session=%u book=%s",
+               session_id,
                selected_book->GetFileName()
                    ? selected_book->GetFileName()
                    : "");
@@ -976,8 +1076,10 @@ u8 ReaderController::OpenBook() {
                  ? selected_book->GetFileName()
                  : "");
   }
-
   if (u8 err = OpenSelectedBook(&app_, session_id)) {
+    CloseFailedOpenBook(&app_, selected_book, session_id,
+                        err == BOOK_ERR_CANCELLED ? "cancelled"
+                                                  : "sync-open-failed");
     app_.SetCurrentBook(nullptr);
     app_.SetCurrentBookSessionId(0);
     app_.SetMode(AppMode::Browser);
@@ -997,8 +1099,9 @@ u8 ReaderController::OpenBook() {
 
   if (pageCount <= 0) {
     app_.PrintStatus("error: book has no parsed pages");
-    bookcurrent_->Close();
+    CloseFailedOpenBook(&app_, bookcurrent_, session_id, "pages-zero");
     app_.SetCurrentBook(nullptr);
+    app_.SetCurrentBookSessionId(0);
     app_.SetMode(AppMode::Browser);
     app_.SetBrowserDirty(true);
     return 253;

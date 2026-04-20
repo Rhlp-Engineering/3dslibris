@@ -73,6 +73,8 @@ Other:
 - X: cycle theme (normal / dark / sepia)
 - Start: return to library
 - Select: open BOOK settings
+- During "opening book ...", B / Start / Select cancels the load and
+  returns to the library
 
 Bookmark persistence:
 - Bookmarks are saved in `sdmc:/3ds/3dslibris/3dslibris.xml`.
@@ -102,6 +104,14 @@ Viewport navigation:
 Other:
 - Start: return to library
 - Select: open BOOK settings
+- During "opening book ...", B / Start / Select cancels the load and
+  returns to the library
+
+Reading direction:
+- Default is Left to right (western books).
+- For manga, Arabic, or Hebrew content: open BOOK settings (Select)
+  and toggle "reading direction" to Right to left.
+- Page turn direction and viewport navigation flip accordingly.
 
 Notes:
 - High-quality redraw can appear shortly after interaction.
@@ -164,6 +174,7 @@ MOBI notes:
   - index
   - bookmarks
   - format-specific options like MOBI line-wrap fix
+  - reading direction toggle (Left to right / Right to left) for PDF/CBZ/XPS
 - Go to page:
   - touch the slider to choose a page
   - Left/Right: move by 1 page

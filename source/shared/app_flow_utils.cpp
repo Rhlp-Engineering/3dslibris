@@ -2,6 +2,8 @@
 
 #include <cstring>
 
+#include "shared/debug_runtime_mode.h"
+
 namespace app_flow_utils {
 namespace {
 
@@ -71,11 +73,13 @@ float GetMuPdfReadingBaseZoom(MuPdfDocumentKind kind) {
 }
 
 bool MuPdfWantsFinalQualityRender(MuPdfDocumentKind kind) {
-  return kind == MuPdfDocumentKind::Pdf || kind == MuPdfDocumentKind::Xps;
+  (void)kind;
+  return !debug_runtime::ForceSynchronousMuPdfRender();
 }
 
 bool MuPdfShouldPrefetchAdjacent(MuPdfDocumentKind kind) {
-  return kind == MuPdfDocumentKind::Pdf || kind == MuPdfDocumentKind::Xps;
+  (void)kind;
+  return false;
 }
 
 bool ShouldIndexBookFilename(const char *filename) {

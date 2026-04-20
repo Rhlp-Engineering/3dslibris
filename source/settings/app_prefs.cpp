@@ -107,7 +107,7 @@ static void CycleColorMode(Text *ts) {
 }
 
 static void ToggleBrowserViewSetting(App *app) {
-  if (!app || !app->prefs)
+  if (!app || !app->prefs.get())
     return;
   app->prefs->browser_view_mode =
       app->prefs->browser_view_mode == BROWSER_VIEW_LIST
@@ -149,8 +149,14 @@ static bool CurrentBookUsesLineWrapFixSlot(App *app) {
   return app && app->IsBookSettingsContext() && book && book->IsMobiFile();
 }
 
+static bool CurrentBookUsesReadingDirectionSlot(App *app) {
+  Book *book = app ? app->GetCurrentBook() : NULL;
+  return app && app->IsBookSettingsContext() && book && book->IsFixedLayout();
+}
+
 static bool CurrentBookShowsLineWrapFix(App *app) {
-  return CurrentBookUsesLineWrapFixSlot(app);
+  return CurrentBookUsesLineWrapFixSlot(app) ||
+         CurrentBookUsesReadingDirectionSlot(app);
 }
 
 static bool CurrentBookUsesTextLayoutSettings(App *app) {
@@ -163,6 +169,13 @@ static bool CurrentBookCanGoToPage(App *app) {
   Book *book = app ? app->GetCurrentBook() : NULL;
   return app && app->IsBookSettingsContext() && book &&
          book->GetPageCount() > 0;
+}
+
+static void ToggleFixedLayoutReadingDirection(Prefs *prefs) {
+  if (!prefs)
+    return;
+  prefs->fixed_layout_rtl = !prefs->fixed_layout_rtl;
+  prefs->Write();
 }
 
 static GoToPagePopupLayout BuildGoToPagePopupLayout() {
@@ -267,7 +280,7 @@ bool SettingsController::ConfirmGoToPageSelection() {
     book->ResetFixedLayoutViewportForNavigation();
 
   app_.ShowCurrentBookView();
-  book->DrawCurrentView(app_.ts);
+  book->DrawCurrentView(app_.ts.get());
   app_.SetPdfDeferredReadyAtMs(
       (book->IsFixedLayout() && book->HasPendingFixedLayoutDeferredWork())
           ? (osGetTime() + book->GetFixedLayoutDeferredDelayMs())
@@ -399,7 +412,7 @@ void SettingsController::PrefsInit() {
       "bookmarks"};
 
   for (int i = 0; i < PREFS_BUTTON_COUNT; i++) {
-    app->prefsButtons[i].Init(app->ts);
+    app->prefsButtons[i].Init(app->ts.get());
     app->prefsButtons[i].SetStyle(BUTTON_STYLE_SETTING);
     app->prefsButtons[i].Resize(230, 36);
     app->prefsButtons[i].SetLabel1(labels[i]);
@@ -767,6 +780,12 @@ void SettingsController::PrefsRefreshButton(int index) {
       app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel2(
           app->GetCurrentBook()->GetMobiLineWrapFix() ? std::string("on")
                                                       : std::string("off"));
+    } else if (CurrentBookUsesReadingDirectionSlot(app)) {
+      app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel1(
+          std::string("reading direction"));
+      app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel2(
+          app->prefs->fixed_layout_rtl ? std::string("Right to left")
+                                       : std::string("Left to right"));
     } else {
       app->prefsButtons[PREFS_BUTTON_LIBRARY_VIEW].SetLabel1(
           std::string("library view"));
@@ -819,7 +838,7 @@ void SettingsController::PrefsHandlePress() {
         OpenGoToPagePopup();
       }
     } else {
-      ToggleClockFormatSetting(app->prefs);
+      ToggleClockFormatSetting(app->prefs.get());
       PrefsRefreshButton(PREFS_BUTTON_TIME24H);
       app->MarkPrefsDirty();
     }
@@ -827,7 +846,7 @@ void SettingsController::PrefsHandlePress() {
   }
 
   if (selected_button == PREFS_BUTTON_COLORMODE) {
-    CycleColorMode(app->ts);
+    CycleColorMode(app->ts.get());
     PrefsRefreshButton(PREFS_BUTTON_COLORMODE);
     app->prefs->Write();
     app->MarkPrefsDirty();
@@ -837,6 +856,14 @@ void SettingsController::PrefsHandlePress() {
   if (selected_button == PREFS_BUTTON_LIBRARY_VIEW) {
     if (CurrentBookUsesLineWrapFixSlot(app)) {
       ToggleCurrentBookMobiLineWrapFix();
+    } else if (CurrentBookUsesReadingDirectionSlot(app)) {
+      ToggleFixedLayoutReadingDirection(app->prefs.get());
+      if (app->GetCurrentBook()) {
+        app->GetCurrentBook()->ResetFixedLayoutViewportForNavigation();
+        app->RequestStatusRedraw();
+      }
+      PrefsRefreshButton(PREFS_BUTTON_LIBRARY_VIEW);
+      app->MarkPrefsDirty();
     } else {
       ToggleBrowserViewSetting(app);
       PrefsRefreshButton(PREFS_BUTTON_LIBRARY_VIEW);

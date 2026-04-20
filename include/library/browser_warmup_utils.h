@@ -32,6 +32,14 @@ inline bool IsBrowserHeavyWarmupIdle(uint64_t now_ms,
   return (now_ms - last_interaction_ms) >= kBrowserHeavyWarmupIdleDelayMs;
 }
 
+inline int VisibleBrowserEntryCount(int page_size, int page_start,
+                                    int book_count) {
+  if (page_size <= 0 || page_start < 0 || book_count <= page_start)
+    return 0;
+  const int remaining = book_count - page_start;
+  return remaining < page_size ? remaining : page_size;
+}
+
 inline bool ShouldQueueCoverWarmup(bool is_selected_book, bool warmup_idle,
                                    bool heavy_warmup_idle) {
   return is_selected_book ? warmup_idle : heavy_warmup_idle;
@@ -70,6 +78,29 @@ inline uint64_t CoverRetryDelayMs(bool is_new_3ds, bool is_selected_book,
                             : kOld3dsWarmCoverRetryDelayMs;
   }
   return 0;
+}
+
+inline bool MetadataWarmupDone(bool supports_metadata_indexing,
+                               bool metadata_index_tried) {
+  return !supports_metadata_indexing || metadata_index_tried;
+}
+
+inline bool CoverWarmupDone(bool supports_cover_warmup, bool has_cover_pixels,
+                            unsigned int cover_attempts,
+                            unsigned int cover_attempt_limit) {
+  return !supports_cover_warmup || has_cover_pixels ||
+         cover_attempts >= cover_attempt_limit;
+}
+
+inline bool BookWarmupDone(bool supports_metadata_indexing,
+                           bool metadata_index_tried,
+                           bool supports_cover_warmup,
+                           bool has_cover_pixels,
+                           unsigned int cover_attempts,
+                           unsigned int cover_attempt_limit) {
+  return MetadataWarmupDone(supports_metadata_indexing, metadata_index_tried) &&
+         CoverWarmupDone(supports_cover_warmup, has_cover_pixels,
+                         cover_attempts, cover_attempt_limit);
 }
 
 } // namespace browser_warmup_utils

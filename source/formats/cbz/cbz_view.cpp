@@ -5,11 +5,14 @@
 #include "formats/cbz/cbz_worker.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "formats/common/pdf_view_utils.h"
+#include "settings/prefs.h"
+#include "shared/debug_runtime_mode.h"
 #include "ui/text.h"
 #include "debug_log.h"
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 
 namespace {
 
@@ -26,8 +29,9 @@ static const u32 kCbzPreloadDeferredDelayMs = 600;
 static const size_t kCbzMaxEntryBytes = 64u * 1024u * 1024u;
 
 inline bool CbzSourceValid(const Book::CbzState::PageBitmap &page_bitmap,
-                           int page_index) {
+                           int page_index, int zoom_index) {
   return page_bitmap.page == page_index &&
+         page_bitmap.zoom_index >= zoom_index &&
          page_bitmap.bitmap.width > 0 &&
          page_bitmap.bitmap.height > 0 &&
          !page_bitmap.bitmap.pixels.empty();
@@ -56,11 +60,71 @@ void ResetCbzPageBitmap(Book::CbzState::PageBitmap *page_bitmap) {
   if (!page_bitmap)
     return;
   page_bitmap->page = -1;
+  page_bitmap->zoom_index = -1;
   page_bitmap->original_width = 0;
   page_bitmap->original_height = 0;
   page_bitmap->bitmap.width = 0;
   page_bitmap->bitmap.height = 0;
   page_bitmap->bitmap.pixels.clear();
+}
+
+bool DecodeCbzPageImageWithFallback(const std::vector<unsigned char> &bytes,
+                                    int preferred_zoom_index,
+                                    CbzDecodedPage *decoded,
+                                    int *used_zoom_index) {
+  if (!decoded)
+    return false;
+  for (int try_zoom = preferred_zoom_index; try_zoom >= 0; --try_zoom) {
+    if (DecodeCbzPageImage(bytes, try_zoom, decoded)) {
+      if (used_zoom_index)
+        *used_zoom_index = try_zoom;
+      return true;
+    }
+  }
+  if (used_zoom_index)
+    *used_zoom_index = -1;
+  return false;
+}
+
+void DrawCbzLoadFailure(Book *book, Text *ts, int page_index,
+                        const std::string &reason) {
+  if (!book || !ts)
+    return;
+
+  const int saved_style = ts->GetStyle();
+  const int saved_color = ts->GetColorMode();
+  u16 *saved_screen = ts->GetScreen();
+  const int saved_bottom_margin = ts->margin.bottom;
+
+  ts->SetStyle(TEXT_STYLE_BROWSER);
+  ts->SetColorMode(0);
+  ts->margin.bottom = 0;
+
+  ts->SetScreen(ts->screenleft);
+  ts->ClearScreen();
+  ts->SetPen(14, 28);
+  ts->PrintString("CBZ page unavailable");
+  ts->SetPen(14, 52);
+  char page_msg[48];
+  snprintf(page_msg, sizeof(page_msg), "page %d", page_index + 1);
+  ts->PrintString(page_msg);
+
+  ts->SetScreen(ts->screenright);
+  ts->ClearScreen();
+  book->DrawBottomGradientBackground();
+  ts->SetPen(12, 28);
+  ts->PrintString("image decode failed");
+  ts->SetPen(12, 48);
+  ts->PrintString("use L/R or B to leave");
+  if (!reason.empty()) {
+    ts->SetPen(12, 72);
+    ts->PrintString(reason.c_str());
+  }
+
+  ts->SetStyle(saved_style);
+  ts->SetColorMode(saved_color);
+  ts->SetScreen(saved_screen);
+  ts->margin.bottom = saved_bottom_margin;
 }
 
 void BlitRgb565BitmapScaledCrop(Text *ts, u16 *screen, int logical_height,
@@ -183,12 +247,13 @@ bool PromoteCbzAdjacentSlotIfMatching(Book::CbzState *cbz_state,
   return true;
 }
 
-bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index) {
+bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index,
+                           int zoom_index) {
   if (!cbz_state || page_index < 0 || page_index >= (int)cbz_state->entries.size())
     return false;
   if (cbz_state->failed_page == page_index)
     return false;
-  if (CbzSourceValid(cbz_state->current_source, page_index))
+  if (CbzSourceValid(cbz_state->current_source, page_index, zoom_index))
     return true;
 
   std::vector<unsigned char> bytes;
@@ -201,7 +266,9 @@ bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index) {
   }
 
   CbzDecodedPage decoded;
-  if (!DecodeCbzPageImage(bytes, cbz_state->max_zoom_index, &decoded)) {
+  int used_zoom_index = -1;
+  if (!DecodeCbzPageImageWithFallback(bytes, zoom_index, &decoded,
+                                      &used_zoom_index)) {
     cbz_state->last_error = GetLastCbzDecodeError();
     cbz_state->failed_page = page_index;
     return false;
@@ -212,6 +279,7 @@ bool EnsureCbzSourceLoaded(Book::CbzState *cbz_state, int page_index) {
   cbz_state->last_error.clear();
   ResetCbzPageBitmap(&cbz_state->current_source);
   cbz_state->current_source.page = page_index;
+  cbz_state->current_source.zoom_index = used_zoom_index;
   cbz_state->current_source.original_width = decoded.original_width;
   cbz_state->current_source.original_height = decoded.original_height;
   cbz_state->current_source.bitmap.width = decoded.source_bitmap.width;
@@ -228,7 +296,7 @@ bool EnsureCbzPreviewCache(Book::CbzState *cbz_state, int page_index) {
   PromoteCbzAdjacentSlotIfMatching(cbz_state, page_index);
   if (CbzPreviewCacheValid(cbz_state->current_preview, page_index))
     return true;
-  if (!EnsureCbzSourceLoaded(cbz_state, page_index))
+  if (!EnsureCbzSourceLoaded(cbz_state, page_index, 0))
     return false;
 
   const pdf_view_utils::PreviewLayout preview_layout =
@@ -259,7 +327,7 @@ bool EnsureCbzInteractiveCache(Book::CbzState *cbz_state, int page_index) {
                           cbz_state->zoom_index)) {
     return true;
   }
-  if (!EnsureCbzSourceLoaded(cbz_state, page_index))
+  if (!EnsureCbzSourceLoaded(cbz_state, page_index, cbz_state->zoom_index))
     return false;
 
   const float fit_scale =
@@ -348,7 +416,38 @@ bool HasCbzNeighborPending(const Book::CbzState *cbz_state, int page_index) {
   return false;
 }
 
+void ResetCbzDeferredCachesForSynchronousRender(Book::CbzState *cbz_state) {
+  if (!cbz_state)
+    return;
+  ResetCbzBitmapCache(&cbz_state->current_interactive);
+  ResetCbzAdjacentSlot(&cbz_state->prev_slot);
+  ResetCbzAdjacentSlot(&cbz_state->next_slot);
+  cbz_state->preload_pending = false;
+}
+
 } // namespace
+
+void Book::ResetCbzTransientViewState(bool restart_worker) {
+  if (!IsCbz() || !cbz_state)
+    return;
+
+  cbz_state->viewport_interaction_active = false;
+  cbz_state->preload_pending = false;
+  cbz_state->viewport_center_x = 0.5f;
+  cbz_state->viewport_center_y = 0.5f;
+  ResetCbzFailureState();
+  ResetCbzPageBitmap(&cbz_state->current_source);
+  ResetCbzBitmapCache(&cbz_state->current_preview);
+  ResetCbzBitmapCache(&cbz_state->current_interactive);
+  ResetCbzAdjacentSlot(&cbz_state->prev_slot);
+  ResetCbzAdjacentSlot(&cbz_state->next_slot);
+
+  if (!restart_worker)
+    return;
+
+  ShutdownCbzWorker(cbz_state);
+  InitCbzWorker(cbz_state);
+}
 
 void Book::DrawCurrentCbzView(Text *ts) {
   if (!ts || !IsCbz() || !cbz_state)
@@ -376,7 +475,20 @@ void Book::DrawCurrentCbzView(Text *ts) {
                    cbz_state->last_error.c_str());
       cbz_state->logged_failed_page = page_index;
     }
+    if (reporter) {
+      DBG_LOGF(reporter, "CBZ load failed: showing fallback page=%d reason=%s",
+               page_index, cbz_state->last_error.c_str());
+    }
+    DrawCbzLoadFailure(this, ts, page_index, cbz_state->last_error);
     return;
+  }
+
+  // In synchronous mode, render interactive cache immediately after preview.
+  // This gives proper zoom-aware resolution without background threads.
+  if (debug_runtime::ForceSynchronousCbzDecode() &&
+      !CbzBitmapCacheValid(cbz_state->current_interactive, page_index,
+                           cbz_state->zoom_index)) {
+    EnsureCbzInteractiveCache(cbz_state, page_index);
   }
 
   const pdf_view_utils::NormalizedRect viewport =
@@ -460,8 +572,12 @@ void Book::SetCbzViewportInteraction(bool active) {
 void Book::ResetCbzViewport() {
   if (!IsCbz() || !cbz_state)
     return;
+  const fixed_layout_viewport_utils::PageTurnDirection direction =
+      (GetPrefs() && GetPrefs()->fixed_layout_rtl)
+          ? fixed_layout_viewport_utils::PAGE_TURN_RIGHT_TO_LEFT
+          : fixed_layout_viewport_utils::PAGE_TURN_LEFT_TO_RIGHT;
   const fixed_layout_viewport_utils::ViewportCenter center =
-      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter();
+      fixed_layout_viewport_utils::DefaultPageTurnViewportCenter(direction);
   cbz_state->viewport_center_x = center.x;
   cbz_state->viewport_center_y = center.y;
   cbz_state->viewport_interaction_active = false;
@@ -518,6 +634,8 @@ bool Book::JumpCbzChapter(int delta) {
 bool Book::HasPendingCbzDeferredWork() const {
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
     return false;
+  if (debug_runtime::ForceSynchronousCbzDecode())
+    return false;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);
   if (cbz_state->failed_page == page_index)
@@ -542,6 +660,8 @@ bool Book::HasPendingCbzDeferredWork() const {
 u32 Book::GetCbzDeferredDelayMs() const {
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
     return 0;
+  if (debug_runtime::ForceSynchronousCbzDecode())
+    return 0;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);
   if (!CbzPreviewCacheValid(cbz_state->current_preview, page_index) ||
@@ -563,7 +683,10 @@ u32 Book::GetCbzDeferredDelayMs() const {
 }
 
 bool Book::PumpDeferredCbzWork(u32 budget_ms) {
+  (void)budget_ms;
   if (!IsCbz() || !cbz_state || cbz_state->page_count == 0)
+    return false;
+  if (debug_runtime::ForceSynchronousCbzDecode())
     return false;
 
   const int page_index = ClampCbzPageIndex(position, cbz_state->page_count);

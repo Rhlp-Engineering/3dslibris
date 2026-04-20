@@ -19,9 +19,19 @@
 #include "formats/pdf/pdf.h"
 #include "formats/cbz/cbz.h"
 #include "formats/odt/odt_loader.h"
+#include "debug_log.h"
 #include "shared/string_utils.h"
 #include <stdio.h>
 #include <sys/param.h>
+
+namespace {
+
+const mobi_parser::Hooks &SharedMobiHooks() {
+  static const mobi_parser::Hooks hooks = mobi_book_hooks::Make();
+  return hooks;
+}
+
+} // namespace
 
 u8 Book::Parse(bool fulltext) {
   //! Parse full text (true) or titles only (false).
@@ -38,8 +48,10 @@ u8 Book::Parse(bool fulltext) {
     return plain_parser::ParseRtfFile(this, path);
   if (fulltext && HasExtCI(GetFileName(), ".odt"))
     return odt_loader::ParseOdtFile(this, path);
-  if (fulltext && HasExtCI(GetFileName(), ".mobi"))
-    return mobi_parser::ParseFile(this, path, mobi_book_hooks::Make());
+  if (fulltext && HasExtCI(GetFileName(), ".mobi")) {
+    const mobi_parser::Hooks &hooks = SharedMobiHooks();
+    return mobi_parser::ParseFile(this, path, hooks);
+  }
   if (fulltext && (HasExtCI(GetFileName(), ".pdf") ||
                    HasExtCI(GetFileName(), ".xps") ||
                    HasExtCI(GetFileName(), ".oxps")))
@@ -60,7 +72,7 @@ bool Book::HasDeferredMobiParse() const {
 
 bool Book::ContinueDeferredMobiParse(u32 budget_ms, u16 page_budget) {
   return mobi_parser::ContinueDeferredParse(this, budget_ms, page_budget,
-                                            mobi_book_hooks::Make());
+                                            SharedMobiHooks());
 }
 
 void Book::CancelDeferredMobiParse() { mobi_deferred_runtime::Erase(this); }

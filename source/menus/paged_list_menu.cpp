@@ -92,7 +92,7 @@ void PagedListMenu::Init() {
   size_t count = std::min(labels.size(), pages.size());
   target_pages.reserve(count);
   for (size_t i = 0; i < count; i++) {
-    Button *b = new Button(app->ts);
+    Button *b = new Button(app->ts.get());
     b->Init();
     b->Resize(LIST_ROW_W, LIST_ROW_H);
     b->Move(LIST_ROW_X, LIST_ROW_Y0 + (i % pagesize) * (LIST_ROW_H + LIST_ROW_GAP));
@@ -372,7 +372,7 @@ void PagedListMenu::ActivateSelected() {
   }
   book->SetPosition(target_page);
   app->ShowCurrentBookView();
-  book->DrawCurrentView(app->ts);
+  book->DrawCurrentView(app->ts.get());
   app->RequestStatusRedraw();
 }
 
@@ -400,7 +400,7 @@ void PagedListMenu::Back() {
   Book *book = app ? app->GetCurrentBook() : NULL;
   app->ShowCurrentBookView();
   if (book) {
-    book->DrawCurrentView(app->ts);
+    book->DrawCurrentView(app->ts.get());
   }
   app->RequestStatusRedraw();
 }
