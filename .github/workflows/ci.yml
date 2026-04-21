@@ -114,7 +114,8 @@ jobs:
           test -f 3dslibris.3dsx
           test -f 3dslibris-debug.3dsx
           test -f dist/romfs/3ds/3dslibris/font/LiberationSerif-Regular.ttf
-          test -f dist/romfs/3ds/3dslibris/resources/splash.jpg
+          test -f dist/romfs/3ds/3dslibris/resources/3DSLibris_dark_small.jpg
+          test -f dist/romfs/3ds/3dslibris/resources/3DSLibris_light_small.jpg
 
       - name: Upload CIA artifacts
         uses: actions/upload-artifact@v4
