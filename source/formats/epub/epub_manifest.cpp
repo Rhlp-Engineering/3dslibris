@@ -134,7 +134,8 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
                            const std::string &xhtml_path,
                            IStatusReporter *reporter,
                            epub_data_t *epd,
-                           epub_css_class_map::CssClassMap *out) {
+                           epub_css_class_map::CssClassMap *out,
+                           unzFile external_scan_uf) {
   out->clear();
   if (archive_path.empty() || xhtml_path.empty())
     return;
@@ -154,7 +155,10 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
     }
   }
 
-  unzFile scan_uf = unzOpen(archive_path.c_str());
+  // Use a caller-provided handle if available to avoid opening the zip for
+  // every spine document. Fall back to opening our own handle if not provided.
+  const bool owns_scan_uf = (external_scan_uf == NULL);
+  unzFile scan_uf = owns_scan_uf ? unzOpen(archive_path.c_str()) : external_scan_uf;
   if (!scan_uf)
     return;
 
@@ -162,7 +166,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   epub_zip_utils::ZipEntryIndex zip_index;
   bool ok = ReadZipEntryText(scan_uf, xhtml_path, xhtml_text, reporter, "CSS-SCAN", &zip_index);
   if (!ok || xhtml_text.empty()) {
-    unzClose(scan_uf);
+    if (owns_scan_uf) unzClose(scan_uf);
     return;
   }
 
@@ -170,7 +174,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   if (css_href.empty()) {
     if (epd)
       epd->css_href_by_doc[xhtml_path] = "";
-    unzClose(scan_uf);
+    if (owns_scan_uf) unzClose(scan_uf);
     return;
   }
 
@@ -186,7 +190,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
         css_it = epd->css_class_map_by_path.find(css_path);
     if (css_it != epd->css_class_map_by_path.end()) {
       *out = css_it->second;
-      unzClose(scan_uf);
+      if (owns_scan_uf) unzClose(scan_uf);
       return;
     }
   }
@@ -194,7 +198,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   std::string css_text;
   epub_zip_utils::ZipEntryIndex css_index;
   ok = ReadZipEntryText(scan_uf, css_path, css_text, reporter, "CSS-LOAD", &css_index);
-  unzClose(scan_uf);
+  if (owns_scan_uf) unzClose(scan_uf);
   if (!ok || css_text.empty())
     return;
 
@@ -369,7 +373,8 @@ static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
   parsedata->prefs = deps.prefs;
 }
 
-int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
+int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps,
+                           unzFile css_scan_uf) {
   int rc = 0;
   parsedata_t pd;
   bool log_content_layout = false;
@@ -414,7 +419,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps) {
     pd.docpath = epd->docpath;
     if (!epd->archive_path.empty())
       LoadCssClassMapForDoc(epd->archive_path, epd->docpath, deps.reporter,
-                            epd, &pd.css_class_map);
+                            epd, &pd.css_class_map, css_scan_uf);
     log_content_layout = deps.reporter && epd->book;
     if (log_content_layout) {
       t_content_begin = osGetTime();

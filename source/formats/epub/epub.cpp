@@ -231,6 +231,10 @@ static int ParseEpubSpineDocuments(
   size_t spine_doc_index = 0;
   unzFile inline_probe_uf = unzOpen(archive_path.c_str());
   book->SetInlineImageProbeZip(inline_probe_uf);
+  // Open a shared handle for CSS stylesheet scanning so LoadCssClassMapForDoc
+  // can reuse it across all spine documents instead of opening and closing the
+  // zip once per document.
+  unzFile css_scan_uf = unzOpen(archive_path.c_str());
 
   for (size_t i = 0; i < hrefs.size(); i++) {
     if (open_cancel_poll::Poll(book, app, "epub-spine-loop")) {
@@ -267,7 +271,7 @@ static int ParseEpubSpineDocuments(
         break;
       parsedata->docpath = path;
       parsedata->archive_path = archive_path;
-      const int parse_rc = epub_parse_currentfile(uf, parsedata, deps);
+      const int parse_rc = epub_parse_currentfile(uf, parsedata, deps, css_scan_uf);
       const int close_rc = unzCloseCurrentFile(uf);
       // Expat XML parse errors (positive, < BOOK_ERR_CANCELLED) are
       // recoverable: real-world EPUBs routinely have malformed XHTML (mismatched
@@ -365,6 +369,8 @@ static int ParseEpubSpineDocuments(
   book->SetInlineImageProbeZip(NULL);
   if (inline_probe_uf)
     unzClose(inline_probe_uf);
+  if (css_scan_uf)
+    unzClose(css_scan_uf);
 #ifdef DSLIBRIS_DEBUG
   if (t_after_content)
     *t_after_content = osGetTime();
