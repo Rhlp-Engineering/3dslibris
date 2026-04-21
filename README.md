@@ -14,8 +14,8 @@ The current `.cia` packaging flow is based on the same `makerom`/`bannertool` pr
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/readme/screenshot1.jpeg" alt="Library view screenshot" /></td>
-    <td width="50%"><img src="assets/readme/screenshot2.jpeg" alt="Reading view screenshot" /></td>
+    <td width="50%"><img width="640" height="531" alt="3dslibris_darksepia" src="https://github.com/user-attachments/assets/6de341bf-7811-4e70-be73-6e0aa4ca62ac" /></td>
+    <td width="50%"> <img width="640" height="531" alt="3dslibris_light" src="https://github.com/user-attachments/assets/9874a40f-47d7-4c07-9f35-a90dd63edc9c" /></td>
   </tr>
 </table>
 
