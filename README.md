@@ -5,6 +5,8 @@
 
 [![Release](https://img.shields.io/github/v/release/RigleGit/3dslibris?label=release)](https://github.com/RigleGit/3dslibris/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/RigleGit/3dslibris/ci.yml?branch=main&label=ci)](https://github.com/RigleGit/3dslibris/actions/workflows/ci.yml)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-rigle-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/rigle)
+[![Get on Universal-Updater](https://db.universal-team.net/assets/images/badges/universal-updater.png)](https://db.universal-team.net/3ds/3dslibris)
 
 Nintendo 3DS homebrew ebook reader based on the original Nintendo DS project `dslibris`.
 
@@ -159,7 +161,8 @@ Expected outputs:
 - `Y` / `Select`: open `GENERAL` settings
 
 Bundled runtime files:
-- `sdmc/3ds/3dslibris/resources/splash.jpg`
+- `sdmc/3ds/3dslibris/resources/3DSLibris_dark_small.jpg`
+- `sdmc/3ds/3dslibris/resources/3DSLibris_light_small.jpg`
 - `sdmc/3ds/3dslibris/resources/ui/icons/png/*.png`
 - `sdmc/3ds/3dslibris/book/README.md`
 - `sdmc/3ds/3dslibris/font/README.md`
@@ -181,7 +184,8 @@ Notes:
 sdmc:/3ds/3dslibris/3dslibris.3dsx
 sdmc:/3ds/3dslibris/book/*.epub|*.fb2|*.txt|*.rtf|*.odt|*.mobi|*.pdf|*.xps|*.oxps|*.cbz
 sdmc:/3ds/3dslibris/font/*.ttf
-sdmc:/3ds/3dslibris/resources/splash.jpg
+sdmc:/3ds/3dslibris/resources/3DSLibris_dark_small.jpg
+sdmc:/3ds/3dslibris/resources/3DSLibris_light_small.jpg
 sdmc:/3ds/3dslibris/resources/ui/icons/png/{back,gear,home,next,prev}.png
 ```
 
