@@ -46,10 +46,13 @@ void Button::Init(Text *typesetter) {
   text.style = TEXT_STYLE_BROWSER;
   text1.clear();
   text2.clear();
+  text3.clear();
   display1.clear();
   display2.clear();
+  display3.clear();
   text1_rtl = false;
   text2_rtl = false;
+  text3_rtl = false;
   icon = UI_BUTTON_ICON_NONE;
   iconExplicit = false;
   enabled = true;
@@ -84,6 +87,11 @@ void Button::SetLabel1(std::string s) {
 void Button::SetLabel2(std::string s) {
   text2 = s;
   PrepareButtonLabel(text2, &display2, &text2_rtl);
+}
+
+void Button::SetLabel3(std::string s) {
+  text3 = s;
+  PrepareButtonLabel(text3, &display3, &text3_rtl);
 }
 
 void Button::Move(u16 x, u16 y) {
@@ -148,7 +156,7 @@ void Button::Draw(u16 *screen, bool highlight) {
     text_width = 6;
 
   if (!text1.empty()) {
-    int line_count = text2.empty() ? 1 : 2;
+    int line_count = text3.empty() ? (text2.empty() ? 1 : 2) : 3;
     int block_h = line_count * line_height;
     int top = by + (bh - block_h) / 2;
     if (line_count == 1)
@@ -217,6 +225,36 @@ void Button::Draw(u16 *screen, bool highlight) {
       }
       ts->SetPen((u16)pen2_x, (u16)(top + line_height * 2));
       ts->PrintString(line2, text.style);
+    }
+
+    if (!text3.empty()) {
+      const char *src3 = text3_rtl ? display3.c_str() : text3.c_str();
+      char line3[256];
+      u8 len3 =
+          ts->GetCharCountInsideWidth(src3, text.style, (u8)text_width);
+      size_t bytes3 = Utf8BytesForCharCount(ts, src3, len3);
+      if (bytes3 > sizeof(line3) - 1)
+        bytes3 = sizeof(line3) - 1;
+      memcpy(line3, src3, bytes3);
+      line3[bytes3] = '\0';
+
+      int pen3_x = text_x;
+      if (text3_rtl) {
+        int w = 0;
+        const char *p = line3;
+        while (*p) {
+          u32 cp = 0;
+          u8 nb = ts->GetCharCode(p, &cp);
+          if (!nb) break;
+          w += ts->GetAdvance((u16)cp);
+          p += nb;
+        }
+        int rx = bx + bw - right_pad - 2 - w;
+        if (rx < text_x) rx = text_x;
+        pen3_x = rx;
+      }
+      ts->SetPen((u16)pen3_x, (u16)(top + line_height * 3));
+      ts->PrintString(line3, text.style);
     }
   }
 

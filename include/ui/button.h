@@ -40,11 +40,14 @@ private:
   int style;
   std::string text1;
   std::string text2;
+  std::string text3;
   // Display-ready strings: Arabic shaped + BIDI reordered.
   std::string display1;
   std::string display2;
+  std::string display3;
   bool text1_rtl;
   bool text2_rtl;
+  bool text3_rtl;
   UiButtonIconId icon;
   bool enabled;
   bool iconExplicit;
@@ -58,11 +61,14 @@ public:
   inline void Init() { Init(ts); };
   void Init(Text *typesetter);
   inline int GetHeight() { return extent.y; };
+  inline int GetX() const { return origin.x; };
+  inline int GetY() const { return origin.y; };
   inline const char *GetLabel() { return text1.c_str(); };
   void Label(const char *text);
   inline void SetLabel(std::string &s) { SetLabel1(s); };
   void SetLabel1(std::string s);
   void SetLabel2(std::string s);
+  void SetLabel3(std::string s);
   inline void SetIcon(UiButtonIconId iconId) {
     icon = iconId;
     iconExplicit = true;
