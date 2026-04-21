@@ -20,6 +20,7 @@
 #include "book/book.h"
 #include "debug_log.h"
 #include "book/page.h"
+#include "shared/text_unicode_utils.h"
 #include "ui/text.h"
 
 namespace {
@@ -34,8 +35,40 @@ static std::string TrimLabel(const std::string &in) {
   return in.substr(start, end - start);
 }
 
-static std::string BuildTwoLineLabelIfNeeded(const std::string &raw) {
-  return TrimLabel(raw);
+static std::vector<std::string> WrapTextToLines(Text *ts,
+                                                const std::string &text,
+                                                int max_width,
+                                                int max_lines) {
+  std::vector<std::string> lines;
+  std::string remaining = TrimLabel(text);
+  const int style = TEXT_STYLE_BROWSER;
+
+  while (!remaining.empty() && (int)lines.size() < max_lines) {
+    u8 chars_fit =
+        ts->GetCharCountInsideWidth(remaining.c_str(), style, (u8)max_width);
+    if (chars_fit == 0)
+      chars_fit = 1;
+
+    size_t bytes =
+        text_unicode_utils::Utf8BytesForDisplayChars(remaining.c_str(), chars_fit);
+    if (bytes > remaining.size())
+      bytes = remaining.size();
+
+    std::string line_text = remaining.substr(0, bytes);
+
+    if ((int)lines.size() == max_lines - 1 && bytes < remaining.size()) {
+      if (chars_fit > 4) {
+        size_t text_bytes = text_unicode_utils::Utf8BytesForDisplayChars(
+            remaining.c_str(), chars_fit - 3);
+        line_text = remaining.substr(0, text_bytes) + "...";
+      }
+    }
+
+    lines.push_back(line_text);
+    remaining = remaining.substr(bytes);
+  }
+
+  return lines;
 }
 
 static std::string ApplyLevelPrefix(const std::string &label, u8 level) {
@@ -484,7 +517,18 @@ void ChapterMenu::BuildEntries(std::vector<std::string> &labels,
   approx_page_cache.reserve(chapters.size());
 
   for (const auto &ch : chapters) {
-    std::string label = BuildTwoLineLabelIfNeeded(ch.title);
+    int prefix_chars = (ch.level > 0) ? (ch.level * 2 + 2) : 0;
+    int text_width = 200 - prefix_chars * 6;
+    if (text_width < 60)
+      text_width = 60;
+    std::vector<std::string> lines =
+        WrapTextToLines(app->ts.get(), ch.title, text_width, 3);
+    std::string label;
+    for (size_t i = 0; i < lines.size(); i++) {
+      if (i > 0)
+        label += '\n';
+      label += lines[i];
+    }
     labels.push_back(ApplyLevelPrefix(label, ch.level));
     pages.push_back(ch.page);
     entry_titles.push_back(ch.title);
