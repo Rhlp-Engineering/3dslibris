@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/RigleGit/3dslibris?label=release)](https://github.com/RigleGit/3dslibris/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/RigleGit/3dslibris/ci.yml?branch=main&label=ci)](https://github.com/RigleGit/3dslibris/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-rigle-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/rigle)
-[![Get on Universal-Updater](https://db.universal-team.net/assets/images/badges/universal-updater.png)](https://db.universal-team.net/3ds/3dslibris)
+[![Universal-Updater](https://img.shields.io/badge/Universal--Updater-available-blue)](https://db.universal-team.net/3ds/3dslibris)
 
 Nintendo 3DS homebrew ebook reader based on the original Nintendo DS project `dslibris`.
 
