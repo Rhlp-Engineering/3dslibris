@@ -43,7 +43,7 @@ int main() {
       {"ForceSynchronousBookOpen",  debug_runtime::ForceSynchronousBookOpen(),  true},
       {"ForceSynchronousCbzDecode", debug_runtime::ForceSynchronousCbzDecode(), true},
       {"ForceSynchronousMuPdfRender", debug_runtime::ForceSynchronousMuPdfRender(), true},
-      {"ForceSynchronousMobiFinalize", debug_runtime::ForceSynchronousMobiFinalize(), false},
+      {"ForceSynchronousMobiFinalize", debug_runtime::ForceSynchronousMobiFinalize(), true},
   };
   CheckFlags(flags, 6);
   return 0;
