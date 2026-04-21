@@ -29,6 +29,7 @@ void LogResolvedChapterSamples(IStatusReporter *reporter, const char *stage,
                                size_t max_entries = 5);
 void LogTocResolveDecision(IStatusReporter *reporter, size_t index,
                            const toc_entry_t &src,
+                           const std::string &display_title,
                            const std::string &normalized_title,
                            const char *method, bool have_page, u16 page,
                            const char *note = NULL);

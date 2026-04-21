@@ -28,12 +28,59 @@
 #include "settings/prefs.h"
 #include "shared/bugfix_utils.h"
 #include "shared/string_utils.h"
+#include "shared/text_unicode_utils.h"
 #include "ui/text.h"
 #include "ui/touch_utils.h"
 
 namespace {
 
 static const u8 kTargetsPerPage = 5;
+
+static std::string TrimLabel(const std::string &in) {
+  size_t start = 0;
+  while (start < in.size() && isspace((unsigned char)in[start]))
+    start++;
+  size_t end = in.size();
+  while (end > start && isspace((unsigned char)in[end - 1]))
+    end--;
+  return in.substr(start, end - start);
+}
+
+static std::vector<std::string> WrapTextToLines(Text *ts,
+                                                const std::string &text,
+                                                int max_width,
+                                                int max_lines) {
+  std::vector<std::string> lines;
+  std::string remaining = TrimLabel(text);
+  const int style = TEXT_STYLE_BROWSER;
+
+  while (!remaining.empty() && (int)lines.size() < max_lines) {
+    u8 chars_fit =
+        ts->GetCharCountInsideWidth(remaining.c_str(), style, (u8)max_width);
+    if (chars_fit == 0)
+      chars_fit = 1;
+
+    size_t bytes =
+        text_unicode_utils::Utf8BytesForDisplayChars(remaining.c_str(), chars_fit);
+    if (bytes > remaining.size())
+      bytes = remaining.size();
+
+    std::string line_text = remaining.substr(0, bytes);
+
+    if ((int)lines.size() == max_lines - 1 && bytes < remaining.size()) {
+      if (chars_fit > 4) {
+        size_t text_bytes = text_unicode_utils::Utf8BytesForDisplayChars(
+            remaining.c_str(), chars_fit - 3);
+        line_text = remaining.substr(0, text_bytes) + "...";
+      }
+    }
+
+    lines.push_back(line_text);
+    remaining = remaining.substr(bytes);
+  }
+
+  return lines;
+}
 
 static std::string BasenameOnly(const std::string &path) {
   size_t slash = path.find_last_of("/\\");
@@ -97,9 +144,19 @@ FontMenu::FontMenu(App *_app)
   for (auto &filename : files) {
     Button *b = new Button(app->ts.get());
     b->Init();
-    b->Move(5, 24 + (buttons.size() % pagesize) * 36);
-    b->Resize(230, 34);
-    b->SetLabel1(std::string(filename));
+    b->Move(5, 24);
+
+    std::vector<std::string> lines = WrapTextToLines(
+        app->ts.get(), filename, 220, 2);
+    if (lines.size() > 0) b->SetLabel1(lines[0]);
+    if (lines.size() > 1) b->SetLabel2(lines[1]);
+
+    int line_height = app->ts->GetHeight();
+    int button_height = 34;
+    if (lines.size() == 2)
+      button_height = 8 + 2 * line_height;
+    b->Resize(230, button_height);
+
     buttons.push_back(b);
   }
 
@@ -199,6 +256,18 @@ void FontMenu::enterTargetView(u8 requested_target) {
   dirty = true;
 }
 
+void FontMenu::LayoutFileButtons() {
+  int y = 24;
+  u8 start = page * pagesize;
+  u8 end = (page + 1) * pagesize;
+  if (end > buttons.size())
+    end = buttons.size();
+  for (u8 i = start; i < end; i++) {
+    buttons[i]->Move(5, y);
+    y += buttons[i]->GetHeight() + 2;
+  }
+}
+
 void FontMenu::enterFileView() {
   viewState = VIEW_FILES;
   selected = 0;
@@ -222,6 +291,7 @@ void FontMenu::enterFileView() {
   }
 
   page = selected / pagesize;
+  LayoutFileButtons();
   dirty = true;
 }
 
@@ -459,6 +529,7 @@ void FontMenu::draw() {
            font_config_utils::GetFontTargetLabel(targetSelected));
   app->ts->PrintString(header);
 
+  LayoutFileButtons();
   for (u8 i = page * pagesize;
        (i < buttons.size()) && (i < (page + 1) * pagesize); i++) {
     buttons[i]->Draw(i == selected);

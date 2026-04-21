@@ -325,7 +325,8 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
                cache_path.c_str());
     }
 #endif
-    if (debug_runtime::BackgroundWorkersDisabled() && !book_path.empty() &&
+    if (debug_runtime::BackgroundWorkersDisabled() &&
+        debug_runtime::BrowserWarmupDisabled() && !book_path.empty() &&
         !book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
       int src_rc = -1;
       if (book->format == FORMAT_EPUB) {
@@ -1107,6 +1108,17 @@ void LibraryController::browser_handleevent() {
     browser_nextpage();
   }
 
+  else if (keys & KEY_X) {
+    int mode = app_.ts->GetColorMode();
+    int next = (mode + 1) % 6;
+    app_.colorMode = next;
+    app_.ts->SetColorMode(next);
+    UiButtonSkin_SetColorMode(next);
+    app_.ts->MarkAllScreensDirty();
+    g_marquee.Reset();
+    app_.SetBrowserDirty(true);
+  }
+
   else if (keys & (KEY_SELECT | KEY_Y)) {
     app_.ShowSettingsView(false);
   }
@@ -1272,10 +1284,8 @@ void LibraryController::browser_draw(void) {
   int savedPixelSize = app_.ts->pixelsize;
 
   app_.ts->SetScreen(app_.ts->screenleft);
-  app_.ts->SetColorMode(0);
   app_.ts->SetStyle(TEXT_STYLE_BROWSER);
   app_.ts->PrintSplash(app_.ts->screenleft);
-  app_.ts->SetPixelSize(8);
   {
     char versionMsg[16];
     snprintf(versionMsg, sizeof(versionMsg), "v%s", VERSION);
@@ -1284,12 +1294,12 @@ void LibraryController::browser_draw(void) {
     int versionX = (240 - versionWidth) / 2;
     if (versionX < 0)
       versionX = 0;
-    app_.ts->SetPen(versionX, 397);
-    app_.ts->PrintString(versionMsg);
+    app_.ts->SetPixelSize(10);
+  app_.ts->SetPen(versionX, 57);
+  app_.ts->PrintString(versionMsg);
   }
 
   app_.ts->SetScreen(app_.ts->screenright);
-  app_.ts->SetColorMode(0);
   app_.ts->ClearScreen();
   app_.DrawBottomGradientBackground();
 

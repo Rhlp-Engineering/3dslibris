@@ -13,7 +13,7 @@
 BrowserGridMarqueeState::BrowserGridMarqueeState()
     : book(NULL), strip(NULL), bg_strip(NULL), strip_w(0), strip_h(0),
       strip_x(0), strip_y(0), blit_w(0), scroll_offset(0), scroll_timer(0),
-      end_timer(0), active(false) {}
+      end_timer(0), color_mode(-1), bg_color(0xFFFF), active(false) {}
 
 void BrowserGridMarqueeState::Reset() {
   delete[] strip;
@@ -24,6 +24,8 @@ void BrowserGridMarqueeState::Reset() {
   display_name.clear();
   strip_w = strip_h = strip_x = strip_y = blit_w = 0;
   scroll_offset = scroll_timer = end_timer = 0;
+  color_mode = -1;
+  bg_color = 0xFFFF;
   active = false;
 }
 
@@ -99,7 +101,9 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
           const int sw = full_w;
           const int fb_stride = app.ts->display.height;
 
-          if (marquee.book != book_i || marquee.display_name != display_name) {
+          int current_color_mode = app.ts->GetColorMode();
+          if (marquee.book != book_i || marquee.display_name != display_name ||
+              marquee.color_mode != current_color_mode) {
             const int vis_w = (btnX + kCellW <= app.ts->display.width)
                                   ? kCellW
                                   : app.ts->display.width - btnX;
@@ -137,9 +141,24 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
             int saved_mr = app.ts->margin.right;
             int saved_ml = app.ts->margin.left;
             const int off_fb_stride = app.ts->display.height;
-            for (int r = 0; r < sh; r++)
-              for (int c = 0; c < capture_w; c++)
-                app.ts->offscreen[(title_y + r) * off_fb_stride + c] = 0xFFFF;
+            u32 r_acc = 0, g_acc = 0, b_acc = 0;
+            int bg_pixels = vis_w * sh;
+            for (int i = 0; i < bg_pixels; i++) {
+              u16 c = marquee.bg_strip[i];
+              r_acc += ((c >> 11) & 0x1F) << 3 | ((c >> 11) & 0x1F) >> 2;
+              g_acc += ((c >> 5) & 0x3F) << 2 | ((c >> 5) & 0x3F) >> 4;
+              b_acc += (c & 0x1F) << 3 | (c & 0x1F) >> 2;
+            }
+            marquee.bg_color = (u16)(((r_acc / bg_pixels) >> 3 << 11) |
+                                     ((g_acc / bg_pixels) >> 2 << 5) |
+                                     ((b_acc / bg_pixels) >> 3));
+
+            for (int r = 0; r < sh; r++) {
+              for (int c = 0; c < capture_w; c++) {
+                app.ts->offscreen[(title_y + r) * off_fb_stride + c] =
+                    marquee.bg_color;
+              }
+            }
 
             app.ts->SetScreen(app.ts->offscreen);
             app.ts->margin.left = 0;
@@ -158,6 +177,7 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
             }
             marquee.scroll_offset = 0;
             marquee.scroll_timer = 0;
+            marquee.color_mode = current_color_mode;
             marquee.active = true;
           }
         } else if (is_selected && !overflows) {
@@ -232,7 +252,7 @@ void TickMarquee(App &app, BrowserGridMarqueeState &marquee) {
     memcpy(dst, marquee.bg_strip + row * bw, bw * sizeof(unsigned short));
     const unsigned short *src = marquee.strip + row * sw + off;
     for (int col = 0; col < blit_w; col++) {
-      if (src[col] != 0xFFFF)
+      if (src[col] != marquee.bg_color)
         dst[col] = src[col];
     }
   }

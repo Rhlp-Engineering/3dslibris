@@ -47,6 +47,7 @@ private:
     void handleFileInput(u32 keys);
     void handleTargetTouchInput();
     void handleButtonPress();
+    void LayoutFileButtons();
     void handleFileTouchInput();
     void nextTargetPage();
     void previousTargetPage();

@@ -38,5 +38,50 @@
       <navLabel><text>Capítulo 3</text></navLabel>
       <content src="text/chapter-03-cosmetic-pagebreak.xhtml#capitulo-3"/>
     </navPoint>
+
+    <navPoint id="nav-6" playOrder="6">
+      <navLabel><text>Capítulo 4 ....... 42</text></navLabel>
+      <content src="text/chapter-04-dotted.xhtml#capitulo-4"/>
+    </navPoint>
+
+    <navPoint id="nav-7" playOrder="7">
+      <navLabel><text>Appendix A.</text></navLabel>
+      <content src="text/chapter-05-punctuation.xhtml#appendix-a"/>
+    </navPoint>
+
+    <navPoint id="nav-8" playOrder="8">
+      <navLabel><text>Sección A</text></navLabel>
+      <content src="text/chapter-06-multi.xhtml#seccion-a"/>
+    </navPoint>
+
+    <navPoint id="nav-9" playOrder="9">
+      <navLabel><text>Sección B</text></navLabel>
+      <content src="text/chapter-06-multi.xhtml#seccion-b"/>
+    </navPoint>
+
+    <navPoint id="nav-10" playOrder="10">
+      <navLabel><text>Parte 2</text></navLabel>
+      <content src="text/chapter-07-numeric.xhtml#parte-2"/>
+    </navPoint>
+
+    <navPoint id="nav-11" playOrder="11">
+      <navLabel><text>Índice proxy: Parte 2</text></navLabel>
+      <content src="text/indice-numerico.xhtml#1"/>
+    </navPoint>
+
+    <navPoint id="nav-12" playOrder="12">
+      <navLabel><text>Índice proxy: Título largo</text></navLabel>
+      <content src="text/indice-numerico.xhtml#2"/>
+    </navPoint>
+
+    <navPoint id="nav-13" playOrder="13">
+      <navLabel><text>Título muy largo para probar la truncatura de más de ciento veinte caracteres en el sistema de índice y ver que el texto original se preserve en la visualización</text></navLabel>
+      <content src="text/chapter-08-long.xhtml#inicio"/>
+    </navPoint>
+
+    <navPoint id="nav-14" playOrder="14">
+      <navLabel><text>¿Quién es usted, señor? — Introducción</text></navLabel>
+      <content src="text/chapter-09-special.xhtml#introduccion"/>
+    </navPoint>
   </navMap>
 </ncx>

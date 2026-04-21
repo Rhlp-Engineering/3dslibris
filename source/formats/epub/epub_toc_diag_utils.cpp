@@ -204,6 +204,7 @@ void LogResolvedChapterSamples(IStatusReporter *reporter, const char *stage,
 
 void LogTocResolveDecision(IStatusReporter *reporter, size_t index,
                            const toc_entry_t &src,
+                           const std::string &display_title,
                            const std::string &normalized_title,
                            const char *method, bool have_page, u16 page,
                            const char *note) {
@@ -212,13 +213,14 @@ void LogTocResolveDecision(IStatusReporter *reporter, size_t index,
 
   std::string href_clip = ClipForDiag(src.href, 56);
   std::string raw_clip = ClipForDiag(Trim(src.title), 56);
+  std::string display_clip = ClipForDiag(display_title, 56);
   std::string norm_clip = ClipForDiag(normalized_title, 56);
-  char msg[384];
+  char msg[512];
   snprintf(msg, sizeof(msg),
-           "EPUB: TOC map[%u] lvl=%d method=%s page=%u href=%s raw=%s norm=%s%s",
+           "EPUB: TOC map[%u] lvl=%d method=%s page=%u href=%s raw=%s display=%s norm=%s%s",
            (unsigned)index, src.level, method, have_page ? (unsigned)page : 0u,
-           href_clip.c_str(), raw_clip.c_str(), norm_clip.c_str(),
-           note ? note : "");
+           href_clip.c_str(), raw_clip.c_str(), display_clip.c_str(),
+           norm_clip.c_str(), note ? note : "");
   DBG_LOG(reporter, msg);
 }
 

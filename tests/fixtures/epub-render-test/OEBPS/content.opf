@@ -17,6 +17,13 @@
     <item id="ch1" href="text/chapter-01.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch2" href="text/chapter-02-hidden.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch3" href="text/chapter-03-cosmetic-pagebreak.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch4" href="text/chapter-04-dotted.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch5" href="text/chapter-05-punctuation.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch6" href="text/chapter-06-multi.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch7" href="text/chapter-07-numeric.xhtml" media-type="application/xhtml+xml"/>
+    <item id="idx" href="text/indice-numerico.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch8" href="text/chapter-08-long.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch9" href="text/chapter-09-special.xhtml" media-type="application/xhtml+xml"/>
     <item id="img1" href="images/test-card.svg" media-type="image/svg+xml"/>
   </manifest>
 
@@ -26,6 +33,13 @@
     <itemref idref="ch1"/>
     <itemref idref="ch2"/>
     <itemref idref="ch3"/>
+    <itemref idref="ch4"/>
+    <itemref idref="ch5"/>
+    <itemref idref="ch6"/>
+    <itemref idref="ch7"/>
+    <itemref idref="idx"/>
+    <itemref idref="ch8"/>
+    <itemref idref="ch9"/>
   </spine>
 
   <guide>
