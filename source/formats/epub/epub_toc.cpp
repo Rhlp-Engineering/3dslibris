@@ -112,7 +112,7 @@ void ResolveEpubTocFromPackageData(
       if (entry.title.empty()) {
         empty_title_count++;
         if (reporter && empty_title_count <= 3) {
-          LogTocResolveDecision(reporter, i, toc_entries[i], "",
+          LogTocResolveDecision(reporter, i, toc_entries[i], entry.title, "",
                                 "skip-empty-title",
                                 true, entry.page, " raw-empty");
         }
@@ -277,12 +277,13 @@ int epub_resolve_toc(Book *book, std::string filepath) {
     std::string resolve_method = "skip-empty-raw";
     if (raw_title.empty()) {
       if (app && resolve_problem_logs < kResolveProblemDiagLimit) {
-        LogTocResolveDecision(app, i, toc_entries[i], "", resolve_method.c_str(),
-                              false, 0, " raw-empty");
+        LogTocResolveDecision(app, i, toc_entries[i], "", "",
+                              resolve_method.c_str(), false, 0, " raw-empty");
         resolve_problem_logs++;
       }
       continue;
     }
+    std::string display_title = raw_title;
     std::string title_match = NormalizeTocTitle(raw_title);
     if (title_match.empty()) {
       title_match = raw_title;
@@ -516,7 +517,7 @@ int epub_resolve_toc(Book *book, std::string filepath) {
         stat_fragment_unresolved++;
       if (app && resolve_problem_logs < kResolveProblemDiagLimit) {
         const char *note = anchor_lookup_failed ? " anchor-miss" : "";
-        LogTocResolveDecision(app, i, toc_entries[i], title_match,
+        LogTocResolveDecision(app, i, toc_entries[i], display_title, title_match,
                               resolve_method.c_str(), false, 0, note);
         resolve_problem_logs++;
       }
@@ -525,7 +526,7 @@ int epub_resolve_toc(Book *book, std::string filepath) {
     if (!has_fragment && used_pages_non_fragment[page]) {
       stat_skip_dup++;
       if (app && resolve_problem_logs < kResolveProblemDiagLimit) {
-        LogTocResolveDecision(app, i, toc_entries[i], title_match,
+        LogTocResolveDecision(app, i, toc_entries[i], display_title, title_match,
                               "skip-dup-page", true, page, "");
         resolve_problem_logs++;
       }
@@ -536,11 +537,11 @@ int epub_resolve_toc(Book *book, std::string filepath) {
 
     ChapterEntry entry;
     entry.page = page;
-    entry.title = title;
+    entry.title = display_title;
     entry.level = toc_entries[i].level;
     resolved.push_back(entry);
     if (app && i < kResolveDecisionDiagLimit) {
-      LogTocResolveDecision(app, i, toc_entries[i], title_match,
+      LogTocResolveDecision(app, i, toc_entries[i], display_title, title_match,
                             resolve_method.c_str(), true, page,
                             page_from_doc_start ? " doc-start" : "");
     }
