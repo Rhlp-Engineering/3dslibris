@@ -88,7 +88,7 @@ namespace
   static std::string ResolveDefaultFontDir()
   {
     static const char *kSdmcFontDir = paths::kFontDir;
-    static const char *kRomfsFontDir = "romfs:/3ds/3dslibris/font"; // TODO: unify with paths::kDefaultFonts entries.
+    static const char *kRomfsFontDir = paths::kRomfsFontDir;
     if (FontDirLooksUsable(kSdmcFontDir))
       return std::string(kSdmcFontDir);
     if (FontDirLooksUsable(kRomfsFontDir))
