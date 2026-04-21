@@ -81,15 +81,16 @@ int main() {
              BROWSER_VIEW_LIST);
 
   browser_view_utils::ListRowPalette selected =
-      browser_view_utils::PaletteForListRow(true);
+      browser_view_utils::PaletteForListRow(true, 0);
   browser_view_utils::ListRowPalette normal =
-      browser_view_utils::PaletteForListRow(false);
+      browser_view_utils::PaletteForListRow(false, 0);
   ExpectNe("selected text contrasts selected bg", (unsigned)selected.text,
            (unsigned)selected.fill);
   ExpectNe("normal text contrasts normal bg", (unsigned)normal.text,
            (unsigned)normal.fill);
-  ExpectNe("selected and normal text differ", (unsigned)selected.text,
-           (unsigned)normal.text);
+  // Selection is indicated by fill color change, not text color.
+  ExpectNe("selected and normal fill differ", (unsigned)selected.fill,
+           (unsigned)normal.fill);
 
   return 0;
 }

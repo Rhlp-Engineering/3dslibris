@@ -7,7 +7,12 @@
 #ifndef COLOR_UTILS_H
 #define COLOR_UTILS_H
 
-#include "3ds.h" // for u16
+#ifdef __3DS__
+#include "3ds.h"
+#else
+#include <stdint.h>
+typedef uint16_t u16;
+#endif
 
 // Convert floating-point R/G/B (0–255 range) to packed RGB565.
 // Values are clamped to [0, 255].

@@ -1,6 +1,11 @@
 #pragma once
 
+#ifdef __3DS__
 #include <3ds.h>
+#else
+#include <stdint.h>
+typedef uint16_t u16;
+#endif
 #include "color_utils.h"
 
 struct ThemePalette {
