@@ -139,8 +139,7 @@ u8 Book::OpenPrepared() {
 }
 
 bool Book::SupportsAsyncReflowOpen() const {
-  return reader::ShouldUseAsyncReflowOpen(UsesTextLayoutSettings(),
-                                          IsMobiFile());
+  return reader::ShouldUseAsyncReflowOpen(UsesTextLayoutSettings());
 }
 
 bool Book::StartAsyncReflowOpen(unsigned int session_id) {

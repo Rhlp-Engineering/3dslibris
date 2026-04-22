@@ -2,9 +2,8 @@
 
 namespace reader {
 
-bool ShouldUseAsyncReflowOpen(bool uses_text_layout_settings,
-                              bool is_mobi_file) {
-  return uses_text_layout_settings && !is_mobi_file;
+bool ShouldUseAsyncReflowOpen(bool uses_text_layout_settings) {
+  return uses_text_layout_settings;
 }
 
 } // namespace reader
