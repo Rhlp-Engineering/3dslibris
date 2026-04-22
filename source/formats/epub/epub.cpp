@@ -559,6 +559,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
              (unsigned)book->GetPageCount());
   }
 
+
   ResolveEpubTocFromPackageData(uf, book, parsedata, folder, page_start_by_href,
                                 reporter);
   if (open_cancel_poll::Poll(book, reporter, "epub-toc-finalize")) {
