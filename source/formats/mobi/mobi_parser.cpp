@@ -31,9 +31,9 @@ namespace {
 static const size_t kMobiMaxBytes = 64 * 1024 * 1024;
 static const u32 kMobiInitialOpenBudgetMs = 320;
 static const u16 kMobiInitialOpenPageBudget = 24;
-static const u32 kMobiSynchronousBudgetMs = 0;
+static const u32 kMobiSynchronousBudgetMs = 2000;
 static const u16 kMobiSynchronousPageBudget = 0;
-static const unsigned int kMobiSynchronousPassLimit = 32;
+static const unsigned int kMobiSynchronousPassLimit = 100;
 
 static bool ShouldAbortMobiOpen(Book *book) {
   return book &&
@@ -712,6 +712,12 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
 
   mobi_text_decode::ApplyEmbeddedTitle(book, raw, header);
 
+  {
+    const unsigned total_kb =
+        (header.text_len > 1024u) ? (unsigned)(header.text_len / 1024u) : 1u;
+    book->NotifySpineProgress(0u, total_kb);
+  }
+
   std::string merged;
   if (!mobi_parser_core::BuildMobiMergedText(raw, header, &merged)) {
     if (reporter)
@@ -783,6 +789,10 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
     return BOOK_ERR_CANCELLED;
 
   if (!pages_done_initial) {
+    const unsigned text_total_kb =
+        (deferred.text_utf8.size() > 1024u)
+            ? (unsigned)(deferred.text_utf8.size() / 1024u)
+            : 1u;
     unsigned int pass_count = 0;
     while (!deferred.stream.completed) {
       if (ShouldAbortMobiOpen(book)) {
@@ -804,8 +814,14 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
 #ifdef DSLIBRIS_DEBUG
       LogPlainTextStreamPerf(reporter, "PLAIN-MOBI sync", perf, done);
 #endif
-      if (done)
+      if (done) {
         deferred.t_after_pages = osGetTime();
+        book->NotifySpineProgress(text_total_kb, text_total_kb);
+      } else {
+        const unsigned cursor_kb =
+            (unsigned)(deferred.stream.cursor / 1024u);
+        book->NotifySpineProgress(cursor_kb, text_total_kb);
+      }
     }
     log_stage("sync-pages-done");
     MobiTocFinalizeResult toc_result;
