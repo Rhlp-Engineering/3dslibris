@@ -410,6 +410,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps,
                            unzFile css_scan_uf) {
   int rc = 0;
   parsedata_t pd;
+#ifdef DSLIBRIS_DEBUG
   bool log_content_layout = false;
   u64 t_content_begin = 0;
   u16 pages_before = 0;
@@ -417,6 +418,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps,
   u64 chardata_ms_before = 0;
   u32 overflow_before = 0;
   text_layout_utils::PerfStats layout_before;
+#endif
   xml_parse_utils::XmlParserOptions options;
   if (epd->type == PARSE_CONTAINER) {
     options.user_data = epd;
@@ -453,6 +455,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps,
     if (!epd->archive_path.empty())
       LoadCssClassMapForDoc(epd->archive_path, epd->docpath, deps.reporter,
                             epd, &pd.css_class_map, css_scan_uf);
+#ifdef DSLIBRIS_DEBUG
     log_content_layout = deps.reporter && epd->book;
     if (log_content_layout) {
       t_content_begin = osGetTime();
@@ -462,6 +465,7 @@ int epub_parse_currentfile(unzFile uf, epub_data_t *epd, const EpubDeps &deps,
       overflow_before = pd.perf_page_overflows;
       layout_before = text_layout_utils::GetPerfStats();
     }
+#endif
     options.user_data = &pd;
     options.abort_parse = [](void *user_data) {
       parsedata_t *parsedata = static_cast<parsedata_t *>(user_data);

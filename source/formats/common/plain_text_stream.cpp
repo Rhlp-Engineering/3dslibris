@@ -90,11 +90,13 @@ bool ContinueState(State *state, const std::string &text_utf8, u32 budget_ms,
     if (heuristic_headings) {
       // Construct temporary strings only for the heuristic heading path (TXT
       // format). For MOBI, detect_heuristic_headings is false so this is skipped.
-      const std::string curr_str(state->curr.data, state->curr.size);
-      const std::string next_str =
-          state->next.valid
-              ? std::string(state->next.data, state->next.size)
-              : std::string();
+      static std::string curr_str;
+      curr_str.assign(state->curr.data, state->curr.size);
+      static std::string next_str;
+      if (state->next.valid)
+        next_str.assign(state->next.data, state->next.size);
+      else
+        next_str.clear();
       curr_blank = callbacks.is_blank_line(curr_str);
       next_blank = !state->next.valid || callbacks.is_blank_line(next_str);
 
