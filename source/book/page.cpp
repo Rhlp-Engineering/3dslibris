@@ -231,7 +231,8 @@ void Page::Draw(Text *ts) {
   bool rtl_paragraph = false;
   u32 rtl_line_px = 0;  // parse-time line width stashed by TEXT_RTL_LINE_PX
   bool in_preformatted_block = false;
-  book_xml_css_style_utils::TextAlign paragraph_align = book_xml_css_style_utils::TextAlign::Left;  while (i < length) {
+  book_xml_css_style_utils::TextAlign paragraph_align = book_xml_css_style_utils::TextAlign::Left;
+  while (i < length) {
     u32 c = buf[i];
     if (c == TEXT_PARAGRAPH_RTL) {
       rtl_paragraph = true;

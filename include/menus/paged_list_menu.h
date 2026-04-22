@@ -37,7 +37,7 @@ protected:
   inline void SetHeaderTitle(const std::string &title) { header_title = title; }
   virtual void BuildEntries(std::vector<std::string> &labels,
                             std::vector<u16> &pages) = 0;
-  virtual bool ResolveTargetPage(u8 index, u16 *page_out);
+  virtual bool ResolveTargetPage(u16 index, u16 *page_out);
 
   u16 GetPageStart(u16 page_index) const;
   u16 GetPageSize(u16 page_index) const;

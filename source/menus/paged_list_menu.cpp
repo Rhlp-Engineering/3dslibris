@@ -421,7 +421,7 @@ void PagedListMenu::ActivateSelected() {
   app->RequestStatusRedraw();
 }
 
-bool PagedListMenu::ResolveTargetPage(u8 index, u16 *page_out) {
+bool PagedListMenu::ResolveTargetPage(u16 index, u16 *page_out) {
   if (!page_out)
     return false;
   if (index >= target_pages.size())
