@@ -130,6 +130,47 @@ std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
   return "";
 }
 
+// Reads an XHTML zip entry in 4KB chunks and returns the href of the first
+// <link rel="stylesheet"> found. Stops reading at </head> or after 8KB,
+// so only the head section is decompressed rather than the full document.
+std::string ScanXhtmlHeadForCssHref(unzFile uf, const std::string &xhtml_path,
+                                     IStatusReporter *reporter) {
+  DBG_LOGF(reporter, "EPUB: CSS-SCAN read begin %s", xhtml_path.c_str());
+  epub_zip_utils::ZipEntryIndex zip_index;
+  if (!epub_zip_utils::LocateSafe(uf, xhtml_path, &zip_index)) {
+    DBG_LOG(reporter, "EPUB: CSS-SCAN locate fail");
+    return "";
+  }
+  DBG_LOG(reporter, "EPUB: CSS-SCAN locate ok");
+
+  if (unzOpenCurrentFile(uf) != UNZ_OK)
+    return "";
+
+  static const size_t kChunkSize = 4096;
+  static const size_t kMaxScanBytes = 8192;
+  char chunk[kChunkSize];
+  std::string buf;
+  buf.reserve(kMaxScanBytes);
+  std::string href;
+
+  while (buf.size() < kMaxScanBytes) {
+    int n = unzReadCurrentFile(uf, chunk, (unsigned)kChunkSize);
+    if (n <= 0)
+      break;
+    buf.append(chunk, (size_t)n);
+    href = ExtractLinkStylesheetHref(buf);
+    if (!href.empty())
+      break;
+    if (buf.find("</head>") != std::string::npos ||
+        buf.find("</HEAD>") != std::string::npos)
+      break;
+  }
+
+  unzCloseCurrentFile(uf);
+  DBG_LOGF(reporter, "EPUB: CSS-SCAN read ok bytes=%u", (unsigned)buf.size());
+  return href;
+}
+
 void LoadCssClassMapForDoc(const std::string &archive_path,
                            const std::string &xhtml_path,
                            IStatusReporter *reporter,
@@ -162,15 +203,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   if (!scan_uf)
     return;
 
-  std::string xhtml_text;
-  epub_zip_utils::ZipEntryIndex zip_index;
-  bool ok = ReadZipEntryText(scan_uf, xhtml_path, xhtml_text, reporter, "CSS-SCAN", &zip_index);
-  if (!ok || xhtml_text.empty()) {
-    if (owns_scan_uf) unzClose(scan_uf);
-    return;
-  }
-
-  std::string css_href = ExtractLinkStylesheetHref(xhtml_text);
+  std::string css_href = ScanXhtmlHeadForCssHref(scan_uf, xhtml_path, reporter);
   if (css_href.empty()) {
     if (epd)
       epd->css_href_by_doc[xhtml_path] = "";
@@ -197,7 +230,7 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
 
   std::string css_text;
   epub_zip_utils::ZipEntryIndex css_index;
-  ok = ReadZipEntryText(scan_uf, css_path, css_text, reporter, "CSS-LOAD", &css_index);
+  bool ok = ReadZipEntryText(scan_uf, css_path, css_text, reporter, "CSS-LOAD", &css_index);
   if (owns_scan_uf) unzClose(scan_uf);
   if (!ok || css_text.empty())
     return;
