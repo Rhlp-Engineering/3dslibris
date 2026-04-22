@@ -100,7 +100,7 @@ std::string Text::GetFontName(u8 style) { return fm->GetFontName(style); }
 
 bool Text::GetFontName(std::string &s) { return fm->GetFontName(s); }
 
-u8 Text::GetHeight() { return fm->GetHeight(); }
+u8 Text::GetHeight() { return fm ? fm->GetHeight() : PIXELSIZE; }
 
 void Text::GetPen(u16 *x, u16 *y) { tr->GetPen(x, y); }
 
@@ -315,7 +315,7 @@ FT_Error Text::GetGlyphBitmap(u32 ucs, FTC_SBit *asbit, FTC_Node *anode) {
 
 FT_UInt Text::GetGlyphIndex(u32 ucs) { return fm->GetGlyphIndex(ucs); }
 
-u8 Text::GetAdvance(u32 ucs, FT_Face face) { return fm->GetAdvance(ucs, face); }
+u8 Text::GetAdvance(u32 ucs, FT_Face face) { return fm ? fm->GetAdvance(ucs, face) : 0; }
 
 u8 Text::GetStringWidth(const char *txt, FT_Face face) {
   return fm->GetStringWidth(txt, face);
