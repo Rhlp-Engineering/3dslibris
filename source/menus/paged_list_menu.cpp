@@ -498,6 +498,8 @@ void PagedListMenu::Back() {
 }
 
 void PagedListMenu::HandleTouchInput() {
+  if (buttons.empty())
+    return;
   LayoutFooterButtons();
   TouchCandidates candidates;
   touch::BuildCandidates(app, &candidates);
