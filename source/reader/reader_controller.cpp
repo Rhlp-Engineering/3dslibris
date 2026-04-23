@@ -16,6 +16,10 @@ u8 App::OpenBook() { return reader_controller_->OpenBook(); }
 
 void App::ToggleBookmark() { reader_controller_->ToggleBookmark(); }
 
+void App::OnReaderAppletSuspendRequested() {
+  reader_controller_->OnAppletSuspendRequested();
+}
+
 void App::OnReaderAppletSuspended() { reader_controller_->OnAppletSuspended(); }
 
 void App::OnReaderAppletResumed() { reader_controller_->OnAppletResumed(); }

@@ -187,12 +187,15 @@ public:
   void MarkPrefsDirty();
   bool IsPrefsDirty() const;
   bool IsBrowserDirty() const;
+  bool ShouldSkipNextBrowserPresent() const;
+  void ClearSkipNextBrowserPresent();
   void ProcessJobs(u32 budget_ms);
   void browser_draw();
   void browser_handleevent();
   void browser_init();
   void TickBrowserWarmup();
   void browser_tick_marquee();
+  void ResetBrowserMarquee();
   void PrefsDraw();
   void PrefsHandleEvent();
   void PersistPrefs();
@@ -379,6 +382,7 @@ private:
   unsigned int status_log_write_count_;
   LightLock status_log_lock_;
   bool pending_boot_reopen_;
+  bool skip_next_browser_present_;
   bool is_new_3ds_;
   bool is_homebrew_;
   bool applet_suspended_;
@@ -390,6 +394,7 @@ private:
   void InitScreens();
   static void AptHookCallback(APT_HookType hook, void *param);
   void HandleAppletHook(APT_HookType hook);
+  void OnReaderAppletSuspendRequested();
   void OnReaderAppletSuspended();
   void OnReaderAppletResumed();
 

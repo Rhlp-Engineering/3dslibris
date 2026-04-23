@@ -263,6 +263,8 @@ void App::TickBrowserWarmup() { library_controller_->TickBrowserWarmup(); }
 
 void App::browser_tick_marquee() { library_controller_->browser_tick_marquee(); }
 
+void App::ResetBrowserMarquee() { library_controller_->ResetBrowserMarquee(); }
+
 void App::QueueBookWarmup(Book *book) { library_controller_->QueueBookWarmup(book); }
 
 void App::QueueTocResolve(Book *book) { library_controller_->QueueTocResolve(book); }

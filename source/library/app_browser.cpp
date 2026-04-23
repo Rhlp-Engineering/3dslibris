@@ -545,10 +545,6 @@ void LibraryController::LoadVisibleBrowserCoverCaches() {
     if (TryLoadCoverCache(book, path)) {
       book->coverAttempts = kCoverMaxAttempts;
       book->coverRetryAfterMs = 0;
-      if (book->format == FORMAT_EPUB) {
-        book->metadataIndexTried = true;
-        book->metadataIndexed = true;
-      }
     }
   }
 }
@@ -558,6 +554,8 @@ namespace {
 static BrowserGridMarqueeState g_marquee;
 
 } // namespace
+
+void LibraryController::ResetBrowserMarquee() { g_marquee.Reset(); }
 
 bool LibraryController::HasQueuedJob(app_job_type_t type, Book *book) const {
   for (const auto &job : job_queue_) {
@@ -816,17 +814,28 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           app_flow_utils::SupportsMetadataIndexing(
               app_flow_utils::DetectBookFormat(book->GetFileName()))) {
         rc = book->Index();
-        if (rc == 0)
+        if (rc == 0) {
           book->ClearBrowserDisplayNameCache();
-        app_.SetBrowserDirty(true);
+          if (book == app_.GetSelectedBook())
+            ResetBrowserMarquee();
+        }
+        const bool cover_followup_pending =
+            app_.GetMode() == AppMode::Browser &&
+            ShouldCurrentBrowserLoadCovers(app_) &&
+            SupportsBrowserCoverWarmup(book->format, book->GetFileName()) &&
+            !book->coverPixels &&
+            book->coverAttempts < kCoverMaxAttempts;
+        if (!cover_followup_pending)
+          app_.SetBrowserDirty(true);
       }
     } else if (job.type == APP_JOB_EXTRACT_COVER) {
       if (!book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
         std::string path = BuildBookPath(book);
+        const bool had_cover_pixels = (book->coverPixels != nullptr);
+        const uint8_t cover_attempts_before = book->coverAttempts;
         if (path.empty()) {
           rc = 1;
           book->coverAttempts = kCoverMaxAttempts; // path failure is permanent
-          app_.SetBrowserDirty(true);
         } else {
 #ifdef DSLIBRIS_DEBUG
         DBG_LOGF(&app_, "COVER: extract start book=%s format=%d attempt=%u",
@@ -871,7 +880,6 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             } else {
               book->coverAttempts = kCoverMaxAttempts;
             }
-            app_.SetBrowserDirty(true);
           }
         } else if (book->format == FORMAT_XHTML &&
                    HasExtCI(book->GetFileName(), ".fb2")) {
@@ -886,7 +894,6 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           } else {
             book->coverAttempts = kCoverMaxAttempts;
           }
-          app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_XHTML &&
                    HasExtCI(book->GetFileName(), ".mobi")) {
           rc = mobi_extract_cover(book, path);
@@ -900,7 +907,6 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           } else {
             book->coverAttempts = kCoverMaxAttempts;
           }
-          app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_PDF) {
           rc = pdf_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
@@ -913,7 +919,6 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           } else {
             book->coverAttempts = kCoverMaxAttempts;
           }
-          app_.SetBrowserDirty(true);
         } else if (book->format == FORMAT_CBZ) {
           rc = cbz_extract_cover(book, path);
           if (rc == 0 && book->coverPixels) {
@@ -926,8 +931,14 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           } else {
             book->coverAttempts = kCoverMaxAttempts;
           }
-          app_.SetBrowserDirty(true);
         }
+        const bool has_cover_pixels = (book->coverPixels != nullptr);
+        const bool cover_visual_changed =
+            (has_cover_pixels != had_cover_pixels) ||
+            (!has_cover_pixels && cover_attempts_before < kCoverMaxAttempts &&
+             book->coverAttempts >= kCoverMaxAttempts);
+        if (cover_visual_changed)
+          app_.SetBrowserDirty(true);
         const u64 retry_delay_ms = browser_warmup_utils::CoverRetryDelayMs(
             app_.IsNew3dsDevice(), is_selected_book, rc,
             book->coverPixels != nullptr);
@@ -1004,6 +1015,9 @@ size_t LibraryController::PauseBrowserJobs() {
 }
 
 void LibraryController::browser_handleevent() {
+  if (app_.ShouldAbortWork())
+    return;
+
   // Re-apply browser layout in case another view reused/moved shared buttons.
   LayoutBrowserNavButtons(&app_);
 

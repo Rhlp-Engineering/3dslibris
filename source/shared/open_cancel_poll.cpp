@@ -17,42 +17,20 @@ static const u32 kOpenPollIntervalMs = 48;
 void Reset() { g_last_poll_ms = 0; }
 
 bool Poll(Book *book, IStatusReporter *reporter, const char *stage) {
+  (void)stage;
   if (!book)
     return reporter && reporter->ShouldAbortWork();
   if ((reporter && reporter->ShouldAbortWork()) || book->IsOpenAbortRequested())
     return true;
 
+  // This helper may run inside long-lived parser/layout code and, in newer
+  // branches, on worker threads. Keep it side-effect free and rely on
+  // ShouldAbortWork()/RequestAbortOpen() to propagate suspend or cancel.
   const u64 now = osGetTime();
   if (g_last_poll_ms != 0 && now >= g_last_poll_ms &&
       (now - g_last_poll_ms) < kOpenPollIntervalMs)
     return false;
   g_last_poll_ms = now;
-
-  gspWaitForVBlank();
-  if (!aptMainLoop()) {
-    book->RequestAbortOpen();
-#ifdef DSLIBRIS_DEBUG
-    if (reporter)
-      DBG_LOGF(reporter, "BOOK open poll: applet-exit stage=%s",
-               stage ? stage : "");
-#endif
-    return true;
-  }
-
-  hidScanInput();
-  const u32 keys = hidKeysDown();
-  if (keys & (KEY_B | KEY_START | KEY_SELECT)) {
-    book->RequestAbortOpen();
-    if (reporter)
-      reporter->PrintStatus("cancelling open ...");
-#ifdef DSLIBRIS_DEBUG
-    if (reporter) {
-      DBG_LOGF(reporter, "BOOK open poll: cancel keys=0x%08lx stage=%s",
-               (unsigned long)keys, stage ? stage : "");
-    }
-#endif
-    return true;
-  }
 
   return (reporter && reporter->ShouldAbortWork()) ||
          book->IsOpenAbortRequested();

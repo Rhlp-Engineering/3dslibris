@@ -24,6 +24,7 @@ public:
   void EnqueueJob(app_job_type_t type, Book *book);
   void TickBrowserWarmup();
   void browser_tick_marquee();
+  void ResetBrowserMarquee();
   void QueueBookWarmup(Book *book);
   void QueueTocResolve(Book *book);
   void ProcessJobs(u32 budget_ms);

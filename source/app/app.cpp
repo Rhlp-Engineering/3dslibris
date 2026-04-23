@@ -51,6 +51,7 @@
 
 namespace
 {
+  static const u64 kBrowserReturnWarmupCooldownMs = 1200;
 } // end anonymous namespace
 #include "color_utils.h"
 #include "ui/theme_colors.h"
@@ -160,6 +161,7 @@ App::App()
 
   // Initialize 3DS-specific state and hooks.
   pending_boot_reopen_ = false;
+  skip_next_browser_present_ = false;
   is_new_3ds_ = false;
   is_homebrew_ = false;
   applet_suspended_ = false;
@@ -340,6 +342,12 @@ bool App::IsPrefsDirty() const { return nav_.prefs.view_dirty; }
 
 bool App::IsBrowserDirty() const { return nav_.browser.view_dirty; }
 
+bool App::ShouldSkipNextBrowserPresent() const {
+  return skip_next_browser_present_;
+}
+
+void App::ClearSkipNextBrowserPresent() { skip_next_browser_present_ = false; }
+
 void App::PersistPrefs() { prefs->Write(); }
 
 void App::RunFontMenuFrame(u32 keys)
@@ -474,35 +482,11 @@ bool App::PresentIfDirty()
 {
   if (applet_suspended_)
     return false;
-#ifdef DSLIBRIS_DEBUG
-  const bool right_dirty = ts->screenright_dirty;
-  const bool left_dirty = ts->screenleft_dirty;
   const bool had_dirty = ts->HasDirtyScreens();
-#endif
   const bool wrote = ts->BlitToFramebuffer();
-#ifdef DSLIBRIS_DEBUG
-  // Present-cycle logs are too chatty while debugging pagination/layout.
-  // Raise this manually if the issue shifts to swap/present behavior.
-  static int s_present_budget = 0;
-  if (s_present_budget > 0 && (had_dirty || IsFontMode(nav_.mode) ||
-                               nav_.mode == AppMode::Chapters))
-  {
-    DBG_LOGF(this, "PRESENT mode=%d had_dirty=%d wrote=%d right_dirty=%d left_dirty=%d",
-             (int)nav_.mode, had_dirty ? 1 : 0, wrote ? 1 : 0,
-             right_dirty ? 1 : 0, left_dirty ? 1 : 0);
-    s_present_budget--;
-  }
-  static int s_present_miss_budget = 12;
-  if (s_present_miss_budget > 0 && had_dirty && !wrote &&
-      (nav_.mode == AppMode::Book || nav_.mode == AppMode::Opening ||
-       nav_.mode == AppMode::Chapters || nav_.mode == AppMode::Prefs))
-  {
-    DBG_LOGF(this,
-             "PRESENT dirty-but-no-copy mode=%d right_dirty=%d left_dirty=%d",
-             (int)nav_.mode, right_dirty ? 1 : 0, left_dirty ? 1 : 0);
-    s_present_miss_budget--;
-  }
-#endif
+  const bool browser_idle_copy = (nav_.mode == AppMode::Browser && !had_dirty && wrote);
+  if (browser_idle_copy)
+    return false;
   if (wrote)
   {
     gfxFlushBuffers();
@@ -729,6 +713,9 @@ void App::HandleAppletHook(APT_HookType hook)
     applet_suspended_ = true;
     applet_resume_pending_ = false;
     applet_suspend_handled_ = false;
+    nav_.browser.wait_input_release = true;
+    nav_.browser.last_interaction_ms = osGetTime();
+    OnReaderAppletSuspendRequested();
     break;
   case APTHOOK_ONRESTORE:
   case APTHOOK_ONWAKEUP:
@@ -948,11 +935,15 @@ void App::ShowLibraryView()
   buttonprefs.Resize(96, 22);
   buttonprefs.Label("settings");
 
+  ResetBrowserMarquee();
   nav_.mode = AppMode::Browser;
   ts->SetScreen(ts->screenright);
+  ts->MarkAllScreensDirty();
   nav_.browser.wait_input_release = true;
-  nav_.browser.last_interaction_ms = osGetTime();
+  nav_.browser.last_interaction_ms =
+      osGetTime() + kBrowserReturnWarmupCooldownMs;
   nav_.browser.view_dirty = true;
+  skip_next_browser_present_ = true;
   nav_.prefs.layout_notice_pending = false;
 }
 

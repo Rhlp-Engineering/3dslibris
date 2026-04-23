@@ -132,6 +132,7 @@ static void ToggleBrowserViewSetting(App *app) {
     app->SetBrowserPageStart(0);
   }
   app->prefs->Write();
+  app->ResetBrowserMarquee();
   app->MarkBrowserDirty();
   app->LoadVisibleBrowserCoverCaches();
 }

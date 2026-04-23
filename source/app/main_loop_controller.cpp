@@ -104,9 +104,10 @@ int MainLoopController::RunMainLoop()
                  (int)app_.GetMode());
         break;
       }
-      app_.browser_tick_marquee();
       if (app_.IsBrowserDirty())
         app_.browser_draw();
+      else
+        app_.browser_tick_marquee();
 #ifdef DSLIBRIS_DEBUG
       if (--heap_log_countdown <= 0)
       {
@@ -145,10 +146,19 @@ int MainLoopController::RunMainLoop()
       break;
     }
 
-    app_.PresentIfDirty();
+    if (app_.GetMode() == AppMode::Browser && app_.IsBrowserDirty())
+      app_.browser_draw();
+
+    if (app_.GetMode() == AppMode::Browser &&
+        app_.ShouldSkipNextBrowserPresent() && !app_.IsBrowserDirty() &&
+        !app_.ts->HasDirtyScreens())
+    {
+      app_.ClearSkipNextBrowserPresent();
+    }
+    else
+    {
+      app_.PresentIfDirty();
+    }
   }
-#ifdef DSLIBRIS_DEBUG
-  app_.PrintStatus("APP exit: aptMainLoop returned false");
-#endif
   return 0;
 }

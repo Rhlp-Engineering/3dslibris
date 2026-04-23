@@ -13,6 +13,7 @@ public:
   void HandleEventInOpening();
   unsigned char OpenBook();
   void ToggleBookmark();
+  void OnAppletSuspendRequested();
   void OnAppletSuspended();
   void OnAppletResumed();
 

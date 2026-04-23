@@ -353,6 +353,8 @@ void DrawOpeningSplash(App *app) {
   app->ts->SetColorMode(savedColorMode);
   app->ts->SetScreen(savedScreen);
 
+  if (app->ShouldAbortWork())
+    return;
   if (app->ts->BlitToFramebuffer()) {
     gfxFlushBuffers();
     gfxSwapBuffers();
@@ -432,7 +434,7 @@ void CloseFailedOpenBook(App *app, Book *book, unsigned int session_id,
 }
 
 void EnsureBookMode(App *app, const char *log_message) {
-  if (!app || app->GetMode() != AppMode::Browser)
+  if (!app || app->GetMode() != AppMode::Browser || app->ShouldAbortWork())
     return;
   if (app->orientation) {
     // lcdSwap(); // Not used on 3DS, keep for parity with original flow.
@@ -451,6 +453,22 @@ void ReaderController::ClearDeferredRelayoutState() {
   app_.SetDeferredRelayoutOldPosition(0);
   app_.MutableDeferredRelayoutOldBookmarks().clear();
   app_.SetDeferredRelayoutInitialPosition(0);
+}
+
+void ReaderController::OnAppletSuspendRequested() {
+  Book *bookcurrent_ = app_.GetCurrentBook();
+  Book *opening_book = app_.GetOpeningBook();
+  app_.SetPdfTouchDragActive(false);
+  app_.SetPdfTouchLastX(-1);
+  app_.SetPdfTouchLastY(-1);
+  app_.SetPdfDeferredReadyAtMs(0);
+  app_.SetMobiDeferredReadyAtMs(0);
+  if (bookcurrent_)
+    bookcurrent_->SetFixedLayoutViewportInteraction(false);
+  if (opening_book) {
+    opening_book->RequestAbortOpen();
+    opening_book->CancelDeferredMobiParse();
+  }
 }
 
 void ReaderController::OnAppletSuspended() {
@@ -538,6 +556,8 @@ bool ReaderController::MaybeFinalizeDeferredRelayout(Book *book, int page_count)
 void ReaderController::HandleEventInOpening() {
   Prefs *prefs = app_.prefs.get();
   Text *ts = app_.ts.get();
+  if (app_.ShouldAbortWork())
+    return;
   const u32 keys = hidKeysDown();
 
   if (keys & (app_.key.b | app_.key.start | app_.key.select)) {
@@ -695,6 +715,8 @@ void ReaderController::HandleEventInBook() {
   Book *bookcurrent_ = app_.GetCurrentBook();
   Prefs *prefs = app_.prefs.get();
   Text *ts = app_.ts.get();
+  if (app_.ShouldAbortWork() || !bookcurrent_)
+    return;
   decltype(App::key) &key = app_.key;
   auto touch_read = [&]() { return app_.TouchRead(); };
   auto request_status_redraw = [&]() { app_.RequestStatusRedraw(); };
@@ -808,8 +830,6 @@ void ReaderController::HandleEventInBook() {
         }
       }
     } else if (keys & KEY_START) {
-      ts->SetStyle(TEXT_STYLE_BROWSER);
-      ts->PrintSplash(ts->screenleft);
       show_library_view();
       prefs->Write();
     } else if (keys & KEY_SELECT) {
@@ -881,8 +901,6 @@ void ReaderController::HandleEventInBook() {
   } else if (keys & KEY_START) {
     // Return to browser without reparsing the current book later.
     // Keep one parsed book resident in memory for fast reopen.
-    ts->SetStyle(TEXT_STYLE_BROWSER);
-    ts->PrintSplash(ts->screenleft);
     show_library_view();
     prefs->Write();
   } else if (keys & KEY_SELECT) {
@@ -997,6 +1015,9 @@ u8 ReaderController::OpenBook() {
   Book *selected_book = app_.GetSelectedBook();
   Book *bookcurrent_ = app_.GetCurrentBook();
 
+  if (app_.ShouldAbortWork())
+    return BOOK_ERR_CANCELLED;
+
   //! Attempt to open book indicated by bookselected.
 
   if (!selected_book)
@@ -1049,6 +1070,11 @@ u8 ReaderController::OpenBook() {
 
   // While parsing a new book, avoid displaying stale browser highlight state.
   DrawOpeningSplash(&app_);
+  if (app_.ShouldAbortWork()) {
+    app_.SetMode(AppMode::Browser);
+    app_.SetBrowserDirty(true);
+    return BOOK_ERR_CANCELLED;
+  }
 
   if (selected_book->SupportsAsyncReflowOpen() &&
       !debug_runtime::ForceSynchronousBookOpen()) {
@@ -1087,6 +1113,14 @@ u8 ReaderController::OpenBook() {
     app_.SetMode(AppMode::Browser);
     app_.SetBrowserDirty(true);
     return err;
+  }
+  if (app_.ShouldAbortWork() || selected_book->IsOpenAbortRequested()) {
+    CloseFailedOpenBook(&app_, selected_book, session_id, "post-open-abort");
+    app_.SetCurrentBook(nullptr);
+    app_.SetCurrentBookSessionId(0);
+    app_.SetMode(AppMode::Browser);
+    app_.SetBrowserDirty(true);
+    return BOOK_ERR_CANCELLED;
   }
   app_.SetCurrentBook(selected_book);
   app_.SetCurrentBookSessionId(session_id);
@@ -1131,6 +1165,14 @@ u8 ReaderController::OpenBook() {
   }
 
   EnsureBookMode(&app_, "OpenBook: switched mode to APP_MODE_BOOK");
+  if (app_.ShouldAbortWork()) {
+    CloseFailedOpenBook(&app_, bookcurrent_, session_id, "post-mode-abort");
+    app_.SetCurrentBook(nullptr);
+    app_.SetCurrentBookSessionId(0);
+    app_.SetMode(AppMode::Browser);
+    app_.SetBrowserDirty(true);
+    return BOOK_ERR_CANCELLED;
+  }
 
   if (bookcurrent_->GetPosition() >= pageCount)
     bookcurrent_->SetPosition(0);
