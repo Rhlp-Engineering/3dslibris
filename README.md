@@ -51,7 +51,7 @@ Important:
 - The `.cia` bundles the default `font/` and `resources/` runtime assets inside `RomFS`, so it can boot without manually extracting `3dslibris-sdmc.zip`.
 - Books are discovered from `sdmc:/3ds/3dslibris/book/` and `romfs:/3ds/3dslibris/book/`.
 - If the same filename exists in both places, SD takes priority.
-- `3dslibris-sdmc.zip` is still the recommended install for `.3dsx`, and it remains useful if you want the same runtime files laid out explicitly on SD.
+- `3dslibris-sdmc.zip` is still the recommended runtime package for `.3dsx`; it does not bundle `3dslibris.3dsx`.
 - `3dslibris-debug.3dsx` uses the same SD layout and writes verbose diagnostics to `sdmc:/3ds/3dslibris/3dslibris.log`.
 - The `.cia` build uses the Universal-Updater-style packaging flow and now also validates the bundled `RomFS` path in GitHub Actions.
 
@@ -63,7 +63,7 @@ Adding books:
 
 Generated install package targets:
 - `make package-sdmc` stages `dist/sdmc/...` with `3dslibris.3dsx` included
-- `make zip-sdmc` creates `dist/3dslibris-sdmc.zip`
+- `make zip-sdmc` creates `dist/3dslibris-sdmc.zip` without bundling `3dslibris.3dsx`
 - `make cia` creates `3dslibris.cia`
 - `make debug-cia` creates `3dslibris-debug.cia`
 - `make source-release` creates `dist/3dslibris-source.tar.gz`

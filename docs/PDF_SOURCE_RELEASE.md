@@ -26,7 +26,7 @@ GitHub release assets for PDF-enabled tags should include:
 - `3dslibris.cia`
 - `3dslibris.3dsx`
 - `3dslibris-debug.3dsx`
-- `3dslibris-sdmc.zip`
+- `3dslibris-sdmc.zip` (runtime assets only)
 - `3dslibris-source.tar.gz`
 
 The `3dslibris-source.tar.gz` bundle is intended to be the exact source

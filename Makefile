@@ -371,6 +371,7 @@ zip-sdmc: package-sdmc
 	@echo zipping sdmc package ...
 	@mkdir -p $(DISTDIR)
 	@rm -f $(SDMC_ZIP)
+	@rm -f $(SDMC_APPDIR)/$(TARGET).3dsx
 	@cd $(DISTDIR) && zip -qr $(TARGET)-sdmc.zip sdmc
 	@echo built ... $(SDMC_ZIP)
 
