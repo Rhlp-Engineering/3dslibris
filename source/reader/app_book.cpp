@@ -448,14 +448,25 @@ void ReaderController::OnAppletSuspended() {
   }
   if (!opening_book)
     return;
+  opening_book->CancelFixedLayoutDeferredWork();
+  if (opening_book->IsAsyncReflowOpenPending()) {
+    // The OS suspends all threads (including the core-1 worker) while the
+    // HOME menu is active. Leave the opening in progress so it completes
+    // transparently on resume — no blocking join, no state teardown.
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF(&app_,
+             "BOOK suspend: keeping async open alive session=%u book=%s",
+             app_.GetOpeningSessionId(),
+             opening_book->GetFileName() ? opening_book->GetFileName() : "");
+#endif
+    return;
+  }
 #ifdef DSLIBRIS_DEBUG
   DBG_LOGF(&app_,
-           "BOOK suspend: cancel opening session=%u book=%s async=%u",
+           "BOOK suspend: cancel opening session=%u book=%s",
            app_.GetOpeningSessionId(),
-           opening_book->GetFileName() ? opening_book->GetFileName() : "",
-           opening_book->IsAsyncReflowOpenPending() ? 1u : 0u);
+           opening_book->GetFileName() ? opening_book->GetFileName() : "");
 #endif
-  opening_book->CancelFixedLayoutDeferredWork();
   opening_book->RequestAbortOpen();
   opening_book->CancelAsyncReflowOpen();
   app_.SetOpeningPending(false);
