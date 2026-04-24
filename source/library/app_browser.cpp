@@ -1134,8 +1134,40 @@ void LibraryController::browser_handleevent() {
     Book *old_selected = app_.GetSelectedBook();
     const int page_size = CurrentBrowserPageSize(app_);
     const int columns = CurrentBrowserColumnCount(app_);
-    BrowserNavState state = {app_.GetBookIndex(app_.GetSelectedBook()),
-                             app_.GetBrowserPageStart()};
+    const int old_index = app_.GetBookIndex(app_.GetSelectedBook());
+    if (old_index < 0)
+      return;
+    const int old_index_on_page = old_index - old_page_start;
+    const int books_remaining = app_.BookCount() - old_page_start;
+    const int visible_on_page =
+        (books_remaining < page_size) ? books_remaining : page_size;
+
+    // At the edges of the current page, overflow d-pad navigation into a page
+    // flip rather than clamping in place.
+    if (columns == 1) {
+      // List mode: top item + backward → prev page; bottom item + forward → next page.
+      if (move == BROWSER_NAV_LEFT && old_index_on_page == 0) {
+        browser_prevpage();
+        return;
+      }
+      if (move == BROWSER_NAV_RIGHT && old_index_on_page == visible_on_page - 1) {
+        browser_nextpage();
+        return;
+      }
+    } else {
+      // Gallery mode: left-column item + left → prev page; right-column item + right → next page.
+      if (move == BROWSER_NAV_LEFT && old_index_on_page % columns == 0) {
+        browser_prevpage();
+        return;
+      }
+      if (move == BROWSER_NAV_RIGHT &&
+          old_index_on_page % columns == columns - 1) {
+        browser_nextpage();
+        return;
+      }
+    }
+
+    BrowserNavState state = {old_index, old_page_start};
     state = BrowserNavMoveSelection(state, app_.BookCount(), page_size, columns,
                                     move);
     if (state.selected_index < 0 || state.selected_index >= app_.BookCount())
