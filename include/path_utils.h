@@ -36,6 +36,7 @@ static const char *kCoverCacheManifest = "sdmc:/3ds/3dslibris/cache/covers/manif
 static const char *kEpubCacheDir    = "sdmc:/3ds/3dslibris/cache/epub";
 static const char *kMobiCacheDir    = "sdmc:/3ds/3dslibris/cache/mobi";
 static const char *kMobiCoverMetaCacheDir = "sdmc:/3ds/3dslibris/cache/mobi-cover";
+static const char *kMetaCacheDir          = "sdmc:/3ds/3dslibris/cache/meta";
 
 // Runtime files
 static const char *kLogFile         = "sdmc:/3ds/3dslibris/3dslibris.log";
