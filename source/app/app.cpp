@@ -116,6 +116,8 @@ App::App()
   key.select = KEY_SELECT;
   key.l = KEY_L;
   key.r = KEY_R;
+  key.zl = KEY_ZL;
+  key.zr = KEY_ZR;
   key.a = KEY_A;
   key.b = KEY_B;
   key.x = KEY_X;
@@ -1159,6 +1161,8 @@ void App::SetOrientation(bool turned_right)
     key.right = KEY_LEFT;
     key.l = KEY_R;
     key.r = KEY_L;
+    key.zl = KEY_ZR;
+    key.zr = KEY_ZL;
   }
   else
   {
@@ -1168,6 +1172,8 @@ void App::SetOrientation(bool turned_right)
     key.right = KEY_RIGHT;
     key.l = KEY_L;
     key.r = KEY_R;
+    key.zl = KEY_ZL;
+    key.zr = KEY_ZR;
   }
 
 #if ORIENTATION_DIAG

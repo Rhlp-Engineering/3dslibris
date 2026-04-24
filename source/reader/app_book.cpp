@@ -756,14 +756,14 @@ void ReaderController::HandleEventInBook() {
       }
     } else if (reader_input_utils::FixedLayoutSupportsShoulderPageTurn(
                    bookcurrent_->format) &&
-               (keys & (key.r | KEY_R))) {
+               (keys & (key.r | KEY_R | key.zl | KEY_ZL))) {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
       }
     } else if (reader_input_utils::FixedLayoutSupportsShoulderPageTurn(
                    bookcurrent_->format) &&
-               (keys & (key.l | KEY_L))) {
+               (keys & (key.l | KEY_L | key.zr | KEY_ZR))) {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1)) {
         status_dirty = true;
         delay_fixed_layout_deferred();
@@ -871,10 +871,10 @@ void ReaderController::HandleEventInBook() {
     return;
   }
 
-  if (keys & (KEY_A | key.r | key.down)) {
+  if (keys & (KEY_A | key.r | key.down | key.zl | KEY_ZL)) {
     // page forward.
     AdvanceBookPage(bookcurrent_, ts, &pagecurrent, &pagecount, &status_dirty);
-  } else if (keys & (KEY_B | key.l | key.up)) {
+  } else if (keys & (KEY_B | key.l | key.up | key.zr | KEY_ZR)) {
     // page back.
     if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1))
       status_dirty = true;

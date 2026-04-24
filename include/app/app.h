@@ -130,7 +130,7 @@ public:
   //! key functions are remappable to support screen flipping.
   struct
   {
-    u32 up, down, left, right, l, r, a, b, x, y, start, select;
+    u32 up, down, left, right, l, r, zl, zr, a, b, x, y, start, select;
     u32 downrepeat;
   } key;
 
