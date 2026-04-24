@@ -1,5 +1,7 @@
 #include "library/browser_presentation_utils.h"
 
+#include <vector>
+
 #include <set>
 
 #include "book/book.h"
@@ -195,8 +197,9 @@ void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
   if (!ts || title.empty() || w <= 8 || h <= 8)
     return;
 
-  const int kPadX = 6;
-  const int kPadY = 6;
+  const int kPadX = 8;
+  const int kPadY = 10;
+  const int kMaxLines = 4;
   const int inner_w = w - kPadX * 2;
   const int inner_h = h - kPadY * 2;
   if (inner_w <= 8 || inner_h <= 8)
@@ -206,21 +209,14 @@ void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
   int max_lines = inner_h / ((line_h > 1) ? line_h : 1);
   if (max_lines < 1)
     return;
+  if (max_lines > kMaxLines)
+    max_lines = kMaxLines;
 
-  const int saved_margin_left = ts->margin.left;
-  const int saved_margin_right = ts->margin.right;
-  const bool saved_clip = ts->IsClipToContentEnabled();
-  const bool saved_wrap = ts->IsAutoWrapEnabled();
-
-  ts->margin.left = x + kPadX;
-  ts->margin.right =
-      ts->display.width - std::min(ts->display.width, x + kPadX + inner_w);
-  ts->SetClipToContentEnabled(true);
-  ts->SetAutoWrapEnabled(false);
+  std::vector<std::string> lines;
+  lines.reserve((size_t)max_lines);
 
   size_t pos = 0;
-  int drawn = 0;
-  while (pos < title.size() && drawn < max_lines) {
+  while (pos < title.size() && (int)lines.size() < max_lines) {
     while (pos < title.size() && title[pos] == ' ')
       pos++;
     if (pos >= title.size())
@@ -244,11 +240,29 @@ void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
       pos += take;
       continue;
     }
-
-    ts->SetPen(x + kPadX, y + kPadY + (drawn + 1) * line_h);
-    ts->PrintString(line.c_str(), style);
-    drawn++;
+    lines.push_back(line);
     pos += take;
+  }
+
+  if (lines.empty())
+    return;
+
+  const int saved_margin_left = ts->margin.left;
+  const int saved_margin_right = ts->margin.right;
+  const bool saved_clip = ts->IsClipToContentEnabled();
+  const bool saved_wrap = ts->IsAutoWrapEnabled();
+
+  ts->margin.left = x + kPadX;
+  ts->margin.right =
+      ts->display.width - std::min(ts->display.width, x + kPadX + inner_w);
+  ts->SetClipToContentEnabled(true);
+  ts->SetAutoWrapEnabled(false);
+
+  const int text_h = (int)lines.size() * line_h;
+  const int top_pad = kPadY + std::max(0, (inner_h - text_h) / 2);
+  for (size_t i = 0; i < lines.size(); i++) {
+    ts->SetPen(x + kPadX, y + top_pad + (int)(i + 1) * line_h);
+    ts->PrintString(lines[i].c_str(), style);
   }
 
   ts->margin.left = saved_margin_left;
