@@ -32,6 +32,7 @@
 #include "reader/deferred_relayout_utils.h"
 #include "reader/book_switch_utils.h"
 #include "reader/fixed_layout_input_utils.h"
+#include "reader/suspend_policy_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/button.h"
 #include "debug_log.h"
@@ -444,12 +445,10 @@ void ReaderController::OnAppletSuspendRequested() {
   app_.SetPdfTouchLastX(-1);
   app_.SetPdfTouchLastY(-1);
   app_.SetPdfDeferredReadyAtMs(0);
-  app_.SetMobiDeferredReadyAtMs(0);
   if (bookcurrent_)
     bookcurrent_->SetFixedLayoutViewportInteraction(false);
   if (opening_book) {
     opening_book->RequestAbortOpen();
-    opening_book->CancelDeferredMobiParse();
   }
 }
 
@@ -467,7 +466,8 @@ void ReaderController::OnAppletSuspended() {
   if (!opening_book)
     return;
   opening_book->CancelFixedLayoutDeferredWork();
-  if (opening_book->IsAsyncReflowOpenPending()) {
+  if (reader_suspend_policy_utils::ShouldKeepOpeningDuringSuspend(
+          true, opening_book->IsAsyncReflowOpenPending())) {
     // The OS suspends all threads (including the core-1 worker) while the
     // HOME menu is active. Leave the opening in progress so it completes
     // transparently on resume — no blocking join, no state teardown.
