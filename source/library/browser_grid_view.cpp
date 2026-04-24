@@ -8,6 +8,7 @@
 #include "library/browser_grid_geometry_utils.h"
 #include "library/browser_presentation_hit_utils.h"
 #include "library/browser_presentation_utils.h"
+#include "library/browser_view_utils.h"
 #include "ui/button.h"
 #include "ui/text.h"
 
@@ -226,7 +227,10 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
       const int fill_y = cover_y + inner_pad_y;
       const int fill_w = kCoverW - inner_pad_x * 2;
       const int fill_h = kCoverH - inner_pad_y * 2;
-      const unsigned short fill = 0xFFFF;
+      const browser_view_utils::ListRowPalette palette =
+          browser_view_utils::PaletteForListRow(
+              false, app.ts->GetColorMode());
+      const unsigned short fill = palette.fill;
       const int stride = app.ts->display.height;
       app.ts->MarkScreenDirtyRect(app.ts->screenright, fill_x, fill_y,
                                   fill_x + fill_w, fill_y + fill_h);
