@@ -576,6 +576,21 @@ bool Book::MoveMuPdfViewportToPreview(int touch_x, int touch_y) {
   return true;
 }
 
+bool Book::TranslateMuPdfViewport(float dx, float dy) {
+  if (!IsPdf() || !mupdf_state)
+    return false;
+  const float new_x =
+      std::max(0.0f, std::min(1.0f, mupdf_state->viewport_center_x + dx));
+  const float new_y =
+      std::max(0.0f, std::min(1.0f, mupdf_state->viewport_center_y + dy));
+  if (std::abs(new_x - mupdf_state->viewport_center_x) < 0.0005f &&
+      std::abs(new_y - mupdf_state->viewport_center_y) < 0.0005f)
+    return false;
+  mupdf_state->viewport_center_x = new_x;
+  mupdf_state->viewport_center_y = new_y;
+  return true;
+}
+
 void Book::SetMuPdfViewportInteraction(bool active) {
   if (!IsPdf() || !mupdf_state)
     return;

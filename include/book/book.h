@@ -293,6 +293,7 @@ public:
   void ResetFixedLayoutViewportForNavigation();
   bool ChangeFixedLayoutZoom(int delta);
   bool MoveFixedLayoutViewportToPreview(int touch_x, int touch_y);
+  bool TranslateFixedLayoutViewport(float dx, float dy);
   bool JumpFixedLayoutChapter(int delta);
   bool HasPendingFixedLayoutDeferredWork() const;
   u32 GetFixedLayoutDeferredDelayMs() const;
@@ -302,6 +303,7 @@ public:
   void ResetCbzViewport();
   bool ChangeCbzZoom(int delta);
   bool MoveCbzViewportToPreview(int touch_x, int touch_y);
+  bool TranslateCbzViewport(float dx, float dy);
   bool JumpCbzChapter(int delta);
   bool HasPendingCbzDeferredWork() const;
   u32 GetCbzDeferredDelayMs() const;
@@ -312,6 +314,7 @@ public:
   void ResetMuPdfViewport();
   bool ChangeMuPdfZoom(int delta);
   bool MoveMuPdfViewportToPreview(int touch_x, int touch_y);
+  bool TranslateMuPdfViewport(float dx, float dy);
   bool JumpMuPdfChapter(int delta);
   void PrefetchAdjacentMuPdfPage();
   bool HasPendingMuPdfDeferredWork() const;

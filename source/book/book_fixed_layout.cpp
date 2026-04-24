@@ -52,6 +52,14 @@ bool Book::MoveFixedLayoutViewportToPreview(int touch_x, int touch_y) {
   return false;
 }
 
+bool Book::TranslateFixedLayoutViewport(float dx, float dy) {
+  if (IsPdf())
+    return TranslateMuPdfViewport(dx, dy);
+  if (IsCbz())
+    return TranslateCbzViewport(dx, dy);
+  return false;
+}
+
 bool Book::JumpFixedLayoutChapter(int delta) {
   if (IsPdf())
     return JumpMuPdfChapter(delta);

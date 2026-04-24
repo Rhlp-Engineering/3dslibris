@@ -624,6 +624,21 @@ bool Book::MoveCbzViewportToPreview(int touch_x, int touch_y) {
   return true;
 }
 
+bool Book::TranslateCbzViewport(float dx, float dy) {
+  if (!IsCbz() || !cbz_state)
+    return false;
+  const float new_x =
+      std::max(0.0f, std::min(1.0f, cbz_state->viewport_center_x + dx));
+  const float new_y =
+      std::max(0.0f, std::min(1.0f, cbz_state->viewport_center_y + dy));
+  if (std::abs(new_x - cbz_state->viewport_center_x) < 0.0005f &&
+      std::abs(new_y - cbz_state->viewport_center_y) < 0.0005f)
+    return false;
+  cbz_state->viewport_center_x = new_x;
+  cbz_state->viewport_center_y = new_y;
+  return true;
+}
+
 bool Book::JumpCbzChapter(int delta) {
   (void)delta;
   return false;

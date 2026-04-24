@@ -854,6 +854,26 @@ void ReaderController::HandleEventInBook() {
       app_.SetPdfTouchLastY(-1);
     }
 
+    // Circle Pad smooth viewport pan. Only active when touch is not dragging.
+    if (!app_.IsPdfTouchDragActive()) {
+      static const int kCPadDeadZone = 15;
+      static const float kCPadScale = 0.012f / 154.0f;
+      circlePosition cpad;
+      hidCircleRead(&cpad);
+      const float cdx =
+          (std::abs((int)cpad.dx) > kCPadDeadZone) ? cpad.dx * kCPadScale : 0.0f;
+      // Positive dy = up on the stick = viewport moves up = center_y decreases.
+      const float cdy =
+          (std::abs((int)cpad.dy) > kCPadDeadZone) ? -cpad.dy * kCPadScale : 0.0f;
+      if ((cdx != 0.0f || cdy != 0.0f) &&
+          bookcurrent_->TranslateFixedLayoutViewport(cdx, cdy)) {
+        bookcurrent_->SetFixedLayoutViewportInteraction(true);
+        DrawBookPage(bookcurrent_, ts);
+        status_dirty = true;
+        delay_fixed_layout_deferred();
+      }
+    }
+
     if (status_dirty) {
       request_status_redraw();
     } else if (!(held & KEY_TOUCH) && keys == 0 &&
