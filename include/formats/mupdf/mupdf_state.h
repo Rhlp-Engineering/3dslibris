@@ -117,6 +117,7 @@ struct Book::MuPdfState {
   MuPdfWorker *worker;
   bool worker_init_attempted;
   IStatusReporter *reporter;
+  int page_too_complex_for_device; // page index skipped due to complexity, -1 if none
 
   MuPdfState()
       : ctx(NULL), doc(NULL), outline(NULL), page_count(0),
@@ -129,5 +130,6 @@ struct Book::MuPdfState {
         current_preview(), current_interactive_tile(), current_final_zoom(),
         final_cache_pending(false), cached_display_list(NULL),
         cached_display_list_page(-1), prev_slot(), next_slot(), incremental(),
-        worker(NULL), worker_init_attempted(false), reporter(NULL) {}
+        worker(NULL), worker_init_attempted(false), reporter(NULL),
+        page_too_complex_for_device(-1) {}
 };

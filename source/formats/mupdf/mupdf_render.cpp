@@ -5,6 +5,12 @@
 #include <algorithm>
 
 #include "debug_log.h"
+#include "formats/mupdf/mupdf_render_policy_utils.h"
+
+extern "C" {
+#include "mupdf/fitz/buffer.h"
+#include "mupdf/pdf.h"
+}
 
 static void ComputeBitmapContentBoundsPx(const RenderedMuPdfBitmap &bitmap,
                                          MuPdfBitmapBoundsPx *bounds) {
@@ -113,6 +119,80 @@ bool QueryMuPdfPageMetrics(fz_context *ctx, fz_document *doc,
   *page_width = bounds.x1 - bounds.x0;
   *page_height = bounds.y1 - bounds.y0;
   return true;
+}
+
+static size_t CountPdfContentBytes(fz_context *ctx, pdf_obj *obj,
+                                   size_t byte_cap) {
+  if (!ctx || !obj || byte_cap == 0)
+    return 0;
+
+  if (pdf_is_array(ctx, obj)) {
+    size_t total = 0;
+    const int len = pdf_array_len(ctx, obj);
+    for (int i = 0; i < len && total <= byte_cap; i++) {
+      total += CountPdfContentBytes(ctx, pdf_array_get(ctx, obj, i),
+                                    byte_cap - std::min(total, byte_cap));
+    }
+    return total;
+  }
+
+  if (!pdf_is_stream(ctx, obj))
+    return 0;
+
+  fz_buffer *buffer = NULL;
+  size_t size = 0;
+  fz_var(buffer);
+  fz_try(ctx) {
+    buffer = pdf_load_raw_stream(ctx, obj);
+    size = fz_buffer_storage(ctx, buffer, NULL);
+  }
+  fz_always(ctx) { fz_drop_buffer(ctx, buffer); }
+  fz_catch(ctx) { size = byte_cap + 1; }
+  return size;
+}
+
+bool EstimateMuPdfPageRenderComplexity(fz_context *ctx, fz_document *doc,
+                                        int page_index, int *xobject_count,
+                                        size_t *content_bytes) {
+  if (xobject_count)
+    *xobject_count = 0;
+  if (content_bytes)
+    *content_bytes = 0;
+  if (!ctx || !doc)
+    return false;
+
+  pdf_page *page = NULL;
+  bool ok = false;
+  fz_var(page);
+  fz_try(ctx) {
+    pdf_document *pdf = pdf_document_from_fz_document(ctx, doc);
+    if (!pdf)
+      fz_throw(ctx, FZ_ERROR_FORMAT, "not a pdf document");
+    page = pdf_load_page(ctx, pdf, page_index);
+    pdf_obj *resources = pdf_page_resources(ctx, page);
+    pdf_obj *xobjects =
+        resources ? pdf_dict_get(ctx, resources, PDF_NAME(XObject)) : NULL;
+    if (xobject_count)
+      *xobject_count = xobjects ? pdf_dict_len(ctx, xobjects) : 0;
+
+    if (content_bytes) {
+      pdf_obj *contents = pdf_page_contents(ctx, page);
+      *content_bytes = CountPdfContentBytes(
+          ctx, contents,
+          mupdf_render_policy_utils::kOld3dsPdfPreviewMaxContentBytes + 1);
+    }
+    ok = true;
+  }
+  fz_always(ctx) { pdf_drop_page(ctx, page); }
+  fz_catch(ctx) {
+    if (xobject_count)
+      *xobject_count = 0;
+    if (content_bytes)
+      *content_bytes =
+          mupdf_render_policy_utils::kOld3dsPdfPreviewMaxContentBytes + 1;
+    ok = false;
+  }
+  return ok;
 }
 
 bool RenderMuPdfBitmap(fz_context *ctx, fz_document *doc, int page_index,

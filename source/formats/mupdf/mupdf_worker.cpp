@@ -3,6 +3,7 @@
 #include "formats/mupdf/mupdf_worker.h"
 
 #include "debug_log.h"
+#include "formats/mupdf/mupdf_render_policy_utils.h"
 #include "formats/mupdf/mupdf_view.h"
 #include "shared/debug_runtime_mode.h"
 
@@ -115,6 +116,23 @@ bool EnsureCurrentMuPdfPreviewCache(Book::MuPdfState *mupdf_state, int page_inde
       "MUPDF preview: render-begin page=%d scale=%.4f page_size=(%.2f,%.2f)",
       page_index, (double)preview_scale, (double)page_width,
       (double)page_height);
+  int xobject_count = 0;
+  size_t content_bytes = 0;
+  if (!mupdf_state->is_new_3ds &&
+      mupdf_state->document_kind == app_flow_utils::MuPdfDocumentKind::Pdf &&
+      EstimateMuPdfPageRenderComplexity(mupdf_state->ctx, mupdf_state->doc,
+                                        page_index, &xobject_count,
+                                        &content_bytes) &&
+      mupdf_render_policy_utils::ShouldSkipOld3dsPdfPreview(
+          mupdf_state->is_new_3ds, mupdf_state->document_kind, xobject_count,
+          content_bytes)) {
+    DBG_LOGF_CAT(mupdf_state->reporter, DBG_LEVEL_WARN, DBG_CAT_RENDER,
+                 "MUPDF preview: skip-complex old3ds page=%d xobjects=%d "
+                 "content_bytes=%u",
+                 page_index, xobject_count, (unsigned)content_bytes);
+    mupdf_state->page_too_complex_for_device = page_index;
+    return false;
+  }
   if (!RenderMuPdfBitmap(mupdf_state->ctx, mupdf_state->doc, page_index,
                          preview_scale, &rendered, &page_width, &page_height,
                          NULL, NULL, NULL, mupdf_state->reporter)) {

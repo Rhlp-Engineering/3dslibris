@@ -41,7 +41,8 @@ static void EnsureMuPdfPageMetrics(Book::MuPdfState *mupdf_state,
   }
 }
 
-static void DrawMuPdfLoadFailure(Book *book, Text *ts, int page_index) {
+static void DrawMuPdfLoadFailure(Book *book, Text *ts, int page_index,
+                                  bool complex_page) {
   if (!book || !ts)
     return;
 
@@ -55,20 +56,46 @@ static void DrawMuPdfLoadFailure(Book *book, Text *ts, int page_index) {
 
   ts->SetScreen(ts->screenleft);
   ts->ClearScreen();
-  ts->SetPen(14, 28);
-  ts->PrintString("PDF page unavailable");
-  ts->SetPen(14, 52);
-  char page_msg[48];
-  snprintf(page_msg, sizeof(page_msg), "page %d", page_index + 1);
-  ts->PrintString(page_msg);
+  if (complex_page) {
+    ts->SetPen(14, 28);
+    ts->PrintString("Page too complex");
+    ts->SetPen(14, 52);
+    ts->PrintString("to render on 3DS.");
+    ts->SetPen(14, 84);
+    char page_msg[48];
+    snprintf(page_msg, sizeof(page_msg), "page %d", page_index + 1);
+    ts->PrintString(page_msg);
+  } else {
+    ts->SetPen(14, 28);
+    ts->PrintString("PDF page unavailable");
+    ts->SetPen(14, 52);
+    char page_msg[48];
+    snprintf(page_msg, sizeof(page_msg), "page %d", page_index + 1);
+    ts->PrintString(page_msg);
+  }
 
   ts->SetScreen(ts->screenright);
   ts->ClearScreen();
   book->DrawBottomGradientBackground();
-  ts->SetPen(12, 28);
-  ts->PrintString("MuPDF preview failed");
-  ts->SetPen(12, 48);
-  ts->PrintString("use L/R or B to leave");
+  if (complex_page) {
+    ts->SetPen(12, 22);
+    ts->PrintString("Page too complex.");
+    ts->SetPen(12, 40);
+    ts->PrintString("On your computer:");
+    ts->SetPen(12, 58);
+    ts->PrintString("simplify the PDF,");
+    ts->SetPen(12, 76);
+    ts->PrintString("or convert to CBZ");
+    ts->SetPen(12, 94);
+    ts->PrintString("with JPG images.");
+    ts->SetPen(12, 122);
+    ts->PrintString("START: back to library");
+  } else {
+    ts->SetPen(12, 28);
+    ts->PrintString("MuPDF preview failed");
+    ts->SetPen(12, 48);
+    ts->PrintString("use L/R or B to leave");
+  }
 
   ts->SetStyle(saved_style);
   ts->SetColorMode(saved_color);
@@ -673,7 +700,9 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
                    page_index, (unsigned)mupdf_state->page_count,
                    (int)mupdf_state->document_kind);
     }
-    DrawMuPdfLoadFailure(this, ts, page_index);
+    const bool complex_page =
+        (mupdf_state->page_too_complex_for_device == page_index);
+    DrawMuPdfLoadFailure(this, ts, page_index, complex_page);
     return;
   }
 

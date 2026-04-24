@@ -3,11 +3,16 @@
 #include "formats/mupdf/mupdf_common.h"
 #include "formats/common/pdf_view_utils.h"
 
+#include <cstddef>
+
 class IStatusReporter;
 
 fz_matrix MakeMuPdfRenderMatrix(fz_rect page_bounds, float scale);
 bool QueryMuPdfPageMetrics(fz_context *ctx, fz_document *doc, int page_index,
                            float *page_width, float *page_height);
+bool EstimateMuPdfPageRenderComplexity(fz_context *ctx, fz_document *doc,
+                                        int page_index, int *xobject_count,
+                                        size_t *content_bytes);
 bool RenderMuPdfBitmap(
     fz_context *ctx, fz_document *doc, int page_index, float scale,
     RenderedMuPdfBitmap *out, float *page_width, float *page_height,
