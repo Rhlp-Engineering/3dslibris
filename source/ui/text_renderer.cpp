@@ -113,9 +113,7 @@ static int grad400w_ds = 0;
 static int g_text_clip_right_budget = 32;
 static int g_text_margin_diag_budget = 12;
 static int g_blit_geometry_diag_budget = 12;
-// Hot-path framebuffer copy logs are too noisy for layout debugging.
-// Raise this manually when debugging the blit stage itself.
-static int g_blit_page_diag_budget = 0;
+static int g_blit_page_diag_budget = 48;
 #endif
 
 static void FillSepiaGradient(u16 *dst, int stride, int w, int logical_h) {
