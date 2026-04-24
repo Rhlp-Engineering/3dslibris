@@ -122,11 +122,24 @@ void TestOld3dsCoverMemoryGuard() {
                   browser_warmup_utils::kOld3dsWarmCoverMinFreeBytes - 1));
 }
 
-void TestOld3dsPdfCoverWarmupIsDisabled() {
-  ExpectFalse("old3ds skips pdf cover warmup",
-              browser_warmup_utils::ShouldAttemptPdfCoverWarmup(false));
-  ExpectTrue("new3ds allows pdf cover warmup",
+void TestPdfCoverWarmupEnabledForAllDevices() {
+  ExpectTrue("old3ds attempts pdf cover warmup",
+             browser_warmup_utils::ShouldAttemptPdfCoverWarmup(false));
+  ExpectTrue("new3ds attempts pdf cover warmup",
              browser_warmup_utils::ShouldAttemptPdfCoverWarmup(true));
+}
+
+void TestPermanentCoverFailureDetection() {
+  ExpectTrue("rc=3 (password) is permanent",
+             browser_warmup_utils::IsPermanentCoverFailure(3));
+  ExpectTrue("rc=8 (too complex) is permanent",
+             browser_warmup_utils::IsPermanentCoverFailure(8));
+  ExpectFalse("rc=1 (generic) is not permanent",
+              browser_warmup_utils::IsPermanentCoverFailure(1));
+  ExpectFalse("rc=4 (open fail) is not permanent",
+              browser_warmup_utils::IsPermanentCoverFailure(4));
+  ExpectFalse("rc=0 (success) is not permanent",
+              browser_warmup_utils::IsPermanentCoverFailure(0));
 }
 
 void TestOld3dsCoverRetryBackoff() {
@@ -174,7 +187,8 @@ int main() {
   TestNonSelectedCoverWarmupUsesHeavyIdle();
   TestOld3dsWarmupQueueLimit();
   TestOld3dsCoverMemoryGuard();
-  TestOld3dsPdfCoverWarmupIsDisabled();
+  TestPdfCoverWarmupEnabledForAllDevices();
+  TestPermanentCoverFailureDetection();
   TestOld3dsCoverRetryBackoff();
   TestWarmupCompletionState();
   return 0;

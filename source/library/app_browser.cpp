@@ -925,7 +925,10 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             book->coverRetryAfterMs = 0;
           } else if (rc == BOOK_ERR_CANCELLED) {
           } else if (rc != 0) {
-            book->coverAttempts++;
+            if (browser_warmup_utils::IsPermanentCoverFailure(rc))
+              book->coverAttempts = kCoverMaxAttempts;
+            else
+              book->coverAttempts++;
           } else {
             book->coverAttempts = kCoverMaxAttempts;
           }

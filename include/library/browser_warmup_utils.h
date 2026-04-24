@@ -80,8 +80,18 @@ inline bool HasCoverExtractionHeadroom(bool is_new_3ds, bool is_selected_book,
   return free_bytes >= min_bytes;
 }
 
-inline bool ShouldAttemptPdfCoverWarmup(bool is_new_3ds) {
-  return is_new_3ds;
+inline bool ShouldAttemptPdfCoverWarmup(bool /*is_new_3ds*/) {
+  // Safe on both old and new 3DS: pdf_extract_cover now calls
+  // EstimateMuPdfPageRenderComplexity before rendering and returns rc=8 for
+  // pages that would OOM, so the cover extraction path no longer crashes.
+  return true;
+}
+
+// Returns true for error codes that represent a permanent cover extraction
+// failure — i.e. retrying will never succeed regardless of available memory.
+// rc=3: password-protected document; rc=8: page too complex to render.
+inline bool IsPermanentCoverFailure(int rc) {
+  return rc == 3 || rc == 8;
 }
 
 inline uint64_t CoverRetryDelayMs(bool is_new_3ds, bool is_selected_book,
