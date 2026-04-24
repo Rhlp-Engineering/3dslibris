@@ -21,6 +21,26 @@ void ExpectFalse(const char *label, bool value) {
     Fail(std::string(label) + ": expected false");
 }
 
+void TestSkipPdfPageRenderDetectsComplexPages() {
+  using app_flow_utils::MuPdfDocumentKind;
+  ExpectTrue("skips many xobjects",
+             mupdf_render_policy_utils::ShouldSkipPdfPageRender(
+                 MuPdfDocumentKind::Pdf,
+                 mupdf_render_policy_utils::kOld3dsPdfPreviewMaxXObjects + 1,
+                 1024));
+  ExpectTrue("skips large content stream",
+             mupdf_render_policy_utils::ShouldSkipPdfPageRender(
+                 MuPdfDocumentKind::Pdf, 1,
+                 mupdf_render_policy_utils::kOld3dsPdfPreviewMaxContentBytes +
+                     1));
+  ExpectFalse("keeps simple pdf",
+              mupdf_render_policy_utils::ShouldSkipPdfPageRender(
+                  MuPdfDocumentKind::Pdf, 4, 32u * 1024u));
+  ExpectFalse("keeps non-pdf",
+              mupdf_render_policy_utils::ShouldSkipPdfPageRender(
+                  MuPdfDocumentKind::Xps, 1000, 1024u * 1024u));
+}
+
 void TestOld3dsSkipsComplexPdfPreview() {
   using app_flow_utils::MuPdfDocumentKind;
   ExpectTrue("old3ds skips many xobjects",
@@ -40,7 +60,7 @@ void TestPolicyKeepsNormalOrNonPdfPreview() {
   ExpectFalse("old3ds keeps simple pdf",
               mupdf_render_policy_utils::ShouldSkipOld3dsPdfPreview(
                   false, MuPdfDocumentKind::Pdf, 4, 32u * 1024u));
-  ExpectFalse("new3ds keeps complex pdf",
+  ExpectFalse("new3ds skips nothing via old3ds fn",
               mupdf_render_policy_utils::ShouldSkipOld3dsPdfPreview(
                   true, MuPdfDocumentKind::Pdf, 1000, 1024u * 1024u));
   ExpectFalse("old3ds keeps non-pdf",
@@ -51,6 +71,7 @@ void TestPolicyKeepsNormalOrNonPdfPreview() {
 } // namespace
 
 int main() {
+  TestSkipPdfPageRenderDetectsComplexPages();
   TestOld3dsSkipsComplexPdfPreview();
   TestPolicyKeepsNormalOrNonPdfPreview();
   return 0;

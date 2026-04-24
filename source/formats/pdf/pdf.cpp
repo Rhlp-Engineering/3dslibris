@@ -5,6 +5,8 @@
 #include "book/book.h"
 #include "formats/mupdf/mupdf_document.h"
 #include "formats/mupdf/mupdf_render.h"
+#include "formats/mupdf/mupdf_render_policy_utils.h"
+#include "shared/app_flow_utils.h"
 
 #include <algorithm>
 #include <vector>
@@ -101,6 +103,18 @@ int pdf_extract_cover(Book *book, const std::string &pdfpath) {
     fz_drop_document(ctx, doc);
     fz_drop_context(ctx);
     return 5;
+  }
+
+  int xobject_count = 0;
+  size_t content_bytes = 0;
+  if (EstimateMuPdfPageRenderComplexity(ctx, doc, 0, &xobject_count,
+                                        &content_bytes) &&
+      mupdf_render_policy_utils::ShouldSkipPdfPageRender(
+          app_flow_utils::MuPdfDocumentKind::Pdf, xobject_count,
+          content_bytes)) {
+    fz_drop_document(ctx, doc);
+    fz_drop_context(ctx);
+    return 8;
   }
 
   const float fit_scale =
