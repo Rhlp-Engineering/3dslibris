@@ -14,6 +14,7 @@
 #include "path_utils.h"
 #include "stb_image.h"
 #include "string.h"
+#include "ui/frame_debug_utils.h"
 #include "ui/text.h"
 #include "ui/text_buffer_utils.h"
 
@@ -888,7 +889,7 @@ bool TextRenderer::BlitToFramebuffer() {
     }
 #ifdef DSLIBRIS_DEBUG
     if (parent->app && g_blit_page_diag_budget > 0 &&
-        (dirty || needs_copy || parent->GetScreen() == src)) {
+        frame_debug_utils::ShouldLogBlitPage(dirty, needs_copy)) {
       const uint16_t px0 = src[0];
       const uint16_t px1 = src[(size_t)std::min(10, geometry.stride - 1)];
       DBG_LOGF(parent->app,
