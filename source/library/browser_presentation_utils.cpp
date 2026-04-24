@@ -207,6 +207,17 @@ void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
   if (max_lines < 1)
     return;
 
+  const int saved_margin_left = ts->margin.left;
+  const int saved_margin_right = ts->margin.right;
+  const bool saved_clip = ts->IsClipToContentEnabled();
+  const bool saved_wrap = ts->IsAutoWrapEnabled();
+
+  ts->margin.left = x + kPadX;
+  ts->margin.right =
+      ts->display.width - std::min(ts->display.width, x + kPadX + inner_w);
+  ts->SetClipToContentEnabled(true);
+  ts->SetAutoWrapEnabled(false);
+
   size_t pos = 0;
   int drawn = 0;
   while (pos < title.size() && drawn < max_lines) {
@@ -239,6 +250,11 @@ void DrawWrappedTitleInsideCover(Text *ts, const std::string &title,
     drawn++;
     pos += take;
   }
+
+  ts->margin.left = saved_margin_left;
+  ts->margin.right = saved_margin_right;
+  ts->SetClipToContentEnabled(saved_clip);
+  ts->SetAutoWrapEnabled(saved_wrap);
 }
 
 } // namespace browser_presentation_utils

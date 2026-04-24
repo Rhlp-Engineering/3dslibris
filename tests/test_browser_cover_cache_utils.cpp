@@ -28,10 +28,20 @@ void TestRangeContainsVisibleIndicesOnly() {
   }
 }
 
+void TestVisibleBookCoverChangeNeedsBrowserRedraw() {
+  const browser_cover_cache_utils::VisibleRange range =
+      browser_cover_cache_utils::ComputeVisibleRange(4, 20, 4);
+  if (!browser_cover_cache_utils::VisibleBookNeedsBrowserRedraw(range, 5))
+    Fail("visible cover job should redraw browser");
+  if (browser_cover_cache_utils::VisibleBookNeedsBrowserRedraw(range, 9))
+    Fail("offscreen cover change should not redraw browser");
+}
+
 } // namespace
 
 int main() {
   TestVisibleRangeClampsToBounds();
   TestRangeContainsVisibleIndicesOnly();
+  TestVisibleBookCoverChangeNeedsBrowserRedraw();
   return 0;
 }

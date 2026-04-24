@@ -32,6 +32,17 @@ void BrowserGridMarqueeState::Reset() {
 
 namespace browser_grid_view {
 
+namespace {
+
+static unsigned short SamplePlaceholderFill(App &app, int x, int y) {
+  const int stride = app.ts->display.height;
+  const int sx = std::max(0, std::min(app.ts->display.width - 1, x));
+  const int sy = std::max(0, std::min(319, y));
+  return app.ts->screenright[(size_t)sy * (size_t)stride + (size_t)sx];
+}
+
+} // namespace
+
 int HitTestBookIndex(int x, int y, int page_start, int book_count) {
   return browser_presentation_hit_utils::HitTestGridBookIndex(
       x, y, page_start, book_count, kGridX0, kGridY0, kCellW, kCellH, kGridCols,
@@ -218,8 +229,29 @@ void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start) {
         app.ts->SetAutoWrapEnabled(saved_wrap);
       }
     } else {
+      const int inner_pad_x = 4;
+      const int inner_pad_y = 4;
+      const int cover_x = btnX + 2;
+      const int cover_y = btnY + 2;
+      const int fill_x = cover_x + inner_pad_x;
+      const int fill_y = cover_y + inner_pad_y;
+      const int fill_w = kCoverW - inner_pad_x * 2;
+      const int fill_h = kCoverH - inner_pad_y * 2;
+      const unsigned short fill =
+          SamplePlaceholderFill(app, fill_x + 2, fill_y + 2);
+      const int stride = app.ts->display.height;
+      app.ts->MarkScreenDirtyRect(app.ts->screenright, fill_x, fill_y,
+                                  fill_x + fill_w, fill_y + fill_h);
+      for (int py = 0; py < fill_h && (fill_y + py) < 320; py++) {
+        for (int px = 0; px < fill_w && (fill_x + px) < 240; px++) {
+          if (!browser_grid_geometry_utils::RoundedRectContains(
+                  px, py, fill_w, fill_h, 5))
+            continue;
+          app.ts->screenright[(fill_y + py) * stride + (fill_x + px)] = fill;
+        }
+      }
       browser_presentation_utils::DrawWrappedTitleInsideCover(
-          app.ts.get(), display_name, btnX + 2, btnY + 2, kCoverW, kCoverH,
+          app.ts.get(), display_name, cover_x, cover_y, kCoverW, kCoverH,
           TEXT_STYLE_BROWSER);
     }
 

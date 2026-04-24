@@ -950,8 +950,28 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             (has_cover_pixels != had_cover_pixels) ||
             (!has_cover_pixels && cover_attempts_before < kCoverMaxAttempts &&
              book->coverAttempts >= kCoverMaxAttempts);
-        if (cover_visual_changed)
-          app_.SetBrowserDirty(true);
+        if (app_.GetMode() == AppMode::Browser) {
+          const browser_cover_cache_utils::VisibleRange visible =
+              browser_cover_cache_utils::ComputeVisibleRange(
+                  app_.GetBrowserPageStart(), app_.BookCount(),
+                  CurrentBrowserPageSize(app_));
+          const int book_index = app_.GetBookIndex(book);
+          if (browser_cover_cache_utils::VisibleBookNeedsBrowserRedraw(
+                  visible, book_index)) {
+            ResetBrowserMarquee();
+            app_.ts->MarkAllScreensDirty();
+            app_.SetBrowserDirty(true);
+#ifdef DSLIBRIS_DEBUG
+            DBG_LOGF(&app_,
+                     "BROWSER: cover job redraw book=%s index=%d rc=%d attempts=%u "
+                     "pixels=%u visual_changed=%u",
+                     book->GetFileName() ? book->GetFileName() : "(null)",
+                     book_index, rc, (unsigned)book->coverAttempts,
+                     book->coverPixels ? 1u : 0u,
+                     cover_visual_changed ? 1u : 0u);
+#endif
+          }
+        }
         const u64 retry_delay_ms = browser_warmup_utils::CoverRetryDelayMs(
             app_.IsNew3dsDevice(), is_selected_book, rc,
             book->coverPixels != nullptr);

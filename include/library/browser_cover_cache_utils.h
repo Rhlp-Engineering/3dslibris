@@ -26,4 +26,9 @@ inline bool RangeContains(const VisibleRange &range, int index) {
   return index >= range.start && index < range.end;
 }
 
+inline bool VisibleBookNeedsBrowserRedraw(const VisibleRange &range,
+                                          int book_index) {
+  return RangeContains(range, book_index);
+}
+
 } // namespace browser_cover_cache_utils

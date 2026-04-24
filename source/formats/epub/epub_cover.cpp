@@ -530,13 +530,19 @@ int Extract(Book *book, const std::string &epubpath) {
   unzClose(uf);
 
   if (is_svg_cover && decode_path == book->coverImagePath) {
-    std::vector<u16> svg_pixels;
-    int svg_w = 0;
-    int svg_h = 0;
-    if (RenderSvgCoverThumbnail(decodebuf, &svg_pixels, &svg_w, &svg_h) &&
-        AdoptCoverPixels(book, svg_pixels, svg_w, svg_h)) {
-      return 0;
+#ifdef DSLIBRIS_DEBUG
+    if (book->GetStatusReporter()) {
+      DBG_LOGF(book->GetStatusReporter(),
+               "COVER: raw svg cover skipped path=%s bytes=%u",
+               decode_path.c_str(), (unsigned)decodebuf.size());
     }
+#endif
+    // Keep browser cover extraction conservative: SVG wrappers that resolve to
+    // embedded raster payloads are handled above, but raw vector SVG covers are
+    // skipped here. On hardware this avoids invoking the SVG render path during
+    // gallery warmup for books that effectively do not have a usable raster
+    // cover thumbnail.
+    return 0;
   }
 
   auto IsJpegCover = [&]() -> bool {
