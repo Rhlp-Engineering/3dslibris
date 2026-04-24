@@ -47,10 +47,11 @@ Recommended install (`.cia` via Universal-Updater):
 
 Manual install (`.3dsx`):
 
-1. Download `3dslibris-sdmc.zip` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
+1. Download `3dslibris-sdmc.zip` and `3dslibris.3dsx` from [GitHub Releases](https://github.com/RigleGit/3dslibris/releases).
 2. Extract it to the root of the SD card so it expands into `sdmc:/`.
-3. Copy your books to `sdmc:/3ds/3dslibris/book/`.
-4. Launch `sdmc:/3ds/3dslibris/3dslibris.3dsx` from Homebrew Launcher.
+3. Copy `3dslibris.3dsx` to `sdmc:/3ds/3dslibris/3dslibris.3dsx`.
+4. Copy your books to `sdmc:/3ds/3dslibris/book/`.
+5. Launch `sdmc:/3ds/3dslibris/3dslibris.3dsx` from Homebrew Launcher.
 
 Manual install (`.cia`):
 
