@@ -73,6 +73,18 @@ void TestRestoreParsedStyleMarkersReinjectsPreContext() {
   test::ExpectEq("mono marker", (int)p.buf[1], TEXT_MONO_ON);
 }
 
+void TestRestoreParsedStyleMarkersKeepsParagraphAlignmentContext() {
+  parsedata_t p{};
+  parse_init(&p);
+  parse_push(&p, TAG_P);
+  p.last_p_style = "text-align: right";
+
+  book_xml_parser_style_utils::RestoreParsedStyleMarkers(&p);
+
+  test::ExpectEq("paragraph alignment marker count", p.buflen, 1);
+  test::ExpectEq("paragraph right marker", (int)p.buf[0], TEXT_PARAGRAPH_RIGHT);
+}
+
 void TestResolveCssMarginLinefeedsUsesCeilQuantization() {
   book_xml_css_style_utils::MarginTopResult m{};
   m.unit = book_xml_css_style_utils::MarginTopResult::Unit::Px;
@@ -172,6 +184,7 @@ int main() {
   TestResolveParsedTextStylePrefersMono();
   TestRestoreParsedStyleMarkersReinjectsMono();
   TestRestoreParsedStyleMarkersReinjectsPreContext();
+  TestRestoreParsedStyleMarkersKeepsParagraphAlignmentContext();
   TestResolveCssMarginLinefeedsUsesCeilQuantization();
   TestResolveBlockSpacingLinefeedsHonorsDefaultsAndZero();
   TestResolveBlockSpacingLinefeedsKeepsSmallExplicitMarginsVisible();

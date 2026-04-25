@@ -145,3 +145,17 @@ p.mb-class-qualified {
 p.mb-class-grouped-qualified {
   margin-bottom: 20%;
 }
+
+/* text-align test classes */
+
+.align-center {
+  text-align: center;
+}
+
+.align-right {
+  text-align: right;
+}
+
+h2.align-center-heading {
+  text-align: center;
+}

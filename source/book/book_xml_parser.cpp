@@ -406,6 +406,34 @@ ParseElementMarginBottomWithClass(const std::string &last_style,
   return LookupClassMarginBottom(last_class, class_map);
 }
 
+static book_xml_css_style_utils::TextAlign
+ResolveElementTextAlignWithClass(const std::string &style_attr,
+                                 const std::string &class_attr,
+                                 const epub_css_class_map::CssClassMap &class_map) {
+  book_xml_css_style_utils::TextAlign align =
+      book_xml_css_style_utils::TextAlign::Left;
+  if (book_xml_css_style_utils::TryParseTextAlign(style_attr.c_str(), &align))
+    return align;
+  if (epub_css_class_map::LookupTextAlignForClassAttr(class_attr, class_map,
+                                                      &align)) {
+    return align;
+  }
+  return book_xml_css_style_utils::TextAlign::Left;
+}
+
+static void AppendParagraphAlignMarker(
+    parsedata_t *p, book_xml_css_style_utils::TextAlign align) {
+  if (!p)
+    return;
+  if (align == book_xml_css_style_utils::TextAlign::Center) {
+    AppendParsedByte(p, TEXT_PARAGRAPH_CENTER);
+  } else if (align == book_xml_css_style_utils::TextAlign::Right) {
+    AppendParsedByte(p, TEXT_PARAGRAPH_RIGHT);
+  } else {
+    AppendParsedByte(p, TEXT_PARAGRAPH_LEFT);
+  }
+}
+
 static bool ShouldRenderHrRule(const std::string &style_attr,
                                const std::string &class_attr) {
   if (ContainsAsciiNoCase(class_attr, "transition"))
@@ -1607,6 +1635,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H1);
     p->last_h1_style = ExtractStyleAttr(attr);
     p->last_h1_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h1_style,
+                                            p->last_h1_class, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1637,6 +1668,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H2);
     p->last_h2_style = ExtractStyleAttr(attr);
     p->last_h2_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h2_style,
+                                            p->last_h2_class, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1667,6 +1701,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H3);
     p->last_h_style = ExtractStyleAttr(attr);
     p->last_h_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
+                                            p->css_class_map));
     {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
@@ -1683,6 +1720,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H4);
     p->last_h_style = ExtractStyleAttr(attr);
     p->last_h_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
+                                            p->css_class_map));
     {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
@@ -1699,6 +1739,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H5);
     p->last_h_style = ExtractStyleAttr(attr);
     p->last_h_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
+                                            p->css_class_map));
     {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
@@ -1715,6 +1758,9 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_H6);
     p->last_h_style = ExtractStyleAttr(attr);
     p->last_h_class = ExtractClassAttr(attr);
+    AppendParagraphAlignMarker(
+        p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
+                                            p->css_class_map));
     {
       const book_xml_css_style_utils::MarginTopResult mtr =
           ParseElementMarginTopWithClass(attr, p);
@@ -1737,14 +1783,10 @@ void start(void *data, const char *el, const char **attr) {
     p->paragraph_has_content = false;
     p->last_p_style = ExtractStyleAttr(attr);
     p->last_p_class = ExtractClassAttr(attr);
-    const book_xml_css_style_utils::TextAlign align = book_xml_css_style_utils::ParseTextAlign(p->last_p_style.c_str());
-    if (align == book_xml_css_style_utils::TextAlign::Center) {
-      AppendParsedByte(p, TEXT_PARAGRAPH_CENTER);
-    } else if (align == book_xml_css_style_utils::TextAlign::Right) {
-      AppendParsedByte(p, TEXT_PARAGRAPH_RIGHT);
-    } else {
-      AppendParsedByte(p, TEXT_PARAGRAPH_LEFT);
-    }
+    const book_xml_css_style_utils::TextAlign align =
+        ResolveElementTextAlignWithClass(p->last_p_style, p->last_p_class,
+                                         p->css_class_map);
+    AppendParagraphAlignMarker(p, align);
     const bool inside_list_item = book_xml_list_utils::IsInsideListItem(p);
     const bool tight_list_paragraph =
         book_xml_list_utils::HasPendingListItemContent(p);
@@ -2317,6 +2359,7 @@ void end(void *data, const char *el) {
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
+    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
     p->in_paragraph = false;
     p->paragraph_has_content = false;
   } else if (!strcmp(el, "div")) {
@@ -2336,6 +2379,7 @@ void end(void *data, const char *el) {
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
+    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
     if (!Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "h2")) {
@@ -2354,6 +2398,7 @@ void end(void *data, const char *el) {
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
+    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
     if (!Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "h3") || !strcmp(el, "h4") || !strcmp(el, "h5") ||
@@ -2397,6 +2442,8 @@ void end(void *data, const char *el) {
       for (int i = 0; i < lf_count; i++)
         linefeed(p);
     }
+    if (strcmp(el, "hr"))
+      AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
     if ((!strcmp(el, "h3")) && !Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "pre")) {

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Capítulo 10 — Alineación</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet.css"/>
+</head>
+<body>
+
+<h1 id="capitulo-10">Capítulo 10: Pruebas de alineación</h1>
+
+<!-- ── Bug 1: alineación vía clase CSS ───────────────────────────── -->
+
+<h2>1. Alineación mediante clase CSS</h2>
+
+<p>Este párrafo no tiene clase de alineación; debe aparecer alineado a la izquierda como referencia.</p>
+
+<p class="align-center">Este párrafo usa la clase <code>align-center</code> definida en la hoja de estilos. Debe aparecer centrado.</p>
+
+<p class="align-right">Este párrafo usa la clase <code>align-right</code>. Debe aparecer alineado a la derecha.</p>
+
+<p>Párrafo de referencia izquierda tras los párrafos con clase.</p>
+
+<!-- ── Bug 2: párrafo centrado que cruza de página ───────────────── -->
+
+<h2>2. Párrafo centrado que cruza de página</h2>
+
+<p class="align-center">Este párrafo largo está centrado y debe ocupar más de una página de la pantalla del 3DS, de modo que la primera línea de la segunda página también aparezca centrada y no vuelva a la izquierda. Primera oración de relleno para consumir espacio vertical. Segunda oración de relleno para seguir ocupando líneas de pantalla en la página. Tercera oración para asegurarse de cruzar el límite de página en dispositivos con pantalla pequeña. Cuarta oración más para añadir aún más líneas. Quinta oración de relleno. Sexta oración, el párrafo continúa en la siguiente página. Séptima oración para que el cruce de página sea inevitable. Octava oración de relleno final.</p>
+
+<p>Párrafo izquierdo de referencia tras el párrafo largo centrado.</p>
+
+<!-- ── Bug 3: headings y small con text-align ─────────────────────── -->
+
+<h2>3. Headings con alineación</h2>
+
+<h1 style="text-align: center">H1 centrado con style inline</h1>
+
+<p>Párrafo izquierdo entre headings.</p>
+
+<h2 class="align-center-heading">H2 centrado mediante clase CSS</h2>
+
+<p>Párrafo izquierdo tras H2 con clase.</p>
+
+<h5 style="text-align: right">H5 alineado a la derecha con style inline</h5>
+
+<p>Párrafo izquierdo tras H5.</p>
+
+<h2>4. Elemento small con alineación</h2>
+
+<p style="text-align: center">Párrafo centrado con <small>texto en small dentro de él</small> — el ancho de línea no debe verse afectado por el token de small.</p>
+
+<p style="text-align: right">Párrafo a la derecha con <small>texto en small</small> al inicio de la línea.</p>
+
+</body>
+</html>

@@ -29,6 +29,7 @@
 
 #include "app/app.h"
 #include "book/book.h"
+#include "book/page_alignment_utils.h"
 #include "book/book_xml_css_style_utils.h"
 #include "book/page_buffer_utils.h"
 #include "debug_log.h"
@@ -543,13 +544,12 @@ void Page::Draw(Text *ts) {
         } else {
           // Fallback: re-measure by scanning forward (used for LTR text in
           // mixed paragraphs or legacy page buffers without the token).
-          line_width = 0;
-          for (u16 scan = (u16)(i - 1); scan < length; scan++) {
-            u32 sc = buf[scan];
-            if (sc == '\n' || sc < 32)
-              break;
-            line_width += ts->GetAdvance((u16)sc);
-          }
+          line_width = page_alignment_utils::MeasureAlignedLineWidth(
+              buf, length, (size_t)(i - 1), ts->bold, ts->italic, mono,
+              [](u32 codepoint, unsigned char style, void *ctx) -> int {
+                return ((Text *)ctx)->GetAdvance(codepoint, style);
+              },
+              ts);
         }
         int right_edge = ts->display.width - ts->margin.right;
         int rtl_x = text_render_layout_utils::ComputeRtlLineStartX(
@@ -565,13 +565,12 @@ void Page::Draw(Text *ts) {
       } else if (ts->GetPenX() == ts->margin.left &&
                  (paragraph_align == book_xml_css_style_utils::TextAlign::Center ||
                   paragraph_align == book_xml_css_style_utils::TextAlign::Right)) {
-        int line_width = 0;
-        for (u16 scan = (u16)(i - 1); scan < length; scan++) {
-          u32 sc = buf[scan];
-          if (sc == '\n' || sc < 32)
-            break;
-          line_width += ts->GetAdvance((u16)sc);
-        }
+        int line_width = page_alignment_utils::MeasureAlignedLineWidth(
+            buf, length, (size_t)(i - 1), ts->bold, ts->italic, mono,
+            [](u32 codepoint, unsigned char style, void *ctx) -> int {
+              return ((Text *)ctx)->GetAdvance(codepoint, style);
+            },
+            ts);
         int available_width = ts->display.width - ts->margin.left - ts->margin.right;
         int x_offset = 0;
         if (paragraph_align == book_xml_css_style_utils::TextAlign::Center) {

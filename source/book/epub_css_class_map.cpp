@@ -148,9 +148,13 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
 
     using book_xml_css_style_utils::ParseMarginBottom;
     using book_xml_css_style_utils::ParseMarginTop;
+    using book_xml_css_style_utils::TextAlign;
+    using book_xml_css_style_utils::TryParseTextAlign;
 
     MarginTopResult mt = ParseMarginTop(b);
     MarginTopResult mb = ParseMarginBottom(b);
+    TextAlign text_align = TextAlign::Left;
+    const bool has_text_align = TryParseTextAlign(b, &text_align);
     const bool hide_list_markers =
         ContainsNoCase(block, "list-style-type:none") ||
         ContainsNoCase(block, "list-style-type: none") ||
@@ -158,7 +162,8 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
         ContainsNoCase(block, "list-style: none");
 
     if (mt.unit != MarginTopResult::Unit::None ||
-        mb.unit != MarginTopResult::Unit::None || hide_list_markers) {
+        mb.unit != MarginTopResult::Unit::None || hide_list_markers ||
+        has_text_align) {
       for (size_t i = 0; i < class_names.size(); i++) {
         CssClassMargins &entry = (*out)[class_names[i]];
         if (mt.unit != MarginTopResult::Unit::None)
@@ -167,6 +172,10 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
           entry.margin_bottom = mb;
         if (hide_list_markers)
           entry.hide_list_markers = true;
+        if (has_text_align) {
+          entry.has_text_align = true;
+          entry.text_align = text_align;
+        }
       }
     }
   }
@@ -238,6 +247,38 @@ bool LookupHideListMarkersForClassAttr(const std::string &class_attr,
   }
 
   return false;
+}
+
+bool LookupTextAlignForClassAttr(const std::string &class_attr,
+                                 const CssClassMap &class_map,
+                                 TextAlign *out) {
+  if (!out || class_attr.empty() || class_map.empty())
+    return false;
+
+  bool found = false;
+  size_t pos = 0;
+  while (pos < class_attr.size()) {
+    while (pos < class_attr.size() &&
+           (class_attr[pos] == ' ' || class_attr[pos] == '\t' ||
+            class_attr[pos] == '\r' || class_attr[pos] == '\n'))
+      ++pos;
+    const size_t start = pos;
+    while (pos < class_attr.size() && IsIdentChar(class_attr[pos]))
+      ++pos;
+    if (pos == start) {
+      if (pos < class_attr.size())
+        ++pos;
+      continue;
+    }
+
+    const std::string class_name = class_attr.substr(start, pos - start);
+    CssClassMap::const_iterator it = class_map.find(class_name);
+    if (it == class_map.end() || !it->second.has_text_align)
+      continue;
+    *out = it->second.text_align;
+    found = true;
+  }
+  return found;
 }
 
 } // namespace epub_css_class_map

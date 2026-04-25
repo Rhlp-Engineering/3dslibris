@@ -28,6 +28,7 @@ void TestParseCssIntoClassMapSupportsQualifiedAndGroupedSelectors() {
   const char *css =
       ".mt-inline { margin-top: 24px; }\n"
       "p.mb-class { margin-bottom: 8%; }\n"
+      ".align-center { text-align: center; }\n"
       ".mt-group, h2.mt-heading { margin-top: 12px; }\n"
       "div.note strong { margin-top: 99px; }\n"
       ".combo.one { margin-bottom: 77px; }\n";
@@ -35,7 +36,7 @@ void TestParseCssIntoClassMapSupportsQualifiedAndGroupedSelectors() {
   CssClassMap out;
   epub_css_class_map::ParseCssIntoClassMap(css, std::strlen(css), &out);
 
-  test::ExpectEq("parsed class count", (int)out.size(), 4);
+  test::ExpectEq("parsed class count", (int)out.size(), 5);
   test::ExpectTrue("simple class parsed", out.find("mt-inline") != out.end());
   test::ExpectTrue("element qualified class parsed",
                    out.find("mb-class") != out.end());
@@ -43,6 +44,7 @@ void TestParseCssIntoClassMapSupportsQualifiedAndGroupedSelectors() {
                    out.find("mt-group") != out.end());
   test::ExpectTrue("grouped selector qualified class parsed",
                    out.find("mt-heading") != out.end());
+  test::ExpectTrue("align class parsed", out.find("align-center") != out.end());
   test::ExpectTrue("descendant selector ignored",
                    out.find("note") == out.end());
   test::ExpectTrue("compound class selector ignored",
@@ -52,6 +54,11 @@ void TestParseCssIntoClassMapSupportsQualifiedAndGroupedSelectors() {
   ExpectMarginBottomPercent("mb-class", out["mb-class"], 8);
   ExpectMarginTopPx("mt-group", out["mt-group"], 12);
   ExpectMarginTopPx("mt-heading", out["mt-heading"], 12);
+  test::ExpectTrue("align-center keeps text-align",
+                   out["align-center"].has_text_align);
+  test::ExpectEq("align-center value",
+                 (int)out["align-center"].text_align,
+                 (int)book_xml_css_style_utils::TextAlign::Center);
 }
 
 void TestLookupMarginsForClassAttrMergesKnownClasses() {
@@ -98,6 +105,22 @@ void TestParseCssIntoClassMapDetectsListStyleNone() {
                     out["normal-list"].hide_list_markers);
 }
 
+void TestLookupTextAlignForClassAttrUsesLastKnownMatch() {
+  CssClassMap map;
+  map["align-left"].has_text_align = true;
+  map["align-left"].text_align = book_xml_css_style_utils::TextAlign::Left;
+  map["align-right"].has_text_align = true;
+  map["align-right"].text_align = book_xml_css_style_utils::TextAlign::Right;
+
+  book_xml_css_style_utils::TextAlign align =
+      book_xml_css_style_utils::TextAlign::Center;
+  const bool found = epub_css_class_map::LookupTextAlignForClassAttr(
+      "align-left align-right", map, &align);
+  test::ExpectTrue("found text align", found);
+  test::ExpectEq("last matching class wins", (int)align,
+                 (int)book_xml_css_style_utils::TextAlign::Right);
+}
+
 } // namespace
 
 int main() {
@@ -105,5 +128,6 @@ int main() {
   TestLookupMarginsForClassAttrMergesKnownClasses();
   TestLookupMarginsForClassAttrRejectsUnknownClasses();
   TestParseCssIntoClassMapDetectsListStyleNone();
+  TestLookupTextAlignForClassAttrUsesLastKnownMatch();
   return 0;
 }

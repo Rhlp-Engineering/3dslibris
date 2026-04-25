@@ -34,9 +34,68 @@ inline u8 ResolveParsedTextStyle(bool bold, bool italic, bool mono) {
   return TEXT_STYLE_REGULAR;
 }
 
+inline void RestoreParsedParagraphAlignmentMarker(parsedata_t *p) {
+  if (!p)
+    return;
+
+  book_xml_css_style_utils::TextAlign align =
+      book_xml_css_style_utils::TextAlign::Left;
+  bool have_align = false;
+  bool in_alignable_block = false;
+
+  if (parse_in(p, TAG_P)) {
+    in_alignable_block = true;
+    have_align = book_xml_css_style_utils::TryParseTextAlign(
+        p->last_p_style.c_str(), &align);
+    if (!have_align) {
+      have_align = epub_css_class_map::LookupTextAlignForClassAttr(
+          p->last_p_class, p->css_class_map, &align);
+    }
+  } else if (parse_in(p, TAG_H1)) {
+    in_alignable_block = true;
+    have_align = book_xml_css_style_utils::TryParseTextAlign(
+        p->last_h1_style.c_str(), &align);
+    if (!have_align) {
+      have_align = epub_css_class_map::LookupTextAlignForClassAttr(
+          p->last_h1_class, p->css_class_map, &align);
+    }
+  } else if (parse_in(p, TAG_H2)) {
+    in_alignable_block = true;
+    have_align = book_xml_css_style_utils::TryParseTextAlign(
+        p->last_h2_style.c_str(), &align);
+    if (!have_align) {
+      have_align = epub_css_class_map::LookupTextAlignForClassAttr(
+          p->last_h2_class, p->css_class_map, &align);
+    }
+  } else if (parse_in(p, TAG_H3) || parse_in(p, TAG_H4) || parse_in(p, TAG_H5) ||
+             parse_in(p, TAG_H6)) {
+    in_alignable_block = true;
+    have_align = book_xml_css_style_utils::TryParseTextAlign(
+        p->last_h_style.c_str(), &align);
+    if (!have_align) {
+      have_align = epub_css_class_map::LookupTextAlignForClassAttr(
+          p->last_h_class, p->css_class_map, &align);
+    }
+  }
+
+  if (!in_alignable_block)
+    return;
+
+  if (!have_align || align == book_xml_css_style_utils::TextAlign::Left) {
+    parse_append_page_byte(p, TEXT_PARAGRAPH_LEFT);
+  } else if (align == book_xml_css_style_utils::TextAlign::Center) {
+    parse_append_page_byte(p, TEXT_PARAGRAPH_CENTER);
+  } else if (align == book_xml_css_style_utils::TextAlign::Right) {
+    parse_append_page_byte(p, TEXT_PARAGRAPH_RIGHT);
+  } else {
+    parse_append_page_byte(p, TEXT_PARAGRAPH_LEFT);
+  }
+}
+
 inline void RestoreParsedStyleMarkers(parsedata_t *p) {
   if (!p)
     return;
+  RestoreParsedParagraphAlignmentMarker(p);
   if (parse_in(p, TAG_PRE))
     parse_append_page_byte(p, TEXT_PRE_ON);
   if (p->superscript)

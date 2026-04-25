@@ -24,6 +24,7 @@
     <item id="idx" href="text/indice-numerico.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch8" href="text/chapter-08-long.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch9" href="text/chapter-09-special.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch10" href="text/chapter-10-alignment.xhtml" media-type="application/xhtml+xml"/>
     <item id="img1" href="images/test-card.svg" media-type="image/svg+xml"/>
   </manifest>
 
@@ -40,6 +41,7 @@
     <itemref idref="idx"/>
     <itemref idref="ch8"/>
     <itemref idref="ch9"/>
+    <itemref idref="ch10"/>
   </spine>
 
   <guide>

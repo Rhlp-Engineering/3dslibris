@@ -83,5 +83,10 @@
       <navLabel><text>¿Quién es usted, señor? — Introducción</text></navLabel>
       <content src="text/chapter-09-special.xhtml#introduccion"/>
     </navPoint>
+
+    <navPoint id="nav-15" playOrder="15">
+      <navLabel><text>Capítulo 10: Pruebas de alineación</text></navLabel>
+      <content src="text/chapter-10-alignment.xhtml#capitulo-10"/>
+    </navPoint>
   </navMap>
 </ncx>

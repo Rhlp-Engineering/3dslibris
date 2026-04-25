@@ -8,13 +8,18 @@
 namespace epub_css_class_map {
 
 using book_xml_css_style_utils::MarginTopResult;
+using book_xml_css_style_utils::TextAlign;
 
 struct CssClassMargins {
   MarginTopResult margin_top;
   MarginTopResult margin_bottom;
   bool hide_list_markers;
+  bool has_text_align;
+  TextAlign text_align;
 
-  CssClassMargins() : hide_list_markers(false) {}
+  CssClassMargins()
+      : hide_list_markers(false), has_text_align(false),
+        text_align(TextAlign::Left) {}
 };
 
 // Map: bare class name (no '.') → extracted margins.
@@ -34,5 +39,9 @@ bool LookupMarginsForClassAttr(const std::string &class_attr,
 
 bool LookupHideListMarkersForClassAttr(const std::string &class_attr,
                                        const CssClassMap &class_map);
+
+bool LookupTextAlignForClassAttr(const std::string &class_attr,
+                                 const CssClassMap &class_map,
+                                 TextAlign *out);
 
 } // namespace epub_css_class_map

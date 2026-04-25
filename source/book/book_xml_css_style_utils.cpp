@@ -237,24 +237,38 @@ MarginTopResult ParseMarginBottom(const char *style) {
   return ParseMarginValue(style, "margin-bottom", 2);
 }
 
-TextAlign ParseTextAlign(const char *style) {
-  if (!style || !style[0])
-    return TextAlign::Left;
+bool TryParseTextAlign(const char *style, TextAlign *out) {
+  if (!out || !style || !style[0])
+    return false;
   const std::string style_lc = ToLowerAscii(std::string(style));
   if (style_lc.find("text-align: center") != std::string::npos ||
       style_lc.find("text-align:center") != std::string::npos) {
-    return TextAlign::Center;
+    *out = TextAlign::Center;
+    return true;
   }
   if (style_lc.find("text-align: right") != std::string::npos ||
       style_lc.find("text-align:right") != std::string::npos) {
-    return TextAlign::Right;
+    *out = TextAlign::Right;
+    return true;
   }
   if (style_lc.find("text-align: justify") != std::string::npos ||
       style_lc.find("text-align:justify") != std::string::npos) {
-    return TextAlign::Justify;
+    *out = TextAlign::Justify;
+    return true;
   }
+  if (style_lc.find("text-align: left") != std::string::npos ||
+      style_lc.find("text-align:left") != std::string::npos) {
+    *out = TextAlign::Left;
+    return true;
+  }
+  return false;
+}
+
+TextAlign ParseTextAlign(const char *style) {
+  TextAlign out = TextAlign::Left;
+  if (TryParseTextAlign(style, &out))
+    return out;
   return TextAlign::Left;
 }
 
 } // namespace book_xml_css_style_utils
-
