@@ -262,6 +262,7 @@ public:
   bool IsHomebrewEnvironment() const;
   bool IsAppletSuspended() const;
   bool ShouldAbortWork() const override;
+  void PrepareForShutdown();
   void HandleAppletSuspend();
   void HandleAppletResume();
 
@@ -386,6 +387,7 @@ private:
   bool applet_suspend_handled_;
   aptHookCookie apt_hook_cookie_;
   bool apt_hook_installed_;
+  bool shutdown_prepared_;
 
   void InitScreens();
   static void AptHookCallback(APT_HookType hook, void *param);

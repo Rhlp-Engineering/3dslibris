@@ -167,6 +167,7 @@ App::App()
   applet_resume_pending_ = false;
   applet_suspend_handled_ = false;
   apt_hook_installed_ = false;
+  shutdown_prepared_ = false;
   APT_CheckNew3DS(&is_new_3ds_);
   is_homebrew_ = envIsHomebrew();
   aptHook(&apt_hook_cookie_, App::AptHookCallback, this); // Install APT hook for handling app lifecycle events (suspend, resume, etc.).
@@ -208,6 +209,7 @@ App::App()
  */
 App::~App()
 {
+  PrepareForShutdown();
   if (apt_hook_installed_)
   { // Clean up APT hook on app exit.
     aptUnhook(&apt_hook_cookie_);
@@ -677,6 +679,56 @@ bool App::IsAppletSuspended() const { return applet_suspended_; }
 bool App::ShouldAbortWork() const
 {
   return applet_suspended_ || nav_.mode == AppMode::Quit;
+}
+
+void App::PrepareForShutdown()
+{
+  if (shutdown_prepared_)
+    return;
+  shutdown_prepared_ = true;
+
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(this,
+           "SHUTDOWN begin env=%s mode=%d current_session=%u opening_session=%u suspended=%u",
+           is_homebrew_ ? "3dsx/homebrew" : "cia/title", (int)nav_.mode,
+           reader_state_.current_book_session_id, reader_state_.opening.session_id,
+           applet_suspended_ ? 1u : 0u);
+#endif
+
+  pending_boot_reopen_ = false;
+  skip_next_browser_present_ = false;
+  applet_resume_pending_ = false;
+  applet_suspend_handled_ = false;
+  nav_.browser.wait_input_release = true;
+  nav_.browser.last_interaction_ms = osGetTime();
+
+  PersistPrefs();
+
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOG(this, "SHUTDOWN cancel workers begin");
+#endif
+  const size_t removed_jobs = PauseBrowserJobs();
+#ifndef DSLIBRIS_DEBUG
+  (void)removed_jobs;
+#endif
+
+  Book *opening_book = reader_state_.opening.book;
+  if (opening_book)
+  {
+    opening_book->RequestAbortOpen();
+    opening_book->CancelFixedLayoutDeferredWork();
+    opening_book->CancelAsyncReflowOpen();
+  }
+
+  CloseBook();
+  nav_.mode = AppMode::Quit;
+
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(this,
+           "SHUTDOWN cancel workers done removed_jobs=%u current_session=%u opening_session=%u",
+           (unsigned)removed_jobs, reader_state_.current_book_session_id,
+           reader_state_.opening.session_id);
+#endif
 }
 
 void App::AptHookCallback(APT_HookType hook, void *param)

@@ -22,13 +22,57 @@
 
 #include <3ds.h>
 #include <dirent.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "app/app.h"
+#include "debug_log.h"
 #include "path_utils.h"
 #include "version.h"
+
+namespace
+{
+
+#ifdef DSLIBRIS_DEBUG
+void ShutdownTrace(const char *fmt, ...)
+{
+  if (!fmt)
+    return;
+
+  FILE *log = fopen(paths::kLogFile, "a");
+  if (!log)
+    return;
+
+  char timestamp[80];
+  time_t rawtime;
+  time(&rawtime);
+  struct tm *info = localtime(&rawtime);
+  if (!info)
+  {
+    fclose(log);
+    return;
+  }
+  strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", info);
+
+  fprintf(log, "[%s] ", timestamp);
+  va_list args;
+  va_start(args, fmt);
+  vfprintf(log, fmt, args);
+  va_end(args);
+  fputc('\n', log);
+  fclose(log);
+}
+#else
+void ShutdownTrace(const char *fmt, ...)
+{
+  (void)fmt;
+}
+#endif
+
+} // namespace
 
 static void PresentCurrentFrameToBothBuffers(Text *presenter)
 {
@@ -124,13 +168,24 @@ int main(int argc, char **argv)
   App::SetInstance(app); // Set the global instance pointer for access in other modules.
   int result = app->Run();
 
+  DBG_LOGF(app, "SHUTDOWN begin env=%s result=%d",
+           app->IsHomebrewEnvironment() ? "3dsx/homebrew" : "cia/title",
+           result);
+  app->PrepareForShutdown();
+
   // Clean up and exit. App destructor will handle resource cleanup.
+  DBG_LOG(app, "SHUTDOWN App destructor begin");
   App::SetInstance(nullptr);
   delete app;
   app = nullptr;
+  ShutdownTrace("SHUTDOWN App destructor done");
 
   if (romfs_ready)
+  {
+    ShutdownTrace("SHUTDOWN romfsExit begin");
     romfsExit();
+    ShutdownTrace("SHUTDOWN romfsExit done");
+  }
 
   // If Run() returned early (error), wait for user
   if (result != 0)
@@ -148,11 +203,9 @@ int main(int argc, char **argv)
     }
   }
 
+  ShutdownTrace("SHUTDOWN gfxExit begin");
   gfxExit(); // Cleanly exit the graphics system and return to the 3DS home menu.
-  // In Homebrew Launcher (3dsx) mode the HBL invalidates the APT session
-  // before aptExit() runs via __appExit, causing a data abort at shutdown.
-  // Our app-level cleanup is complete at this point, so terminate directly.
-  if (envIsHomebrew())
-    svcExitProcess();
+  ShutdownTrace("SHUTDOWN gfxExit done");
+  ShutdownTrace("SHUTDOWN returning normally");
   return 0;
 }
