@@ -255,7 +255,8 @@ public:
                              InlineImageContext image_context,
                              InlineImageLayoutPlan *out);
   bool DrawInlineImage(Text *ts, u16 image_id,
-                       const InlineImageLayoutPlan *plan = NULL);
+                       const InlineImageLayoutPlan *plan = NULL,
+                       int current_screen = -1);
   void AddChapter(u16 page, const std::string &title, u8 level = 0);
   void ClearChapters();
   int GetFocusedInlineLinkIndex() const;

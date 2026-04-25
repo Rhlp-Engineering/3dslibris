@@ -465,7 +465,7 @@ void Page::Draw(Text *ts) {
         i += 2;
 
         InlineImageLayoutPlan image_plan{};
-        int current_screen = (ts->GetScreen() == first_screen) ? 0 : 1;
+        int current_screen = on_first_screen ? 0 : 1;
         book->PlanInlineImageLayout(ts, image_id, current_screen, ts->GetPenX(),
                                     ts->GetPenY(), ts->linebegan, next_image_context,
                                     &image_plan);
@@ -475,6 +475,7 @@ void Page::Draw(Text *ts) {
           if (!advance_to_next_screen()) {
             break;
           }
+          current_screen = on_first_screen ? 0 : 1;
         }
         if (image_plan.line_break_before && ts->linebegan) {
           if (!ts->PrintNewLine()) {
@@ -483,7 +484,7 @@ void Page::Draw(Text *ts) {
           ts->linebegan = false;
         }
 
-        book->DrawInlineImage(ts, image_id, &image_plan);
+        book->DrawInlineImage(ts, image_id, &image_plan, current_screen);
 
         bool stop_page_draw = false;
         switch (image_plan.mode) {

@@ -25,18 +25,18 @@ void ExpectTrue(const char *label, bool value) {
 
 void TestPlacementUsesContentArea() {
   const InlineImagePagePlacement p = ResolveInlineImagePagePlacement(
-      240, 400, 12, 12, 10, 36, 600, 1200, 2);
+      240, 400, 12, 12, 10, 36, 600, 1200, 2, 2, 0);
   ExpectEq("avail width excludes margins", p.avail_width, 212);
-  ExpectEq("avail height excludes ui", p.avail_height, 350);
+  ExpectEq("avail height excludes ui", p.avail_height, 352);
   ExpectTrue("draw height fits content box", p.draw_height <= p.avail_height);
   ExpectTrue("top respects top margin", p.start_y >= 12);
   ExpectTrue("bottom stays above footer",
-             p.start_y + p.draw_height <= 362);
+             p.start_y + p.draw_height <= 364);
 }
 
 void TestSmallImageCentersWithinContentBox() {
   const InlineImagePagePlacement p = ResolveInlineImagePagePlacement(
-      240, 320, 12, 12, 10, 16, 80, 60, 2);
+      240, 320, 12, 12, 10, 16, 80, 60, 2, 2, 0);
   ExpectEq("no upscale width", p.draw_width, 80);
   ExpectEq("no upscale height", p.draw_height, 60);
   ExpectTrue("x centered", p.start_x > 14);

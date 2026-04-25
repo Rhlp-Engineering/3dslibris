@@ -8,7 +8,11 @@ struct InlineImageScreenLayout {
 };
 
 InlineImageScreenLayout ResolveInlineImageScreenLayout(
-    bool current_screen_is_left, int full_bottom_margin);
+    bool current_screen_is_left, int full_bottom_margin, int line_height);
+
+int ResolveReadingScreenIndexForPhysicalScreen(bool turned_right,
+                                               bool current_screen_is_left);
 
 InlineImageScreenLayout ResolveInlineImageScreenLayoutForReadingScreen(
-    bool turned_right, int current_screen, int full_bottom_margin);
+    bool turned_right, int current_screen, int full_bottom_margin,
+    int line_height);

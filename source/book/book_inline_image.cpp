@@ -629,7 +629,8 @@ bool Book::PlanInlineImageLayout(Text *ts, u16 image_id, int current_screen,
   InlineImageLayoutRequest req{};
   const InlineImageScreenLayout screen_layout =
       ResolveInlineImageScreenLayoutForReadingScreen(
-          GetOrientation() != 0, current_screen, ts->margin.bottom);
+          GetOrientation() != 0, current_screen, ts->margin.bottom,
+          ts->GetHeight());
   req.screen_width = 240;
   req.screen_height = screen_layout.current_screen_height;
   req.next_screen_height = screen_layout.next_screen_height;
@@ -652,13 +653,17 @@ bool Book::PlanInlineImageLayout(Text *ts, u16 image_id, int current_screen,
 }
 
 bool Book::DrawInlineImage(Text *ts, u16 image_id,
-                           const InlineImageLayoutPlan *plan_ptr) {
+                           const InlineImageLayoutPlan *plan_ptr,
+                           int current_screen) {
   if (!ts)
     return false;
 
   InlineImageLayoutPlan local_plan{};
-  const bool left_screen = (ts->GetScreen() == ts->screenleft);
-  const int current_screen = left_screen ? 0 : 1;
+  if (current_screen < 0) {
+    const bool left_screen = (ts->GetScreen() == ts->screenleft);
+    current_screen = ResolveReadingScreenIndexForPhysicalScreen(
+        GetOrientation() != 0, left_screen);
+  }
   if (!plan_ptr) {
     if (!PlanInlineImageLayout(ts, image_id, current_screen, ts->GetPenX(),
                                ts->GetPenY(), ts->linebegan,
@@ -672,7 +677,8 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
   const int screen_w = 240;
   const InlineImageScreenLayout draw_screen_layout =
       ResolveInlineImageScreenLayoutForReadingScreen(
-          GetOrientation() != 0, current_screen, ts->margin.bottom);
+          GetOrientation() != 0, current_screen, ts->margin.bottom,
+          ts->GetHeight());
   const int screen_h = draw_screen_layout.current_screen_height;
   const int text_w = screen_w - ts->margin.left - ts->margin.right;
   const int line_height = ts->GetHeight();
@@ -704,7 +710,7 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
           ResolveInlineImagePagePlacement(
               screen_w, screen_h, ts->margin.left, ts->margin.right,
               ts->margin.top, draw_screen_layout.current_margin_bottom,
-              page_imgW, page_imgH, 2);
+              page_imgW, page_imgH, 2, 2, 0);
       draw_w = placement.draw_width;
       draw_h = placement.draw_height;
       start_x = placement.start_x;
@@ -792,18 +798,15 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
 
   // PAGE fallback: metadata was unavailable, compute from decoded pixels.
   if (need_page_recompute && page_imgW == 0 && page_imgH == 0) {
-    const int pad = 2;
-    const int avail_w = screen_w - (pad * 2);
-    const int avail_h = screen_h - (pad * 2);
-    int sx = (avail_w * 1024) / std::max(1, imgW);
-    int sy = (avail_h * 1024) / std::max(1, imgH);
-    int scale = std::min(sx, sy);
-    if (scale > 1024)
-      scale = 1024;
-    draw_w = std::max(1, (imgW * scale + 512) / 1024);
-    draw_h = std::max(1, (imgH * scale + 512) / 1024);
-    start_x = pad + (avail_w - draw_w) / 2;
-    start_y = pad + (avail_h - draw_h) / 2;
+    const InlineImagePagePlacement placement =
+        ResolveInlineImagePagePlacement(
+            screen_w, screen_h, ts->margin.left, ts->margin.right,
+            ts->margin.top, draw_screen_layout.current_margin_bottom, imgW,
+            imgH, 2, 2, 0);
+    draw_w = placement.draw_width;
+    draw_h = placement.draw_height;
+    start_x = placement.start_x;
+    start_y = placement.start_y;
   }
 
   // Guard: cap draw buffer to 1.5M pixels (same as EnsureInlineImageMetadata).

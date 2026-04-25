@@ -12,4 +12,5 @@ struct InlineImagePagePlacement {
 InlineImagePagePlacement ResolveInlineImagePagePlacement(
     int screen_width, int screen_height, int margin_left, int margin_right,
     int margin_top, int margin_bottom, int src_width, int src_height,
-    int padding = 2);
+    int horizontal_padding = 2, int top_padding = 2,
+    int bottom_padding = 0);
