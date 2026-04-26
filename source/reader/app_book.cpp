@@ -954,11 +954,17 @@ void ReaderController::HandleEventInBook()
   const u32 fixed_prev_chapter_keys = key.dup;
   const u32 fixed_next_chapter_keys = key.ddown;
 
-  const u32 standard_next_page_keys = key.a | key.r | key.down | key.zl;
-  const u32 standard_prev_page_keys = key.b | key.l | key.up | key.zr;
+  const u32 standard_next_page_keys =
+      reader_input_utils::ReflowableNextPageKeys(
+          key.a, key.r, key.down, key.ddown, key.zl);
+  const u32 standard_prev_page_keys =
+      reader_input_utils::ReflowablePrevPageKeys(
+          key.b, key.l, key.up, key.dup, key.zr);
 
-  const u32 bookmark_prev_keys = key.dright;
-  const u32 bookmark_next_keys = key.dleft;
+  const u32 bookmark_prev_keys =
+      reader_input_utils::ReflowableBookmarkPrevKeys(key.right, key.dright);
+  const u32 bookmark_next_keys =
+      reader_input_utils::ReflowableBookmarkNextKeys(key.left, key.dleft);
 
   const u32 back_to_library_keys = key.start;
   const u32 settings_keys = key.select;
@@ -1514,24 +1520,26 @@ u8 ReaderController::OpenBook()
       app_.PauseBrowserJobs();
     }
     DetachCurrentBookForSwitch(&app_, selected_book, session_id, "async-open");
+    app_.SetOpeningPending(true);
+    app_.SetOpeningBook(selected_book);
+    app_.SetOpeningSessionId(session_id);
+    app_.SetOpeningNeedsRelayout(relayout_state.needs_relayout);
+    app_.SetOpeningOldPageCount(relayout_state.old_page_count);
+    app_.SetOpeningOldPosition(relayout_state.old_position);
+    app_.MutableOpeningOldBookmarks() = relayout_state.old_bookmarks;
+    app_.SetOpeningStartedAtMs(osGetTime());
+    app_.SetMode(AppMode::Opening);
     if (selected_book->StartAsyncReflowOpen(session_id))
     {
-      app_.SetOpeningPending(true);
-      app_.SetOpeningBook(selected_book);
-      app_.SetOpeningSessionId(session_id);
-      app_.SetOpeningNeedsRelayout(relayout_state.needs_relayout);
-      app_.SetOpeningOldPageCount(relayout_state.old_page_count);
-      app_.SetOpeningOldPosition(relayout_state.old_position);
-      app_.MutableOpeningOldBookmarks() = relayout_state.old_bookmarks;
-      app_.SetOpeningStartedAtMs(osGetTime());
       DBG_LOGF(&app_, "REFLOW: async open submitted session=%u book=%s",
                session_id,
                selected_book->GetFileName()
                    ? selected_book->GetFileName()
                    : "");
-      app_.SetMode(AppMode::Opening);
       return 0;
     }
+    ResetOpeningState(&app_);
+    app_.SetMode(AppMode::Browser);
     DBG_LOGF(&app_, "REFLOW: async open fallback book=%s",
              selected_book->GetFileName()
                  ? selected_book->GetFileName()

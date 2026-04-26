@@ -78,6 +78,78 @@ bool IsLikelyListMarkerCodepoint(uint32_t cp) {
   return cp >= 0xF000 && cp <= 0xF8FF;
 }
 
+bool IsSimpleWhitespaceCodepoint(uint32_t cp) {
+  switch (cp) {
+  case '\t':
+  case '\n':
+  case '\r':
+  case 0x000B:
+  case 0x000C:
+  case 0x0085:
+  case 0x00A0:
+  case 0x2028:
+  case 0x2029:
+  case 0x202F:
+    return true;
+  default:
+    return cp == ' ';
+  }
+}
+
+bool IsSimpleLtrCodepoint(uint32_t cp) {
+  if (IsSimpleWhitespaceCodepoint(cp))
+    return true;
+  if (cp < 0x20 || cp == 0x7F)
+    return false;
+  if (cp < 0x0300)
+    return true;
+  if (cp >= 0x0300 && cp <= 0x036F)
+    return false;
+  if (cp < 0x0590)
+    return true;
+  if (cp >= 0x2010 && cp <= 0x203A)
+    return true;
+  return cp == 0x20AC || cp == 0x2122;
+}
+
+bool AllowsSimpleBreakAfter(uint32_t cp) {
+  return cp == '-' || cp == '/' || cp == 0x2010 || cp == 0x2013 ||
+         cp == 0x2014;
+}
+
+bool BuildTextRunUtf8Simple(const char *s, size_t len,
+                            std::vector<TextCodepoint> *out) {
+  if (!s || !out)
+    return false;
+
+  out->clear();
+  size_t offset = 0;
+  while (offset < len && s[offset] != '\0') {
+    uint32_t cp = 0;
+    size_t step = DecodeNextDisplayCodepoint(s + offset, len - offset, &cp);
+    if (!step)
+      return false;
+    if (!IsSimpleLtrCodepoint(cp))
+      return false;
+
+    TextCodepoint unit;
+    unit.codepoint = cp;
+    unit.byte_offset = offset;
+    unit.byte_length = step;
+    unit.grapheme_start = true;
+    unit.whitespace = IsSimpleWhitespaceCodepoint(cp);
+    unit.breakable_space =
+        unit.whitespace && cp != 0x00A0 && cp != 0x202F && cp != 0x2060;
+    unit.allow_break_after = unit.breakable_space || AllowsSimpleBreakAfter(cp);
+    unit.must_break_after =
+        cp == '\n' || cp == '\r' || cp == 0x000B || cp == 0x000C ||
+        cp == 0x0085 || cp == 0x2028 || cp == 0x2029;
+    out->push_back(unit);
+    offset += step;
+  }
+  return true;
+}
+
 size_t ConsumeOrderedListMarkerUtf8(const char *s, size_t len) {
   if (!s || !len)
     return 0;
@@ -139,6 +211,9 @@ bool BuildTextRunUtf8(const char *s, size_t len, const char *lang,
                       std::vector<TextCodepoint> *out) {
   if (!s || !out)
     return false;
+
+  if (BuildTextRunUtf8Simple(s, len, out))
+    return true;
 
   out->clear();
   static std::string normalized;

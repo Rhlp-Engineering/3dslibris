@@ -23,4 +23,6 @@ void Save(Book *book, const char *book_path,
           const char *regular_font,
           bool line_wrap_fix_enabled);
 
+void SavePending(Book *book);
+
 } // namespace mobi_page_cache

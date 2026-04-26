@@ -24,6 +24,19 @@ static bool IsClosingWordAttachedPunctuation(uint32_t cp) {
   return cp == '!' || cp == '?';
 }
 
+static bool IsArabicCodepoint(uint32_t cp) {
+  return (cp >= 0x0600 && cp <= 0x06FF) ||
+         (cp >= 0x08A0 && cp <= 0x08FF);
+}
+
+static bool IsRtlCodepoint(uint32_t cp) {
+  return (cp >= 0x0590 && cp <= 0x05FF) ||
+         (cp >= 0x0600 && cp <= 0x06FF) ||
+         (cp >= 0x08A0 && cp <= 0x08FF) ||
+         (cp >= 0xFB50 && cp <= 0xFDFF) ||
+         (cp >= 0xFE70 && cp <= 0xFEFF);
+}
+
 static uint64_t PerfNowMs() {
 #ifdef __3DS__
   return (uint64_t)osGetTime();
@@ -208,10 +221,23 @@ bool ShapeTextRunBidi(const char *s, size_t len, const char *lang,
   if (!out || out->empty())
     return true;
 
+  bool contains_rtl = false;
+  bool contains_arabic = false;
+  for (size_t i = 0; i < out->size(); i++) {
+    const uint32_t cp = (*out)[i].text.codepoint;
+    if (IsArabicCodepoint(cp))
+      contains_arabic = true;
+    if (IsRtlCodepoint(cp))
+      contains_rtl = true;
+  }
+  if (!contains_rtl)
+    return true;
+
   // Apply Arabic contextual shaping before BiDi so the analyser sees
   // presentation-form codepoints (still in RTL ranges, no BiDi change).
-  text_arabic_shaping::ApplyContextualShaping(out, measure_codepoint,
-                                               measure_ctx);
+  if (contains_arabic)
+    text_arabic_shaping::ApplyContextualShaping(out, measure_codepoint,
+                                                 measure_ctx);
 
   std::vector<uint32_t> cps;
   cps.reserve(out->size());

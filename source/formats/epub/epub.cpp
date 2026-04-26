@@ -85,9 +85,11 @@ static bool ShouldAbortEpubOpen(Book *book) {
           book->IsOpenAbortRequested());
 }
 
+#ifdef DSLIBRIS_DEBUG
 static u64 SafeElapsedMs(u64 later, u64 earlier) {
   return later >= earlier ? (later - earlier) : 0;
 }
+#endif
 
 using epub_toc_diag_utils::ClipForDiag;
 using epub_toc_diag_utils::LogResolvedChapterSamples;
@@ -108,17 +110,6 @@ using epub_toc_title_match_utils::FindChapterPageFromParsedHeadings;
 using epub_toc_title_match_utils::FindTocTitlePageGlobal;
 using epub_toc_title_match_utils::FindTocTitlePageInDocRange;
 using epub_toc_title_match_utils::PathLooksLikeTocDocForFallback;
-
-static void InitParsedataWithEpubDeps(parsedata_t *parsedata, Book *book,
-                                      const EpubDeps &deps) {
-  if (!parsedata)
-    return;
-  parse_init(parsedata);
-  parsedata->book = book;
-  parsedata->reporter = deps.reporter;
-  parsedata->ts = deps.ts;
-  parsedata->prefs = deps.prefs;
-}
 
 static std::string BuildChapterLabel(const std::string &path, int chapter_num) {
   std::string base = path;
@@ -504,17 +495,10 @@ int epub(Book *book, std::string name, bool metadataonly) {
   std::map<std::string, u16> page_start_by_href;
 
   epub_page_cache::StreamWriter stream_writer;
-  const bool use_stream =
-      stream_writer.Begin(book, name.c_str(),
-                          deps.ts ? (int)deps.ts->GetPixelSize() : 0,
-                          deps.ts ? (int)deps.ts->linespacing : 0,
-                          deps.paragraph_spacing, deps.paragraph_indent,
-                          deps.orientation,
-                          deps.ts ? (int)deps.ts->margin.left : 0,
-                          deps.ts ? (int)deps.ts->margin.right : 0,
-                          deps.ts ? (int)deps.ts->margin.top : 0,
-                          deps.ts ? (int)deps.ts->margin.bottom : 0,
-                          deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL);
+  // Avoid SD cache writes on the critical first-open path. The pages remain
+  // resident for reading, and FinalizeEpubParse marks the cache save pending so
+  // it can be flushed when the book is closed.
+  const bool use_stream = false;
 
   rc = ParseEpubSpineDocuments(
       uf, book, &parsedata, name, folder, hrefs, deps, &page_start_by_href,

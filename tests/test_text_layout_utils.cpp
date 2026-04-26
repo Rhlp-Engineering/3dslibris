@@ -18,6 +18,11 @@ void ExpectTrue(const char *label, bool value) {
     Fail(std::string(label) + ": expected true");
 }
 
+void ExpectFalse(const char *label, bool value) {
+  if (value)
+    Fail(std::string(label) + ": expected false");
+}
+
 void ExpectEq(const char *label, size_t actual, size_t expected) {
   if (actual != expected) {
     Fail(std::string(label) + ": expected " + std::to_string(expected) +
@@ -42,6 +47,23 @@ void TestShapeAndMeasure() {
   ExpectEq("run size", run.size(), (size_t)10);
   ExpectEq("measure all", text_layout_utils::MeasureTextRun(run, 0, run.size()),
            10);
+}
+
+void TestShapeSimpleLatinUtf8() {
+  const std::string text = std::string("caf\xC3\xA9 ") + "\xE2\x80\x94" +
+                           " ma\xC3\xB1"
+                           "ana";
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = true;
+  ExpectTrue("shape latin utf8",
+             text_layout_utils::ShapeTextRunBidi(text.c_str(), text.size(),
+                                                 NULL, MeasureMono, NULL, &run,
+                                                 &has_rtl));
+  ExpectFalse("latin utf8 is not rtl", has_rtl);
+  ExpectEq("latin utf8 codepoints", run.size(), (size_t)13);
+  ExpectEq("accented e codepoint", (int)run[3].text.codepoint, 0x00E9);
+  ExpectEq("em dash codepoint", (int)run[5].text.codepoint, 0x2014);
+  ExpectEq("enye codepoint", (int)run[9].text.codepoint, 0x00F1);
 }
 
 void TestFindLineBreaks() {
@@ -150,6 +172,7 @@ void TestPrepareDisplayUtf8_RtlDetection() {
 
 int main() {
   TestShapeAndMeasure();
+  TestShapeSimpleLatinUtf8();
   TestFindLineBreaks();
   TestFindPreformattedBreaks();
   TestMeasureCombinedBreaks();

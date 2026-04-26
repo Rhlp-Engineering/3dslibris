@@ -20,6 +20,7 @@ static const u16 kPageCacheTitleMaxBytes = 1000;
 static const u16 kPageCachePageMaxBytes = 4096;
 static const u16 kPageCacheChapterTitleMaxBytes = 2048;
 static const u16 kPageCachePathMaxBytes = 2048;
+static const size_t kPageCacheIoBufferBytes = 32768;
 
 struct MobiPageCacheHeader {
   u32 magic;
@@ -177,6 +178,7 @@ bool TryLoad(Book *book, const char *book_path,
   FILE *fp = fopen(cache_path.c_str(), "rb");
   if (!fp)
     return false;
+  setvbuf(fp, NULL, _IOFBF, kPageCacheIoBufferBytes);
 
   MobiPageCacheHeader hdr;
   if (fread(&hdr, 1, sizeof(hdr), fp) != sizeof(hdr)) {
@@ -292,6 +294,7 @@ void Save(Book *book, const char *book_path,
   FILE *fp = fopen(cache_path.c_str(), "wb");
   if (!fp)
     return;
+  setvbuf(fp, NULL, _IOFBF, kPageCacheIoBufferBytes);
 
   bool ok = fwrite(&hdr, 1, sizeof(hdr), fp) == sizeof(hdr);
   if (ok)
@@ -329,6 +332,31 @@ void Save(Book *book, const char *book_path,
   fclose(fp);
   if (!ok)
     remove(cache_path.c_str());
+}
+
+void SavePending(Book *book) {
+  if (!book || !book->HasPendingMobiPageCacheSave())
+    return;
+
+  const char *folder = book->GetFolderName();
+  const char *file = book->GetFileName();
+  if (!folder || !*folder || !file || !*file) {
+    book->SetPendingMobiPageCacheSave(false);
+    return;
+  }
+
+  std::string path(folder);
+  path.push_back('/');
+  path += file;
+
+  const Book::MobiCacheSaveParams &p = book->GetMobiCacheSaveParams();
+  Save(book, path.c_str(), p.pixel_size, p.line_spacing,
+       p.paragraph_spacing, p.paragraph_indent, p.orientation, p.margin_left,
+       p.margin_right, p.margin_top, p.margin_bottom,
+       p.regular_font.empty() ? NULL : p.regular_font.c_str(),
+       p.line_wrap_fix_enabled);
+
+  book->SetPendingMobiPageCacheSave(false);
 }
 
 } // namespace mobi_page_cache

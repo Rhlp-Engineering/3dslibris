@@ -18,6 +18,7 @@
 #include "book/heading_layout.h"
 #include "formats/epub/epub.h"
 #include "formats/epub/epub_page_cache.h"
+#include "formats/mobi/mobi_page_cache.h"
 #include "main.h"
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
@@ -258,6 +259,7 @@ Book::Book(const BookContext &c) : ctx(c)
 
   // Cache state / rendering heuristics
   epub_page_cache_save_pending = false;
+  mobi_page_cache_save_pending = false;
   mobi_line_wrap_fix = false;
   parsed_with_mobi_line_wrap_fix = false;
   browser_display_name_cached = false;
@@ -748,6 +750,10 @@ void Book::Close()
       reflow_cache_save_utils::ShouldFlushDeferredCacheSaveOnClose(
           epub_page_cache_save_pending, IsAsyncReflowOpenPending(),
           (unsigned int)GetPageCount());
+  const bool flush_pending_mobi_cache =
+      reflow_cache_save_utils::ShouldFlushDeferredCacheSaveOnClose(
+          mobi_page_cache_save_pending, IsAsyncReflowOpenPending(),
+          (unsigned int)GetPageCount());
   DBG_LOGF(r, "BOOK close: cancel-async-reflow book=%s", filename.c_str());
   CancelAsyncReflowOpen();
   if (flush_pending_epub_cache)
@@ -756,7 +762,14 @@ void Book::Close()
     epub_page_cache::SavePending(this, true);
     DBG_LOGF(r, "BOOK close: save-epub-cache done book=%s", filename.c_str());
   }
+  if (flush_pending_mobi_cache)
+  {
+    DBG_LOGF(r, "BOOK close: save-mobi-cache begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+    mobi_page_cache::SavePending(this);
+    DBG_LOGF(r, "BOOK close: save-mobi-cache done book=%s", filename.c_str());
+  }
   epub_page_cache_save_pending = false;
+  mobi_page_cache_save_pending = false;
   DBG_LOGF(r, "BOOK close: clear-pages count=%d book=%s", (int)pages.size(), filename.c_str());
   std::vector<Page *>::iterator it = pages.begin();
   while (it != pages.end())
@@ -840,6 +853,41 @@ void Book::SetPendingEpubPageCacheSaveWithParams(
 const Book::EpubCacheSaveParams &Book::GetEpubCacheSaveParams() const
 {
   return epub_cache_save_params;
+}
+
+bool Book::HasPendingMobiPageCacheSave() const
+{
+  return mobi_page_cache_save_pending;
+}
+
+void Book::SetPendingMobiPageCacheSave(bool pending)
+{
+  mobi_page_cache_save_pending = pending;
+}
+
+void Book::SetPendingMobiPageCacheSaveWithParams(
+    int pixel_size, int line_spacing, int paragraph_spacing,
+    int paragraph_indent, int orientation,
+    int margin_left, int margin_right, int margin_top, int margin_bottom,
+    const char *regular_font, bool line_wrap_fix_enabled)
+{
+  mobi_page_cache_save_pending = true;
+  mobi_cache_save_params.pixel_size = pixel_size;
+  mobi_cache_save_params.line_spacing = line_spacing;
+  mobi_cache_save_params.paragraph_spacing = paragraph_spacing;
+  mobi_cache_save_params.paragraph_indent = paragraph_indent;
+  mobi_cache_save_params.orientation = orientation;
+  mobi_cache_save_params.margin_left = margin_left;
+  mobi_cache_save_params.margin_right = margin_right;
+  mobi_cache_save_params.margin_top = margin_top;
+  mobi_cache_save_params.margin_bottom = margin_bottom;
+  mobi_cache_save_params.regular_font = regular_font ? regular_font : "";
+  mobi_cache_save_params.line_wrap_fix_enabled = line_wrap_fix_enabled;
+}
+
+const Book::MobiCacheSaveParams &Book::GetMobiCacheSaveParams() const
+{
+  return mobi_cache_save_params;
 }
 
 unsigned int Book::GetLayoutRevision() const { return layout_revision; }

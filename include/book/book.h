@@ -170,6 +170,26 @@ public:
           margin_top(0), margin_bottom(0) {}
   };
   EpubCacheSaveParams epub_cache_save_params;
+  bool mobi_page_cache_save_pending;
+  struct MobiCacheSaveParams
+  {
+    int pixel_size;
+    int line_spacing;
+    int paragraph_spacing;
+    int paragraph_indent;
+    int orientation;
+    int margin_left;
+    int margin_right;
+    int margin_top;
+    int margin_bottom;
+    std::string regular_font;
+    bool line_wrap_fix_enabled;
+    MobiCacheSaveParams()
+        : pixel_size(0), line_spacing(0), paragraph_spacing(0),
+          paragraph_indent(0), orientation(0), margin_left(0), margin_right(0),
+          margin_top(0), margin_bottom(0), line_wrap_fix_enabled(false) {}
+  };
+  MobiCacheSaveParams mobi_cache_save_params;
   //! Per-book opt-in for collapsing visually hard-wrapped MOBI prose.
   bool mobi_line_wrap_fix;
   //! Remembers which wrap-fix state produced the currently cached pages.
@@ -351,6 +371,14 @@ public:
       int margin_left, int margin_right, int margin_top, int margin_bottom,
       const char *regular_font);
   const EpubCacheSaveParams &GetEpubCacheSaveParams() const;
+  bool HasPendingMobiPageCacheSave() const;
+  void SetPendingMobiPageCacheSave(bool pending);
+  void SetPendingMobiPageCacheSaveWithParams(
+      int pixel_size, int line_spacing, int paragraph_spacing,
+      int paragraph_indent, int orientation,
+      int margin_left, int margin_right, int margin_top, int margin_bottom,
+      const char *regular_font, bool line_wrap_fix_enabled);
+  const MobiCacheSaveParams &GetMobiCacheSaveParams() const;
   void ResetCbzFailureState();
   bool IsMobiFile() const;
   bool GetMobiLineWrapFix() const;

@@ -117,29 +117,23 @@ static bool TryLoadMobiPageCache(Book *book, const char *book_path,
       book->GetMobiLineWrapFix());
 }
 
-static void SaveMobiPageCache(Book *book, const char *book_path,
-                               const BookParseDeps &deps,
-                               bool line_wrap_fix_enabled) {
-  if (!book || !book_path || !deps.reporter ||
-      book->GetPageCount() == 0)
+static void DeferMobiPageCacheSave(Book *book, const BookParseDeps &deps,
+                                   bool line_wrap_fix_enabled) {
+  if (!book || book->GetPageCount() == 0)
     return;
   const TextLayoutSnapshot &layout = deps.layout;
   if (layout.pixel_size == 0)
     return;
 #ifdef DSLIBRIS_DEBUG
-  DBG_LOGF(deps.reporter, "MOBI: cache-save start pages=%u",
-           (unsigned)book->GetPageCount());
+  if (deps.reporter)
+    DBG_LOGF(deps.reporter, "MOBI: cache-save deferred pages=%u",
+             (unsigned)book->GetPageCount());
 #endif
-  mobi_page_cache::Save(book, book_path, layout.pixel_size,
-                        layout.linespacing, deps.paragraph_spacing,
-                        deps.paragraph_indent, deps.orientation,
-                        layout.margin_left, layout.margin_right,
-                        layout.margin_top, layout.margin_bottom,
-                        layout.regular_font_path.c_str(),
-                        line_wrap_fix_enabled);
-#ifdef DSLIBRIS_DEBUG
-  DBG_LOGF(deps.reporter, "MOBI: cache-save done");
-#endif
+  book->SetPendingMobiPageCacheSaveWithParams(
+      layout.pixel_size, layout.linespacing, deps.paragraph_spacing,
+      deps.paragraph_indent, deps.orientation, layout.margin_left,
+      layout.margin_right, layout.margin_top, layout.margin_bottom,
+      layout.regular_font_path.c_str(), line_wrap_fix_enabled);
 }
 
 static std::string DecodeMobiBytesToUtf8(const std::string &in, u32 encoding,
@@ -598,7 +592,8 @@ static void FinalizeImmediateMobiParse(Book *book, const char *path,
              (unsigned)book->GetChapters().size());
   }
 #endif
-  SaveMobiPageCache(book, path, deps, deferred->line_wrap_fix_applied);
+  (void)path;
+  DeferMobiPageCacheSave(book, deps, deferred->line_wrap_fix_applied);
   book->MarkMobiRenderSettingsApplied(deferred->line_wrap_fix_applied);
 }
 
