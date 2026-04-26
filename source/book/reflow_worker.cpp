@@ -272,14 +272,18 @@ void Book::CancelAsyncReflowOpen() {
                "REFLOW cancel: joining thread session=%u book=%s",
                (unsigned)w->session_id, GetFileName() ? GetFileName() : "");
 #endif
-    // Use a short timeout instead of U64_MAX. If the main thread is blocked
-    // here during applet suspension, the system may panic because the app
-    // cannot respond to APT messages while waiting for the worker to finish
-    // a long parse.
-    Result join_rc = threadJoin(w->thread_handle, 100 * 1000000ULL);
-    if (R_SUCCEEDED(join_rc)) {
-      threadFree(w->thread_handle);
-      w->thread_handle = NULL;
+    // All current callers either tear down or immediately reuse this Book.
+    // Returning while the worker still runs can corrupt the Book state when
+    // Close() frees pages/caches or when a new open starts on the same object.
+    // Async opens are kept alive during HOME suspend, so explicit cancellation
+    // is allowed to wait here until the worker exits cooperatively.
+    while (w->thread_handle) {
+      Result join_rc = threadJoin(w->thread_handle, 100 * 1000000ULL);
+      if (R_SUCCEEDED(join_rc)) {
+        threadFree(w->thread_handle);
+        w->thread_handle = NULL;
+        break;
+      }
     }
   }
   if (!w->thread_handle) {
