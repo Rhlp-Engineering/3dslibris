@@ -108,13 +108,9 @@ static void SyncLibraryButtonLayout(Button *button, bool paged) {
   if (paged) {
     button->Move(PREFS_FOOTER_MID_X, PREFS_FOOTER_Y);
     button->Resize(PREFS_FOOTER_MID_W, PREFS_FOOTER_BTN_H);
-    button->Label("library");
-    button->SetIcon(UI_BUTTON_ICON_NONE);
   } else {
     button->Move(PREFS_LIBRARY_BTN_X, PREFS_LIBRARY_BTN_Y);
     button->Resize(PREFS_LIBRARY_BTN_W, PREFS_LIBRARY_BTN_H);
-    button->Label("library");
-    button->SetIcon(UI_BUTTON_ICON_NONE);
   }
 }
 
