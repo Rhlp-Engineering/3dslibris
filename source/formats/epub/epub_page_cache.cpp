@@ -336,7 +336,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
     DBG_LOGF(r, "EPUB cache save: fopen failed");
     return;
   }
-  setvbuf(fp, NULL, _IOFBF, 32768);
+  setvbuf(fp, NULL, _IOFBF, 262144);
 
   bool ok = fwrite(&hdr, 1, sizeof(hdr), fp) == sizeof(hdr);
   DBG_LOGF(r, "EPUB cache save: write-hdr ok=%d", (int)ok);
@@ -463,11 +463,10 @@ bool StreamWriter::Begin(Book *book, const char *book_path, int pixel_size,
   if (!fp_)
     return false;
   // Use a large write buffer to amortise per-page fwrite() calls into
-  // block-sized I/O on the SD card. Without this, 800+ tiny fwrite()s
-  // (2-16 KB each) serialise through the SD controller one at a time.
-  // 32 KB is large enough to batch ~20–100 pages per physical write while
-  // staying well within New3DS RAM budget.
-  setvbuf(fp_, NULL, _IOFBF, 32768);
+  // block-sized I/O on the SD card. Without this, each ctrulib FSFILE_Write
+  // IPC call adds ~1s of overhead per 32 KB flush, making large books
+  // (e.g. 9000+ pages) take many minutes to save.
+  setvbuf(fp_, NULL, _IOFBF, 262144);
 
   const char *title_c = book->GetTitle();
   std::string title = title_c ? title_c : "";

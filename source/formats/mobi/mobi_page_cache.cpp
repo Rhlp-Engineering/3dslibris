@@ -20,7 +20,7 @@ static const u16 kPageCacheTitleMaxBytes = 1000;
 static const u16 kPageCachePageMaxBytes = 4096;
 static const u16 kPageCacheChapterTitleMaxBytes = 2048;
 static const u16 kPageCachePathMaxBytes = 2048;
-static const size_t kPageCacheIoBufferBytes = 32768;
+static const size_t kPageCacheIoBufferBytes = 262144;
 
 struct MobiPageCacheHeader {
   u32 magic;
