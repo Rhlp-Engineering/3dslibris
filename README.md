@@ -81,8 +81,9 @@ Library:
 Standard reading:
 
 - `A` / `B` / `L` / `R`: turn pages
+- `ZL` / `ZR` (New 3DS): previous or next page
 - `D-Pad Left` / `D-Pad Right`: jump between bookmarks
-- `Y`: toggle bookmark
+- `Y`: toggle bookmark; hold `Y` on a page with inline links to enter link-focus mode, then D-Pad to move and `A` to follow
 - `X`: change background color
 - `SELECT`: open `BOOK` settings
 - `START`: return to library
