@@ -41,6 +41,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include <stdio.h>
 #include <set>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 typedef BookParseDeps EpubDeps;
@@ -218,9 +220,9 @@ int epub_resolve_toc(Book *book, std::string filepath) {
   std::vector<ChapterEntry> resolved;
   const std::vector<ChapterEntry> parsed_headings = book->GetChapters();
   std::map<u16, bool> used_pages_non_fragment;
-  std::map<std::string, u16> page_start_by_href_lc;
-  std::map<std::string, u16> page_start_by_basename_lc;
-  std::set<std::string> basename_lc_ambiguous;
+  std::unordered_map<std::string, u16> page_start_by_href_lc;
+  std::unordered_map<std::string, u16> page_start_by_basename_lc;
+  std::unordered_set<std::string> basename_lc_ambiguous;
   std::vector<u16> doc_starts;
   size_t stat_exact = 0;
   size_t stat_nofrag = 0;

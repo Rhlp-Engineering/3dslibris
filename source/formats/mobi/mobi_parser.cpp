@@ -279,8 +279,8 @@ static void CleanupDecodedMobiText(IStatusReporter *reporter, std::string *text,
   std::string text_before_mobi_cleanup;
   std::vector<u16> image_ids_before_cleanup;
   if (track_image_tokens) {
-    text_before_mobi_cleanup = *text;
-    CollectMobiInlineImageTokenIds(*text, &image_ids_before_cleanup);
+    text_before_mobi_cleanup = std::move(*text);
+    CollectMobiInlineImageTokenIds(text_before_mobi_cleanup, &image_ids_before_cleanup);
   }
 
 #ifdef DSLIBRIS_DEBUG
@@ -292,7 +292,7 @@ static void CleanupDecodedMobiText(IStatusReporter *reporter, std::string *text,
 
   if (track_image_tokens) {
     *text = mobi_text_cleanup::RepairCommonMojibakePreservingMobiImageTokens(
-        *text);
+        text_before_mobi_cleanup);
   } else {
     *text = mobi_text_cleanup::RepairCommonMojibake(*text);
   }
@@ -331,7 +331,7 @@ static void CleanupDecodedMobiText(IStatusReporter *reporter, std::string *text,
     std::vector<u16> image_ids_after_cleanup;
     CollectMobiInlineImageTokenIds(*text, &image_ids_after_cleanup);
     if (image_ids_before_cleanup != image_ids_after_cleanup) {
-      *text = text_before_mobi_cleanup;
+      *text = std::move(text_before_mobi_cleanup);
       text_post_cleanup = text->size();
     }
   }
