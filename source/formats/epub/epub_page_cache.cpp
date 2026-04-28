@@ -179,8 +179,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
   FILE *fp = fopen(cache_path.c_str(), "rb");
   if (!fp)
     return false;
-  // Batch SD card reads: 809+ small fread()s become ~handful of 32KB reads.
-  setvbuf(fp, NULL, _IOFBF, 32768);
+  setvbuf(fp, NULL, _IOFBF, 262144);
 
   EpubPageCacheHeader hdr;
   if (fread(&hdr, 1, sizeof(hdr), fp) != sizeof(hdr)) {
