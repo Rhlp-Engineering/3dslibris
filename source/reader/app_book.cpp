@@ -926,7 +926,13 @@ void ReaderController::HandleEventInOpening()
       bookcurrent_->HasPendingMobiPageCacheSave())
   {
     DrawOpeningSplashImpl(&app_, 0, 0, "saving cache...");
+#ifdef DSLIBRIS_DEBUG
+    u64 t0_flush = osGetTime();
+#endif
     bookcurrent_->FlushPendingCacheSaves();
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF(&app_, "FlushPendingCacheSaves (open): ms=%u", (unsigned)(osGetTime() - t0_flush));
+#endif
   }
 
   app_.ShowCurrentBookView();
@@ -1408,8 +1414,8 @@ void ReaderController::ToggleBookmark()
 
   if (!found)
   {
-    bookmarks.push_back(pagecurrent);
-    bookmarks.sort();
+    auto it = std::lower_bound(bookmarks.begin(), bookmarks.end(), pagecurrent);
+    bookmarks.insert(it, pagecurrent);
   }
 
   DrawBookPage(bookcurrent_, ts);
@@ -1635,7 +1641,13 @@ u8 ReaderController::OpenBook()
       bookcurrent_->HasPendingMobiPageCacheSave())
   {
     DrawOpeningSplashImpl(&app_, 0, 0, "saving cache...");
+#ifdef DSLIBRIS_DEBUG
+    u64 t0_flush2 = osGetTime();
+#endif
     bookcurrent_->FlushPendingCacheSaves();
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF(&app_, "FlushPendingCacheSaves (reopen): ms=%u", (unsigned)(osGetTime() - t0_flush2));
+#endif
   }
 
   if (bookcurrent_->GetPosition() >= pageCount)

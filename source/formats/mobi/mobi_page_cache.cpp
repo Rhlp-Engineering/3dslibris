@@ -2,6 +2,7 @@
 
 #include "book/book.h"
 #include "book/page.h"
+#include "debug_log.h"
 #include "formats/common/page_cache_utils.h"
 #include "path_utils.h"
 
@@ -262,6 +263,10 @@ void Save(Book *book, const char *book_path,
           bool line_wrap_fix_enabled) {
   if (!book || !book_path || book->GetPageCount() == 0)
     return;
+#ifdef DSLIBRIS_DEBUG
+  IStatusReporter *r_timing = book->GetStatusReporter();
+  u64 t0_save = osGetTime();
+#endif
   EnsureCacheDirs();
   std::string cache_path =
       BuildCachePath(book_path, pixel_size, line_spacing,
@@ -332,6 +337,10 @@ void Save(Book *book, const char *book_path,
   fclose(fp);
   if (!ok)
     remove(cache_path.c_str());
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(r_timing, "MOBI cache save: done ok=%d ms=%u pages=%d",
+           (int)ok, (unsigned)(osGetTime() - t0_save), (int)book->GetPageCount());
+#endif
 }
 
 void SavePending(Book *book) {

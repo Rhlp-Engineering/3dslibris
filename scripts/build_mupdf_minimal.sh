@@ -57,7 +57,7 @@ cd "$MUPDF_DIR"
   CXX="$CXX_BIN" \
   AR="$AR_BIN" \
   RANLIB="$RANLIB_BIN" \
-  XCFLAGS="-D__3DS__ -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -mword-relocations -O2 -ffunction-sections -fdata-sections -DFZ_ENABLE_ICC=0 -DFZ_ENABLE_JPX=0" \
+  XCFLAGS="-D__3DS__ -march=armv6k -mtune=mpcore -mfloat-abi=hard -mtp=soft -mword-relocations -O2 -ffunction-sections -fdata-sections -DFZ_ENABLE_ICC=0 -DFZ_ENABLE_JPX=0 -w" \
   XLIBS="-lm"
 
 test -f "$OUT_DIR/libmupdf.a"

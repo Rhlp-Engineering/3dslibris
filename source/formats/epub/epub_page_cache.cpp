@@ -113,33 +113,6 @@ static void EnsureCacheDirs() {
   initialized = true;
 }
 
-static std::vector<page_cache_utils::CachedPage>
-CollectPages(Book *book, bool closing) {
-  std::vector<page_cache_utils::CachedPage> pages;
-  if (!book)
-    return pages;
-
-  const u16 page_count = book->GetPageCount();
-  pages.reserve(page_count);
-  for (u16 i = 0; i < page_count; i++) {
-    if (open_cancel_poll::Poll(closing ? nullptr : book, book->GetStatusReporter(),
-                               "epub-cache-collect-pages")) {
-      return std::vector<page_cache_utils::CachedPage>();
-    }
-    Page *page = book->GetPage((int)i);
-    const int length = page ? page->GetLength() : 0;
-    page_cache_utils::CachedPage cached_page;
-    if (page && length > 0) {
-      const u32 *buffer = page->GetBuffer();
-      if (!buffer)
-        return std::vector<page_cache_utils::CachedPage>();
-      cached_page.assign(buffer, buffer + length);
-    }
-    pages.push_back(cached_page);
-  }
-  return pages;
-}
-
 static void AppendPages(Book *book,
                         const std::vector<page_cache_utils::CachedPage> &pages) {
   if (!book)
@@ -299,6 +272,9 @@ void Save(Book *book, const char *book_path, int pixel_size,
     return;
 
   DBG_LOGF(r, "EPUB cache save: begin pages=%d closing=%d", (int)book->GetPageCount(), (int)closing);
+#ifdef DSLIBRIS_DEBUG
+  u64 t0_save = osGetTime();
+#endif
   EnsureCacheDirs();
 
   EpubCacheLayoutParams params = BuildLayoutParams(
@@ -407,6 +383,10 @@ void Save(Book *book, const char *book_path, int pixel_size,
   fclose(fp);
   if (!ok)
     remove(cache_path.c_str());
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(r, "EPUB cache save: done ok=%d ms=%u pages=%d",
+           (int)ok, (unsigned)(osGetTime() - t0_save), (int)book->GetPageCount());
+#endif
 }
 
 void SavePending(Book *book, bool closing) {

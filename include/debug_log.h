@@ -79,15 +79,21 @@ void Logf(IStatusReporter *reporter, int level, uint32_t category,
 
 #define DBG_LOG_CAT(app_ptr, category, msg)                                     \
   do {                                                                           \
+    _Pragma("GCC diagnostic push")                                               \
+    _Pragma("GCC diagnostic ignored \"-Wnonnull-compare\"")                     \
     if ((app_ptr) != nullptr && DBG_SHOULD_LOG(DBG_LEVEL_INFO, (category)))     \
       debug_log::Log((app_ptr), DBG_LEVEL_INFO, (uint32_t)(category), (msg));   \
+    _Pragma("GCC diagnostic pop")                                               \
   } while (0)
 
 #define DBG_LOGF_CAT(app_ptr, level, category, fmt, ...)                         \
   do {                                                                            \
+    _Pragma("GCC diagnostic push")                                               \
+    _Pragma("GCC diagnostic ignored \"-Wnonnull-compare\"")                     \
     if ((app_ptr) != nullptr && DBG_SHOULD_LOG((level), (category)))             \
       debug_log::Logf((app_ptr), (level), (uint32_t)(category), (fmt),           \
                       ##__VA_ARGS__);                                             \
+    _Pragma("GCC diagnostic pop")                                               \
   } while (0)
 
 // Backward-compatible defaults.

@@ -415,15 +415,6 @@ bool HasCbzNeighborPending(const Book::CbzState *cbz_state, int page_index) {
   return false;
 }
 
-void ResetCbzDeferredCachesForSynchronousRender(Book::CbzState *cbz_state) {
-  if (!cbz_state)
-    return;
-  ResetCbzBitmapCache(&cbz_state->current_interactive);
-  ResetCbzAdjacentSlot(&cbz_state->prev_slot);
-  ResetCbzAdjacentSlot(&cbz_state->next_slot);
-  cbz_state->preload_pending = false;
-}
-
 } // namespace
 
 void Book::ResetCbzTransientViewState(bool restart_worker) {

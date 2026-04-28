@@ -41,18 +41,6 @@ static std::string BuildDocPath(const std::string &opf_folder,
   return NormalizePath(opf_folder + "/" + UrlDecode(href));
 }
 
-static bool FindManifestItemPath(epub_data_t &data, const std::string &id,
-                                 const std::string &opf_folder,
-                                 std::string &path_out) {
-  for (auto item : data.manifest) {
-    if (item->id == id) {
-      path_out = BuildDocPath(opf_folder, item->href);
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool LocateZipEntrySafe(unzFile uf, const std::string &entry_path) {
   if (!uf || entry_path.empty())
     return false;
@@ -159,7 +147,6 @@ static bool DecodePngCoverThumbnail(const std::vector<u8> &decodebuf,
   }
 
   PngMemoryReader reader = {decodebuf.data(), decodebuf.size(), 0};
-  bool ok = false;
   std::vector<u16> thumb;
   std::vector<png_byte> row_buf;
 
@@ -259,107 +246,6 @@ static bool DecodePngCoverThumbnail(const std::vector<u8> &decodebuf,
   *thumb_w_out = thumb_w;
   *thumb_h_out = thumb_h;
   return true;
-}
-
-static bool RenderSvgCoverThumbnail(const std::vector<u8> &svg_buf,
-                                    std::vector<u16> *thumb_pixels,
-                                    int *thumb_w_out, int *thumb_h_out) {
-  if (!thumb_pixels || !thumb_w_out || !thumb_h_out || svg_buf.empty())
-    return false;
-
-  fz_context *ctx = NULL;
-  fz_buffer *buf = NULL;
-  fz_document *doc = NULL;
-  fz_page *page = NULL;
-  fz_pixmap *pixmap = NULL;
-  fz_device *device = NULL;
-  bool ok = false;
-
-  InitMuPdfLocks();
-  ctx = fz_new_context(NULL, &g_mupdf_locks_ctx, FZ_STORE_DEFAULT);
-  if (!ctx)
-    return false;
-  fz_register_document_handlers(ctx);
-
-  fz_var(buf);
-  fz_var(doc);
-  fz_var(page);
-  fz_var(pixmap);
-  fz_var(device);
-
-  fz_try(ctx) {
-    buf = fz_new_buffer_from_copied_data(ctx, svg_buf.data(), svg_buf.size());
-    doc = fz_open_document_with_buffer(ctx, "image/svg+xml", buf);
-    if (!doc)
-      fz_throw(ctx, FZ_ERROR_FORMAT, "failed to open svg document");
-    page = fz_load_page(ctx, doc, 0);
-    if (!page)
-      fz_throw(ctx, FZ_ERROR_FORMAT, "failed to load svg page");
-
-    const fz_rect page_bounds = fz_bound_page(ctx, page);
-    float svg_w = 0.0f;
-    float svg_h = 0.0f;
-    svg_w = page_bounds.x1 - page_bounds.x0;
-    svg_h = page_bounds.y1 - page_bounds.y0;
-    if (!(svg_w > 0.0f && svg_h > 0.0f))
-      fz_throw(ctx, FZ_ERROR_FORMAT, "invalid svg size");
-
-    int thumb_w = 0;
-    int thumb_h = 0;
-    float scale = 1.0f;
-    if (!epub_cover_decode_utils::ComputeCoverThumbSize(
-            (int)(svg_w + 0.5f), (int)(svg_h + 0.5f), kCoverThumbMaxW,
-            kCoverThumbMaxH, &thumb_w, &thumb_h, &scale)) {
-      fz_throw(ctx, FZ_ERROR_FORMAT, "invalid svg thumbnail size");
-    }
-
-    const fz_rect bounds = fz_make_rect(0.0f, 0.0f, svg_w, svg_h);
-    const fz_matrix ctm = fz_scale(scale, scale);
-    const fz_irect bbox = fz_round_rect(fz_transform_rect(bounds, ctm));
-    if (bbox.x1 <= bbox.x0 || bbox.y1 <= bbox.y0)
-      fz_throw(ctx, FZ_ERROR_FORMAT, "invalid svg bbox");
-
-    pixmap = fz_new_pixmap_with_bbox(ctx, fz_device_rgb(ctx), bbox, NULL, 0);
-    fz_clear_pixmap_with_value(ctx, pixmap, 255);
-    device = fz_new_draw_device(ctx, fz_identity, pixmap);
-    fz_run_page(ctx, page, device, ctm, NULL);
-    fz_close_device(ctx, device);
-
-    const int pix_w = fz_pixmap_width(ctx, pixmap);
-    const int pix_h = fz_pixmap_height(ctx, pixmap);
-    const int stride = fz_pixmap_stride(ctx, pixmap);
-    const int comps = fz_pixmap_components(ctx, pixmap);
-    unsigned char *samples = fz_pixmap_samples(ctx, pixmap);
-    if (!samples || pix_w <= 0 || pix_h <= 0 || comps < 3)
-      fz_throw(ctx, FZ_ERROR_FORMAT, "invalid svg pixmap");
-
-    thumb_pixels->assign((size_t)pix_w * (size_t)pix_h, 0);
-    for (int y = 0; y < pix_h; y++) {
-      const unsigned char *src = samples + (size_t)y * (size_t)stride;
-      for (int x = 0; x < pix_w; x++) {
-        const u16 r = (u16)((src[0] >> 3) & 0x1F);
-        const u16 g = (u16)((src[1] >> 2) & 0x3F);
-        const u16 b = (u16)((src[2] >> 3) & 0x1F);
-        (*thumb_pixels)[(size_t)y * (size_t)pix_w + (size_t)x] =
-            (u16)((r << 11) | (g << 5) | b);
-        src += comps;
-      }
-    }
-    *thumb_w_out = pix_w;
-    *thumb_h_out = pix_h;
-    ok = true;
-  }
-  fz_always(ctx) {
-    fz_drop_device(ctx, device);
-    fz_drop_pixmap(ctx, pixmap);
-    fz_drop_page(ctx, page);
-    fz_drop_document(ctx, doc);
-    fz_drop_buffer(ctx, buf);
-  }
-  fz_catch(ctx) { ok = false; }
-  fz_drop_context(ctx);
-
-  return ok;
 }
 
 static bool DecodeImageCoverThumbnailWithMuPdf(const std::vector<u8> &decodebuf,

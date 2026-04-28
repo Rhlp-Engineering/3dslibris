@@ -249,16 +249,6 @@ static mobi_toc_prepare::InlineTitleCallbacks MakeMobiInlineTitleCallbacks() {
   return callbacks;
 }
 
-static mobi_markup_extract::ExtractCallbacks MakeMobiMarkupExtractCallbacks() {
-  mobi_markup_extract::ExtractCallbacks callbacks;
-  callbacks.trim_ascii_whitespace = plain_parser::TrimAsciiWhitespace;
-  callbacks.collapse_ascii_whitespace = plain_parser::CollapseAsciiWhitespace;
-  callbacks.fold_latin_for_match = plain_parser::FoldLatinForMatch;
-  callbacks.looks_like_structured_chapter_title = LooksLikeStructuredMobiChapterTitle;
-  callbacks.add_chapter_at_page_if_unique = plain_parser::AddChapterAtPageIfUnique;
-  return callbacks;
-}
-
 static uint16_t RegisterMobiInlineImage(void *user_data,
                                         const std::string &path) {
   Book *book = static_cast<Book *>(user_data);

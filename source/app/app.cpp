@@ -469,7 +469,6 @@ void App::RunChaptersMenuFrame(u32 keys)
   if (keys == 0)
     return;
 
-  const bool dirty_before = chaptermenu && chaptermenu->IsDirty();
   chaptermenu->HandleInput(keys);
   const bool dirty_after_input = chaptermenu && chaptermenu->IsDirty();
 #ifdef DSLIBRIS_DEBUG

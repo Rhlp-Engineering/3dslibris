@@ -69,34 +69,6 @@ using epub_package_toc_utils::ReadZipEntryText;
 
 namespace {
 
-bool ReadOpenZipEntryText(unzFile uf, std::string *out, size_t max_bytes) {
-  if (!uf || !out)
-    return false;
-
-  unz_file_info fi;
-  if (unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0) != UNZ_OK)
-    return false;
-  if (fi.uncompressed_size == 0 || fi.uncompressed_size > max_bytes)
-    return false;
-
-  out->assign((size_t)fi.uncompressed_size, '\0');
-  size_t total = 0;
-  while (total < out->size()) {
-    int n = unzReadCurrentFile(uf, &(*out)[total],
-                               (unsigned int)(out->size() - total));
-    if (n < 0) {
-      out->clear();
-      return false;
-    }
-    if (n == 0)
-      break;
-    total += (size_t)n;
-  }
-
-  out->resize(total);
-  return total > 0;
-}
-
 std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
   const char *s = xhtml_text.c_str();
   size_t len = xhtml_text.size();

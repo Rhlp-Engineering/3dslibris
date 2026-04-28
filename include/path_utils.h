@@ -21,46 +21,19 @@
 
 namespace paths {
 
-// Base directories
+// Base directories (used by inline Get*() helpers below)
 static const char *kLegacySdmcBase  = "sdmc:/3ds/3dslibris";
 static const char *kConfigSdmcBase  = "sdmc:/config/3dslibris";
-static const char *kSdmcBase        = "sdmc:/3ds/3dslibris";
-static const char *kRomfsBase       = "romfs:/3ds/3dslibris";
-static const char *kBookDir         = "sdmc:/3ds/3dslibris/book";
-static const char *kRomfsBookDir    = "romfs:/3ds/3dslibris/book";
-static const char *kFontDir         = "sdmc:/3ds/3dslibris/font";
-static const char *kRomfsFontDir    = "romfs:/3ds/3dslibris/font";
-static const char *kResourceDir     = "sdmc:/3ds/3dslibris/resources";
-static const char *kCacheBaseDir    = "sdmc:/3ds/3dslibris/cache";
 
-// Cache subdirectories
-static const char *kCoverCacheDir   = "sdmc:/3ds/3dslibris/cache/covers";
-static const char *kCoverCacheManifest = "sdmc:/3ds/3dslibris/cache/covers/manifest.txt";
-static const char *kEpubCacheDir    = "sdmc:/3ds/3dslibris/cache/epub";
-static const char *kMobiCacheDir    = "sdmc:/3ds/3dslibris/cache/mobi";
-static const char *kMobiCoverMetaCacheDir = "sdmc:/3ds/3dslibris/cache/mobi-cover";
-static const char *kMetaCacheDir          = "sdmc:/3ds/3dslibris/cache/meta";
+// Constants used directly by individual translation units.
+// __attribute__((unused)) suppresses the per-TU warning for TUs that
+// include this header but do not reference these symbols.
+static const char *kLogFile      __attribute__((unused)) = "sdmc:/3ds/3dslibris/3dslibris.log";
+static const char *kRomfsBookDir __attribute__((unused)) = "romfs:/3ds/3dslibris/book";
+static const char *kRomfsFontDir __attribute__((unused)) = "romfs:/3ds/3dslibris/font";
 
-// Runtime files
-static const char *kLogFile         = "sdmc:/3ds/3dslibris/3dslibris.log";
-static const char *kPrefsFile       = "sdmc:/3ds/3dslibris/3dslibris.xml";
-
-// Splash screen search paths
-static const char *kSplashPaths[] = {
-    "sdmc:/3ds/3dslibris/resources/splash.jpg",
-    "sdmc:/3ds/3dslibris/resources/splash.jpeg",
-    "sdmc:/3ds/3dslibris/splash.jpg",
-    "sdmc:/3ds/3dslibris/splash.jpeg",
-};
-static const int kSplashPathCount = 4;
-
-// UI icon search paths
-static const char *kIconPngDir     = "sdmc:/3ds/3dslibris/resources/ui/icons/png";
-static const char *kIconDir        = "sdmc:/3ds/3dslibris/resources/ui/icons";
-static const char *kResourceBase   = "sdmc:/3ds/3dslibris/resources";
-
-// Bundled fonts
-static const char *kDefaultFonts[][2] = {
+// Bundled fonts (used by startup_controller.cpp)
+static const char *kDefaultFonts[][2] __attribute__((unused)) = {
     {"LiberationSerif-Regular.ttf",    "sdmc:/3ds/3dslibris/font/LiberationSerif-Regular.ttf"},
     {"LiberationSerif-Bold.ttf",       "sdmc:/3ds/3dslibris/font/LiberationSerif-Bold.ttf"},
     {"LiberationSerif-Italic.ttf",     "sdmc:/3ds/3dslibris/font/LiberationSerif-Italic.ttf"},
@@ -71,12 +44,11 @@ static const char *kDefaultFonts[][2] = {
     {"LiberationMono-Italic.ttf",      "sdmc:/3ds/3dslibris/font/LiberationMono-Italic.ttf"},
     {"LiberationMono-BoldItalic.ttf",  "sdmc:/3ds/3dslibris/font/LiberationMono-BoldItalic.ttf"},
 };
-static const int kDefaultFontCount = 9;
 
 // Fallback font filename patterns (checked in order of preference).
 // When a font filename contains any of these substrings, it is auto-loaded
 // as a fallback face for non-Latin glyph coverage (CJK, Hebrew, Arabic).
-static const char *kCjkFontPatterns[] = {
+static const char *kCjkFontPatterns[] __attribute__((unused)) = {
     // CJK (Chinese / Japanese / Korean)
     "NotoSansCJK",
     "NotoSerifCJK",
@@ -107,7 +79,7 @@ static const char *kCjkFontPatterns[] = {
     "UnDotum",
     "Baekmuk",
 };
-static const int kCjkFontPatternCount = 25;
+static const int kCjkFontPatternCount __attribute__((unused)) = 25;
 
 inline bool PathExists(const char *path, bool expect_directory = false) {
   if (!path || !*path)

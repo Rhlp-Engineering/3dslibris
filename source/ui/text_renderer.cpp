@@ -264,7 +264,6 @@ void TextRenderer::ClearScreen() {
 
 void TextRenderer::ClearRect(u16 xl, u16 yl, u16 xh, u16 yh) {
   MarkCurrentScreenDirtyRect((int)xl, (int)yl, (int)xh, (int)yh);
-  u16 clearcolor = (colorMode == 1 || colorMode == 4) ? 0x0000 : 0xFFFF;
   int maxHeight = (parent->screen == parent->screenleft ? 400 : 320);
   // Pre-clamp to valid range
   if (xl >= (u16)parent->display.width || yl >= (u16)maxHeight) return;

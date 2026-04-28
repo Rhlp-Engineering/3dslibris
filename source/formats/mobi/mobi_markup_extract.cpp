@@ -320,6 +320,7 @@ static int EstimateWrappedLineCount(const TextLayoutSnapshot *layout,
       step = 1;
       cp = c;
     }
+    (void)cp;
     word_width += std::max(1, avg_char_width);
     have_word = true;
     i += step;
