@@ -155,6 +155,10 @@ void Page::FreeBuffer() {
   SyncBufferAlias();
 }
 
+size_t Page::GetInlineLinkCount() const {
+  return inline_link_utils::CountInlineLinksInBuffer(buf, length);
+}
+
 void Page::Draw(Text *ts) {
   const bool saved_auto_wrap = ts->IsAutoWrapEnabled();
   const bool saved_clip_to_content = ts->IsClipToContentEnabled();
