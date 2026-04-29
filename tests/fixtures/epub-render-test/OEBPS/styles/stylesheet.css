@@ -192,3 +192,12 @@ h2.align-center-heading {
 .heading-size-larger {
   font-size: larger;
 }
+
+/* Ornament separator — as reported in issue #74 */
+.spaceOrnament {
+  display: block;
+  margin-bottom: 3%;
+  margin-top: 3%;
+  text-align: center;
+  text-indent: 0%;
+}

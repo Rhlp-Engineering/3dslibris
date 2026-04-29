@@ -224,6 +224,12 @@ u8 Book::GetInlineImageFollowTextLines(u16 id) const {
   return inline_images[id].follow_text_lines;
 }
 
+void Book::SetInlineImageAuthorMaxWidth(u16 id, int px) {
+  if (id >= inline_images.size())
+    return;
+  inline_images[id].author_max_width_px = px;
+}
+
 void Book::ClearInlineImageCache() {
   inline_image_cache.clear();
   inline_image_cache_index.clear();
@@ -647,6 +653,8 @@ bool Book::PlanInlineImageLayout(Text *ts, u16 image_id, int current_screen,
   req.image_context = image_context;
   req.current_screen = current_screen;
   req.follow_text_lines = GetInlineImageFollowTextLines(image_id);
+  req.author_max_width_px =
+      (image_id < inline_images.size()) ? inline_images[image_id].author_max_width_px : 0;
 
   *out = ::PlanInlineImageLayout(req, meta);
   return true;

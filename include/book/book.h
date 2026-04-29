@@ -68,10 +68,11 @@ public:
     int source_width;
     int source_height;
     u8 follow_text_lines;
+    int author_max_width_px;
 
     InlineImageEntry()
         : metadata_probed(false), metadata_ok(false), source_width(0),
-          source_height(0), follow_text_lines(0) {}
+          source_height(0), follow_text_lines(0), author_max_width_px(0) {}
   };
 
   struct InlineImageCacheEntry
@@ -266,6 +267,7 @@ public:
   bool GetInlineImageMetadata(u16 id, InlineImageMetadata *out);
   void SetInlineImageFollowTextLines(u16 id, u8 lines);
   u8 GetInlineImageFollowTextLines(u16 id) const;
+  void SetInlineImageAuthorMaxWidth(u16 id, int px);
   void ClearInlineImages();
   void SetInlineImageProbeZip(void *uf);
   bool StoreFb2InlineImage(const std::string &id,

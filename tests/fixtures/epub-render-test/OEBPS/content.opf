@@ -27,6 +27,8 @@
     <item id="ch10" href="text/chapter-10-alignment.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch11" href="text/chapter-11-headings.xhtml" media-type="application/xhtml+xml"/>
     <item id="img1" href="images/test-card.svg" media-type="image/svg+xml"/>
+    <item id="img2" href="images/ornament-bar.png" media-type="image/png"/>
+    <item id="ch12" href="text/chapter-12-ornament-images.xhtml" media-type="application/xhtml+xml"/>
   </manifest>
 
   <spine toc="ncx">
@@ -44,6 +46,7 @@
     <itemref idref="ch9"/>
     <itemref idref="ch10"/>
     <itemref idref="ch11"/>
+    <itemref idref="ch12"/>
   </spine>
 
   <guide>

@@ -252,6 +252,110 @@ ParseMarginTopPx(const char *style) {
   return book_xml_css_style_utils::ParseMarginTop(style);
 }
 
+// Parse a CSS/HTML width value and return pixels (>0), or 0 if unconstrained.
+// Handles: %, px, bare integer (HTML width attr), em/rem, pt, cm, mm, in, vw.
+// text_width = available text area in pixels; font_px = current font height in px.
+// screen_width is fixed at 240 on 3DS.
+static int ParseCssLengthPx(const char *v, int text_width, int font_px) {
+  if (!v || !*v)
+    return 0;
+  while (*v == ' ')
+    v++;
+  if (!*v)
+    return 0;
+
+  // Numeric part: integer * 1000 + fractional (3 decimal places of precision)
+  int num1000 = 0; // value * 1000
+  bool has_digit = false;
+  while (*v >= '0' && *v <= '9') {
+    num1000 = num1000 * 10 + (*v - '0') * 1000;
+    has_digit = true;
+    v++;
+    if (num1000 > 100000 * 1000) // overflow guard (>100000 px is nonsense)
+      return 0;
+  }
+  if (*v == '.') {
+    v++;
+    int place = 100;
+    while (*v >= '0' && *v <= '9' && place > 0) {
+      num1000 += (*v - '0') * place;
+      place /= 10;
+      v++;
+      has_digit = true;
+    }
+    while (*v >= '0' && *v <= '9')
+      v++; // consume remaining decimal digits
+  }
+  if (!has_digit)
+    return 0;
+  while (*v == ' ')
+    v++;
+
+  int result_px = 0;
+  if (*v == '%') {
+    // Percentage of text width. Cap at 100% (10000 hundredths).
+    if (num1000 <= 0 || num1000 > 100 * 1000)
+      return 0;
+    result_px = (text_width * num1000 + 50000) / 100000;
+  } else if (*v == '\0') {
+    // Bare integer HTML attribute (e.g. width="50") — treated as px.
+    result_px = (num1000 + 500) / 1000;
+  } else if (v[0] == 'p' && v[1] == 'x') {
+    result_px = (num1000 + 500) / 1000;
+  } else if ((v[0] == 'e' && v[1] == 'm') ||
+             (v[0] == 'r' && v[1] == 'e' && v[2] == 'm')) {
+    // em/rem relative to current font size.
+    result_px = (num1000 * font_px + 500) / 1000;
+  } else if (v[0] == 'p' && v[1] == 't') {
+    // 1pt = 4/3 px at 96 DPI.
+    result_px = (num1000 * 4 + 1500) / 3000;
+  } else if (v[0] == 'c' && v[1] == 'm') {
+    // 1cm = 37.795px at 96 DPI; use 378/10.
+    result_px = (num1000 * 378 + 5000) / 10000;
+  } else if (v[0] == 'm' && v[1] == 'm') {
+    // 1mm = 3.7795px; use 378/100.
+    result_px = (num1000 * 378 + 50000) / 100000;
+  } else if (v[0] == 'i' && v[1] == 'n') {
+    // 1in = 96px.
+    result_px = (num1000 * 96 + 500) / 1000;
+  } else if (v[0] == 'v' && v[1] == 'w') {
+    // vw: percentage of 240px viewport width.
+    if (num1000 <= 0 || num1000 > 100 * 1000)
+      return 0;
+    result_px = (240 * num1000 + 50000) / 100000;
+  } else {
+    // Unknown unit (ch, ex, svw, dvw, max-content, etc.) — don't constrain.
+    return 0;
+  }
+
+  return std::max(0, std::min(result_px, text_width));
+}
+
+// Return the author-specified max width in pixels for an img element.
+// Checks the HTML width attribute first, then the CSS width property in style.
+// Returns 0 if no usable constraint found.
+static int ParseImgWidthPx(const char *width_attr, const char *style,
+                            int text_width, int font_px) {
+  if (width_attr && *width_attr) {
+    int px = ParseCssLengthPx(width_attr, text_width, font_px);
+    if (px > 0)
+      return px;
+  }
+  if (style && *style) {
+    std::string lc = ToLowerAscii(std::string(style));
+    size_t pos = lc.find("width:");
+    if (pos != std::string::npos) {
+      pos += 6;
+      while (pos < lc.size() && lc[pos] == ' ')
+        pos++;
+      int px = ParseCssLengthPx(lc.c_str() + pos, text_width, font_px);
+      if (px > 0)
+        return px;
+    }
+  }
+  return 0;
+}
+
 static void ParseClassStyleFlags(const char *class_name, bool *bold_out,
                                  bool *italic_out, bool *underline_out,
                                  u8 *underline_style_out,
@@ -2130,11 +2234,14 @@ void start(void *data, const char *el, const char **attr) {
 
     const char *src = NULL;
     const char *img_style = NULL;
+    const char *img_width_attr = NULL;
     for (int i = 0; attr && attr[i]; i += 2) {
       if (XmlNameEquals(attr[i], "src") || XmlNameEquals(attr[i], "href"))
         src = attr[i + 1];
       else if (AttrNameEquals(attr[i], "style"))
         img_style = attr[i + 1];
+      else if (AttrNameEquals(attr[i], "width"))
+        img_width_attr = attr[i + 1];
     }
 
     if (img_style) {
@@ -2162,6 +2269,11 @@ void start(void *data, const char *el, const char **attr) {
 
     if (!resolved.empty() && p->book) {
       u16 image_id = p->book->RegisterInlineImage(resolved);
+      const int text_w = ts->display.width - ts->margin.left - ts->margin.right;
+      const int author_max_w =
+          ParseImgWidthPx(img_width_attr, img_style, text_w, ts->GetHeight());
+      if (author_max_w > 0)
+        p->book->SetInlineImageAuthorMaxWidth(image_id, author_max_w);
       InlineImageLayoutPlan image_plan{};
       const bool leading_paragraph_image =
           p->in_paragraph && !p->paragraph_has_content;
