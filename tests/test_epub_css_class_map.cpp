@@ -126,6 +126,28 @@ void TestLookupTextAlignForClassAttrUsesLastKnownMatch() {
                  (int)book_xml_css_style_utils::TextAlign::Right);
 }
 
+void TestParseCssIntoClassMapDetectsTextAlignStartEnd() {
+  const char *css =
+      ".align-start { text-align: start; }\n"
+      ".align-end { text-align: end; }\n";
+
+  CssClassMap out;
+  epub_css_class_map::ParseCssIntoClassMap(css, std::strlen(css), &out);
+
+  test::ExpectTrue("align-start parsed", out.find("align-start") != out.end());
+  test::ExpectTrue("align-end parsed", out.find("align-end") != out.end());
+  test::ExpectTrue("align-start has_text_align",
+                   out["align-start"].has_text_align);
+  test::ExpectTrue("align-end has_text_align",
+                   out["align-end"].has_text_align);
+  test::ExpectEq("align-start value",
+                 (int)out["align-start"].text_align,
+                 (int)book_xml_css_style_utils::TextAlign::Left);
+  test::ExpectEq("align-end value",
+                 (int)out["align-end"].text_align,
+                 (int)book_xml_css_style_utils::TextAlign::Right);
+}
+
 void TestLookupFontSizeForClassAttrUsesLastKnownMatch() {
   CssClassMap map;
   map["small"].font_size.unit =
@@ -388,6 +410,7 @@ int main() {
   TestLookupMarginsForClassAttrRejectsUnknownClasses();
   TestParseCssIntoClassMapDetectsListStyleNone();
   TestLookupTextAlignForClassAttrUsesLastKnownMatch();
+  TestParseCssIntoClassMapDetectsTextAlignStartEnd();
   TestLookupFontSizeForClassAttrUsesLastKnownMatch();
   TestParseCssIntoClassMapDetectsSuperSubScript();
   TestLookupSuperSubForClassAttr();

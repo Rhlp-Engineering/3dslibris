@@ -350,6 +350,22 @@ void TestParseTextIndent() {
   test::ExpectTrue("negative text-indent is negative", neg.negative);
 }
 
+void TestParseTextAlignStartEnd() {
+  using TA = book_xml_css_style_utils::TextAlign;
+
+  TA start = TA::Left;
+  test::ExpectTrue("start parsed",
+                   book_xml_css_style_utils::TryParseTextAlign(
+                       "text-align: start;", &start));
+  test::ExpectEq("start maps to Left", (int)start, (int)TA::Left);
+
+  TA end = TA::Left;
+  test::ExpectTrue("end parsed",
+                   book_xml_css_style_utils::TryParseTextAlign(
+                       "text-align: end;", &end));
+  test::ExpectEq("end maps to Right", (int)end, (int)TA::Right);
+}
+
 void TestParseTextTransform() {
   using TT = book_xml_css_style_utils::TextTransform;
 
@@ -406,6 +422,7 @@ int main() {
   TestResolveFontSizePxHandlesRelativeValues();
   TestParseInlineFlagsResets();
   TestParseTextIndent();
+  TestParseTextAlignStartEnd();
   TestParseTextTransform();
   return 0;
 }

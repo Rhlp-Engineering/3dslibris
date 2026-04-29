@@ -167,6 +167,14 @@ p.mb-class-grouped-qualified {
   text-align: right;
 }
 
+.align-start {
+  text-align: start;
+}
+
+.align-end {
+  text-align: end;
+}
+
 h2.align-center-heading {
   text-align: center;
 }

@@ -465,6 +465,16 @@ bool TryParseTextAlign(const char *style, TextAlign *out) {
     *out = TextAlign::Left;
     return true;
   }
+  if (style_lc.find("text-align: start") != std::string::npos ||
+      style_lc.find("text-align:start") != std::string::npos) {
+    *out = TextAlign::Left;
+    return true;
+  }
+  if (style_lc.find("text-align: end") != std::string::npos ||
+      style_lc.find("text-align:end") != std::string::npos) {
+    *out = TextAlign::Right;
+    return true;
+  }
   return false;
 }
 
