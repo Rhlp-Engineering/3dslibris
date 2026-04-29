@@ -407,9 +407,24 @@ ParseElementMarginBottomWithClass(const std::string &last_style,
   return LookupClassMarginBottom(last_class, class_map);
 }
 
+static bool FindActiveBlockTextAlign(
+    const parsedata_t *p, book_xml_css_style_utils::TextAlign *out) {
+  if (!p || !out)
+    return false;
+  for (int i = (int)p->stacksize - 1; i >= 0; --i) {
+    if (!p->block_text_align_stack[i])
+      continue;
+    *out = (book_xml_css_style_utils::TextAlign)
+               p->block_text_align_value_stack[i];
+    return true;
+  }
+  return false;
+}
+
 static book_xml_css_style_utils::TextAlign
 ResolveElementTextAlignWithClass(const std::string &style_attr,
                                  const std::string &class_attr,
+                                 const parsedata_t *p,
                                  const epub_css_class_map::CssClassMap &class_map) {
   book_xml_css_style_utils::TextAlign align =
       book_xml_css_style_utils::TextAlign::Left;
@@ -419,6 +434,8 @@ ResolveElementTextAlignWithClass(const std::string &style_attr,
                                                       &align)) {
     return align;
   }
+  if (FindActiveBlockTextAlign(p, &align))
+    return align;
   return book_xml_css_style_utils::TextAlign::Left;
 }
 
@@ -433,6 +450,59 @@ static void AppendParagraphAlignMarker(
   } else {
     AppendParsedByte(p, TEXT_PARAGRAPH_LEFT);
   }
+}
+
+static bool StyleLooksDisplayBlock(const std::string &style_attr) {
+  const std::string style_lc = ToLowerAsciiLocal(style_attr);
+  return ContainsAsciiNoCase(style_lc, "display:block") ||
+         ContainsAsciiNoCase(style_lc, "display: block");
+}
+
+static bool ElementCanCarryBlockTextAlign(const char *el,
+                                          const std::string &style_attr) {
+  return !strcmp(el, "body") || !strcmp(el, "div") ||
+         !strcmp(el, "aside") || !strcmp(el, "blockquote") ||
+         !strcmp(el, "caption") || !strcmp(el, "figure") ||
+         AttrNameEquals(el, "section") || StyleLooksDisplayBlock(style_attr);
+}
+
+static void RestoreActiveBlockTextAlignMarker(parsedata_t *p) {
+  if (!p)
+    return;
+  for (int i = (int)p->stacksize - 1; i >= 0; --i) {
+    if (!p->block_text_align_stack[i])
+      continue;
+    AppendParagraphAlignMarker(
+        p, (book_xml_css_style_utils::TextAlign)
+               p->block_text_align_value_stack[i]);
+    return;
+  }
+  AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
+}
+
+static void ConfigureBlockTextAlign(parsedata_t *p, const char *el,
+                                    const char **attr) {
+  if (!p || !el || p->stacksize == 0)
+    return;
+
+  const std::string style_attr = ExtractStyleAttr(attr);
+  const std::string class_attr = ExtractClassAttr(attr);
+  if (!ElementCanCarryBlockTextAlign(el, style_attr))
+    return;
+
+  book_xml_css_style_utils::TextAlign align =
+      book_xml_css_style_utils::TextAlign::Left;
+  const bool has_align =
+      book_xml_css_style_utils::TryParseTextAlign(style_attr.c_str(), &align) ||
+      epub_css_class_map::LookupTextAlignForClassAttr(class_attr,
+                                                      p->css_class_map, &align);
+  if (!has_align)
+    return;
+
+  const u8 current = (u8)(p->stacksize - 1);
+  p->block_text_align_stack[current] = true;
+  p->block_text_align_value_stack[current] = (u8)align;
+  AppendParagraphAlignMarker(p, align);
 }
 
 static void ApplyHeadingFontSize(parsedata_t *p, Text *ts, int heading_level,
@@ -1706,7 +1776,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 1, p->last_h1_style, p->last_h1_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h1_style,
-                                            p->last_h1_class, p->css_class_map));
+                                            p->last_h1_class, p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1744,7 +1814,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 2, p->last_h2_style, p->last_h2_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h2_style,
-                                            p->last_h2_class, p->css_class_map));
+                                            p->last_h2_class, p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1782,7 +1852,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 3, p->last_h_style, p->last_h_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
-                                            p->css_class_map));
+                                            p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1805,7 +1875,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 4, p->last_h_style, p->last_h_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
-                                            p->css_class_map));
+                                            p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1828,7 +1898,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 5, p->last_h_style, p->last_h_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
-                                            p->css_class_map));
+                                            p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1851,7 +1921,7 @@ void start(void *data, const char *el, const char **attr) {
     ApplyHeadingFontSize(p, ts, 6, p->last_h_style, p->last_h_class);
     AppendParagraphAlignMarker(
         p, ResolveElementTextAlignWithClass(p->last_h_style, p->last_h_class,
-                                            p->css_class_map));
+                                            p, p->css_class_map));
     AppendParsedByte(p, TEXT_BOLD_ON);
     p->pos++;
     p->bold = true;
@@ -1879,7 +1949,7 @@ void start(void *data, const char *el, const char **attr) {
     p->last_p_class = ExtractClassAttr(attr);
     const book_xml_css_style_utils::TextAlign align =
         ResolveElementTextAlignWithClass(p->last_p_style, p->last_p_class,
-                                         p->css_class_map);
+                                         p, p->css_class_map);
     AppendParagraphAlignMarker(p, align);
     const bool inside_list_item = book_xml_list_utils::IsInsideListItem(p);
     const bool tight_list_paragraph =
@@ -2206,6 +2276,8 @@ void start(void *data, const char *el, const char **attr) {
   } else
     parse_push(p, TAG_UNKNOWN);
 
+  ConfigureBlockTextAlign(p, el, attr);
+
   // CSS-based emphasis fallback for EPUBs that do not use semantic tags.
   if (parse_in(p, TAG_BODY) && p->stacksize > 0) {
     bool style_bold = false;
@@ -2483,7 +2555,7 @@ void end(void *data, const char *el) {
         linefeed(p);
       }
     }
-    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
+    RestoreActiveBlockTextAlignMarker(p);
     p->in_paragraph = false;
     p->paragraph_has_content = false;
   } else if (!strcmp(el, "div")) {
@@ -2504,7 +2576,7 @@ void end(void *data, const char *el) {
         linefeed(p);
     }
     RestoreHeadingFontSize(p, ts);
-    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
+    RestoreActiveBlockTextAlignMarker(p);
     if (!Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "h2")) {
@@ -2524,7 +2596,7 @@ void end(void *data, const char *el) {
         linefeed(p);
     }
     RestoreHeadingFontSize(p, ts);
-    AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
+    RestoreActiveBlockTextAlignMarker(p);
     if (!Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "h3") || !strcmp(el, "h4") || !strcmp(el, "h5") ||
@@ -2570,7 +2642,7 @@ void end(void *data, const char *el) {
       RestoreHeadingFontSize(p, ts);
     }
     if (strcmp(el, "hr"))
-      AppendParagraphAlignMarker(p, book_xml_css_style_utils::TextAlign::Left);
+      RestoreActiveBlockTextAlignMarker(p);
     if ((!strcmp(el, "h3")) && !Trim(p->doc_heading).empty())
       p->doc_heading_complete = true;
   } else if (!strcmp(el, "pre")) {
@@ -2588,7 +2660,15 @@ void end(void *data, const char *el) {
     linefeed(p);
   }
 
+  bool restore_block_text_align = false;
+  if (p->stacksize > 0) {
+    const u8 current = (u8)(p->stacksize - 1);
+    restore_block_text_align = p->block_text_align_stack[current];
+  }
+
   parse_pop(p);
+  if (restore_block_text_align)
+    RestoreActiveBlockTextAlignMarker(p);
 
   const bool want_bold =
       parse_in(p, TAG_STRONG) || parse_in(p, TAG_H1) || parse_in(p, TAG_H2) ||

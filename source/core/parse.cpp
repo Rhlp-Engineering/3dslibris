@@ -164,6 +164,8 @@ void parse_init(parsedata_t *data) {
     data->style_hidden_stack[i] = false;
     data->link_active_stack[i] = false;
     data->link_href_id_stack[i] = 0;
+    data->block_text_align_stack[i] = false;
+    data->block_text_align_value_stack[i] = 0;
     data->list_marker_hidden_stack[i] = false;
     data->list_item_pending_stack[i] = false;
     data->ordered_list_ordinal_stack[i] = 0;
@@ -249,6 +251,8 @@ void parse_push(parsedata_t *data, context_t context) {
     data->style_hidden_stack[data->stacksize] = false;
     data->link_active_stack[data->stacksize] = false;
     data->link_href_id_stack[data->stacksize] = 0;
+    data->block_text_align_stack[data->stacksize] = false;
+    data->block_text_align_value_stack[data->stacksize] = 0;
     data->list_marker_hidden_stack[data->stacksize] = false;
     data->list_item_pending_stack[data->stacksize] = false;
     data->ordered_list_ordinal_stack[data->stacksize] = 0;
@@ -273,6 +277,8 @@ context_t parse_pop(parsedata_t *data) {
     data->style_hidden_stack[data->stacksize] = false;
     data->link_active_stack[data->stacksize] = false;
     data->link_href_id_stack[data->stacksize] = 0;
+    data->block_text_align_stack[data->stacksize] = false;
+    data->block_text_align_value_stack[data->stacksize] = 0;
     data->list_marker_hidden_stack[data->stacksize] = false;
     data->list_item_pending_stack[data->stacksize] = false;
     data->ordered_list_ordinal_stack[data->stacksize] = 0;

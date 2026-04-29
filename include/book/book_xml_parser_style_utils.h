@@ -82,6 +82,27 @@ inline void RestoreParsedParagraphAlignmentMarker(parsedata_t *p) {
       have_align = epub_css_class_map::LookupTextAlignForClassAttr(
           p->last_h_class, p->css_class_map, &align);
     }
+  } else {
+    for (int i = (int)p->stacksize - 1; i >= 0; --i) {
+      if (!p->block_text_align_stack[i])
+        continue;
+      in_alignable_block = true;
+      have_align = true;
+      align = (book_xml_css_style_utils::TextAlign)
+                  p->block_text_align_value_stack[i];
+      break;
+    }
+  }
+
+  if (in_alignable_block && !have_align) {
+    for (int i = (int)p->stacksize - 1; i >= 0; --i) {
+      if (!p->block_text_align_stack[i])
+        continue;
+      have_align = true;
+      align = (book_xml_css_style_utils::TextAlign)
+                  p->block_text_align_value_stack[i];
+      break;
+    }
   }
 
   if (!in_alignable_block)

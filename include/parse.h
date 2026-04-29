@@ -103,6 +103,8 @@ struct parsedata_t {
 	bool style_hidden_stack[32];
 	bool link_active_stack[32];
 	u16 link_href_id_stack[32];
+	bool block_text_align_stack[32];
+	u8 block_text_align_value_stack[32];
 	bool list_marker_hidden_stack[32];
 	bool list_item_pending_stack[32];
 	unsigned int ordered_list_ordinal_stack[32];
