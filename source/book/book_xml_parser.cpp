@@ -23,6 +23,7 @@
 #include "book/book_xml_table_utils.h"
 #include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
+#include "formats/common/epub_image_utils.h"
 #include "formats/common/html_entity_utils.h"
 #include "reader/inline_link_utils.h"
 #include "book/heading_layout.h"
@@ -505,6 +506,11 @@ static bool ShouldRenderHrRule(const std::string &style_attr,
     return false;
   }
   return true;
+}
+
+static bool ImagePathLooksLikeSvgWrapper(const std::string &path) {
+  static const std::vector<u8> empty;
+  return epub_image_utils::LooksLikeSvgWrapper(path, empty);
 }
 
 static const char *MarginUnitName(
@@ -2101,7 +2107,8 @@ void start(void *data, const char *el, const char **attr) {
       // while drawing nothing. Emit a text placeholder instead.
       InlineImageMetadata img_meta{};
       p->book->GetInlineImageMetadata(image_id, &img_meta);
-      if (!img_meta.ok && image_plan.mode == INLINE_IMAGE_LAYOUT_PAGE) {
+      if (!img_meta.ok && image_plan.mode == INLINE_IMAGE_LAYOUT_PAGE &&
+          ImagePathLooksLikeSvgWrapper(resolved)) {
         const char *fallback = "[illustration]";
         if (!blankline(p))
           linefeed(p);
