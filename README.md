@@ -146,7 +146,7 @@ This makes debugging much easier, especially because some problems only occur on
 
 Questions, ideas, and development discussion happen in [GitHub Discussions](https://github.com/RigleGit/3dslibris/discussions):
 
-- **[Q&A / Support](https://github.com/RigleGit/3dslibris/discussions/new?category=q-a)** — installation help, usage questions
+- **[Q&A / Support](https://github.com/RigleGit/3dslibris/discussions/new?category=q-a-support)** — installation help, usage questions
 - **[Bug triage](https://github.com/RigleGit/3dslibris/discussions/new?category=bug-triage)** — crashes or unexpected behavior not yet confirmed as a reproducible issue
 - **[Ideas](https://github.com/RigleGit/3dslibris/discussions/new?category=ideas)** — feature suggestions
 - **[Development](https://github.com/RigleGit/3dslibris/discussions/new?category=development)** — implementation questions, architecture discussion
