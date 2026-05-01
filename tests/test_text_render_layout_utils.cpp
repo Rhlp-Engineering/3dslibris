@@ -146,11 +146,11 @@ void TestWouldOverflowReadingScreen() {
 
 void TestWouldCurrentLineOverflowReadingScreen() {
   ExpectFalse("current parser line may sit exactly on footer edge",
-              text_render_layout_utils::WouldCurrentLineOverflowReadingScreen(
-                  364, 400, 36));
+              text_render_layout_utils::WouldOverflowReadingScreen(
+                  364, 0, 0, 400, 36));
   ExpectTrue("current parser line overflows below footer edge",
-             text_render_layout_utils::WouldCurrentLineOverflowReadingScreen(
-                 365, 400, 36));
+             text_render_layout_utils::WouldOverflowReadingScreen(
+                 365, 0, 0, 400, 36));
 }
 
 } // namespace
