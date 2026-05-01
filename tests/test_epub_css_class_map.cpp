@@ -197,6 +197,41 @@ void TestParseCssIntoClassMapDetectsPageBreakInsideAvoid() {
                        "keep", map));
 }
 
+void TestParseCssIntoClassMapDetectsPageBreakBeforeAfter() {
+  const char *css =
+      ".chapter-start { page-break-before: always; }\n"
+      ".section-start { break-before: page; }\n"
+      ".section-end { page-break-after: always; }\n"
+      ".css3-end { break-after: page; }\n";
+
+  CssClassMap out;
+  epub_css_class_map::ParseCssIntoClassMap(css, std::strlen(css), &out);
+
+  test::ExpectTrue("chapter-start parsed", out.find("chapter-start") != out.end());
+  test::ExpectTrue("section-start parsed", out.find("section-start") != out.end());
+  test::ExpectTrue("section-end parsed", out.find("section-end") != out.end());
+  test::ExpectTrue("css3-end parsed", out.find("css3-end") != out.end());
+
+  test::ExpectTrue("chapter-start before",
+                   epub_css_class_map::LookupPageBreakBeforeForClassAttr(
+                       "chapter-start", out));
+  test::ExpectTrue("section-start before",
+                   epub_css_class_map::LookupPageBreakBeforeForClassAttr(
+                       "section-start", out));
+  test::ExpectTrue("section-end after",
+                   epub_css_class_map::LookupPageBreakAfterForClassAttr(
+                       "section-end", out));
+  test::ExpectTrue("css3-end after",
+                   epub_css_class_map::LookupPageBreakAfterForClassAttr(
+                       "css3-end", out));
+  test::ExpectFalse("missing before",
+                    epub_css_class_map::LookupPageBreakBeforeForClassAttr(
+                        "missing", out));
+  test::ExpectFalse("missing after",
+                    epub_css_class_map::LookupPageBreakAfterForClassAttr(
+                        "missing", out));
+}
+
 void TestParseCssIntoClassMapDetectsFloatAndClear() {
   const char *css =
       ".flt-left { float: left; }\n"
@@ -487,6 +522,7 @@ int main() {
   TestParseCssIntoClassMapDetectsTextAlignStartEnd();
   TestParseCssIntoClassMapDetectsWhiteSpaceModes();
   TestParseCssIntoClassMapDetectsPageBreakInsideAvoid();
+  TestParseCssIntoClassMapDetectsPageBreakBeforeAfter();
   TestParseCssIntoClassMapDetectsFloatAndClear();
   TestLookupFontSizeForClassAttrUsesLastKnownMatch();
   TestParseCssIntoClassMapDetectsSuperSubScript();

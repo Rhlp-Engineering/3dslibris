@@ -69,6 +69,15 @@ void TestIgnoresImageAlignTokenAndPayload() {
                  2);
 }
 
+void TestIgnoresLineStartXTokenAndPayload() {
+  const uint32_t buf[] = {TEXT_LINE_START_X, 48, 'A', 'B', '\n'};
+  test::ExpectEq("line-start-x token ignored",
+                 page_alignment_utils::MeasureAlignedLineWidth(
+                     buf, sizeof(buf) / sizeof(buf[0]), 0, false, false, false,
+                     MeasureGlyph, NULL),
+                 2);
+}
+
 } // namespace
 
 int main() {
@@ -77,5 +86,6 @@ int main() {
   TestStopsAtBlockTokens();
   TestIgnoresFontSizeTokenAndPayload();
   TestIgnoresImageAlignTokenAndPayload();
+  TestIgnoresLineStartXTokenAndPayload();
   return 0;
 }

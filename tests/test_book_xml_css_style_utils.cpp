@@ -243,6 +243,42 @@ void TestParseMarginRightShorthandTwoValues() {
   test::ExpectEq("right shorthand 2val value", r.value, 16);
 }
 
+void TestResolveHorizontalMarginPx() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+
+  R px{};
+  px.unit = R::Unit::Px;
+  px.value = 32;
+  test::ExpectEq("positive px margin",
+                 book_xml_css_style_utils::ResolveHorizontalMarginPx(px, 240),
+                 32);
+
+  R percent{};
+  percent.unit = R::Unit::Percent;
+  percent.value = 15;
+  test::ExpectEq("percent margin",
+                 book_xml_css_style_utils::ResolveHorizontalMarginPx(percent, 240),
+                 36);
+
+  R negative_px{};
+  negative_px.unit = R::Unit::Px;
+  negative_px.value = 10;
+  negative_px.negative = true;
+  test::ExpectEq("negative px margin",
+                 book_xml_css_style_utils::ResolveHorizontalMarginPx(
+                     negative_px, 240),
+                 -10);
+
+  R negative_percent{};
+  negative_percent.unit = R::Unit::Percent;
+  negative_percent.value = 20;
+  negative_percent.negative = true;
+  test::ExpectEq("negative percent margin",
+                 book_xml_css_style_utils::ResolveHorizontalMarginPx(
+                     negative_percent, 240),
+                 -48);
+}
+
 void TestTryParseFontSizeAcceptsPxValues() {
   book_xml_css_style_utils::FontSizeSpec spec{};
   const bool ok =
@@ -446,6 +482,28 @@ void TestParsePageBreakInsideAvoid() {
                         "page-break-inside: auto;"));
 }
 
+void TestParsePageBreakBeforeAfter() {
+  test::ExpectTrue("page-break-before always parsed",
+                   book_xml_css_style_utils::HasPageBreakBefore(
+                       "page-break-before: always;"));
+  test::ExpectTrue("break-before page parsed",
+                   book_xml_css_style_utils::HasPageBreakBefore(
+                       "break-before: page;"));
+  test::ExpectFalse("break-before auto ignored",
+                    book_xml_css_style_utils::HasPageBreakBefore(
+                        "break-before: auto;"));
+
+  test::ExpectTrue("page-break-after always parsed",
+                   book_xml_css_style_utils::HasPageBreakAfter(
+                       "page-break-after: always;"));
+  test::ExpectTrue("break-after page parsed",
+                   book_xml_css_style_utils::HasPageBreakAfter(
+                       "break-after: page;"));
+  test::ExpectFalse("break-after auto ignored",
+                    book_xml_css_style_utils::HasPageBreakAfter(
+                        "break-after: auto;"));
+}
+
 void TestParseFloatAndClear() {
   using FM = book_xml_css_style_utils::FloatMode;
   using CM = book_xml_css_style_utils::ClearMode;
@@ -500,6 +558,7 @@ int main() {
   TestParseMarginRightPercent();
   TestParseMarginRightShorthand();
   TestParseMarginRightShorthandTwoValues();
+  TestResolveHorizontalMarginPx();
   TestTryParseFontSizeAcceptsPxValues();
   TestTryParseFontSizeAcceptsRelativeValues();
   TestTryParseFontSizePt();
@@ -512,6 +571,7 @@ int main() {
   TestNormalizeWhiteSpaceText();
   TestParseTextTransform();
   TestParsePageBreakInsideAvoid();
+  TestParsePageBreakBeforeAfter();
   TestParseFloatAndClear();
   return 0;
 }

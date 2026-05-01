@@ -120,6 +120,8 @@ struct parsedata_t {
 	bool heading_font_size_emitted_stack[32];
 	u8 heading_saved_font_size_stack[32];
 	bool page_break_after_stack[32];
+	int block_margin_left_stack[32];
+	int block_margin_right_stack[32];
 	bool deferred_style_sync;
 	bool deferred_target_bold;
 	bool deferred_target_italic;
@@ -197,3 +199,6 @@ bool parse_page_buffer_overflowed(const parsedata_t *data);
 void parse_reset_page_buffer(parsedata_t *data);
 void parse_printerror(XML_Parser p);
 void parse_push(parsedata_t *data, context_t context);
+int parse_current_block_margin_left(const parsedata_t *data);
+int parse_current_block_margin_right(const parsedata_t *data);
+void parse_set_current_block_margins(parsedata_t *data, int left, int right);

@@ -405,6 +405,23 @@ void Page::Draw(Text *ts) {
       } else if (ts->linebegan) {
         ts->PrintNewLine();
       }
+    } else if (c == TEXT_SCREEN_BREAK) {
+      i++;
+      // Forced screen break emitted by ForcePageBreak (CSS page-break-before).
+      // On the first screen: advance to second screen so break-before content
+      // starts at the top of screen=1 rather than continuing mid-screen=0.
+      // On the second screen: no-op (already there, or break came after a full
+      // page was committed so this token is at the start of a new buffer).
+      if (on_first_screen)
+        advance_to_next_screen();
+    } else if (c == TEXT_LINE_START_X) {
+      if (i + 1 < length) {
+        const int x = std::max(0, std::min((int)buf[i + 1], ts->display.width));
+        ts->SetPen((u16)x, ts->GetPenY());
+      }
+      ts->linebegan = false;
+      i += (i + 1 < length) ? 2 : 1;
+      continue;
     } else if (c == TEXT_BOLD_ON) {
       i++;
       ts->bold = true;

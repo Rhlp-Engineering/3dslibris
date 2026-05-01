@@ -251,19 +251,19 @@ h2.align-center-heading {
 }
 
 .ml-percent {
-  margin-left: 20%;
+  margin-left: 15%;
 }
 
 .mr-percent {
-  margin-right: 20%;
+  margin-right: 15%;
 }
 
 .ml-shorthand {
-  margin: 0 24px 0 48px;
+  margin: 0 0 0 32px;
 }
 
 .mr-shorthand {
-  margin: 0 48px 0 24px;
+  margin: 0 32px 0 0;
 }
 
 /* text-indent */

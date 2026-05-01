@@ -101,6 +101,7 @@ int MeasureAlignedLineWidth(const uint32_t *buf, size_t length, size_t start,
     case TEXT_IMAGE_ALIGN:
     case TEXT_RTL_LINE_PX:
     case TEXT_LINE_PX:
+    case TEXT_LINE_START_X:
     case TEXT_LINK_START:
       ++scan;
       continue;

@@ -346,6 +346,19 @@ MarginTopResult ParseMarginRight(const char *style) {
   return ParseMarginValue(style, "margin-right", 1);
 }
 
+int ResolveHorizontalMarginPx(const MarginTopResult &mtr, int display_width) {
+  if (mtr.unit == MarginTopResult::Unit::None)
+    return 0;
+
+  int resolved = 0;
+  if (mtr.unit == MarginTopResult::Unit::Percent)
+    resolved = (mtr.value * display_width) / 100;
+  else
+    resolved = mtr.value;
+
+  return mtr.negative ? -resolved : resolved;
+}
+
 bool TryParseFontSize(const char *style, FontSizeSpec *out) {
   if (!out || !style || !style[0])
     return false;
