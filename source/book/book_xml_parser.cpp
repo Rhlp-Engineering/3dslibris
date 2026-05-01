@@ -15,6 +15,7 @@
 
 #include "book/book_xml_block_utils.h"
 #include "book/book_context.h"
+#include "book/book_xml_css_resolver.h"
 #include "book/book_xml_css_style_utils.h"
 #include "book/book_xml_hidden_utils.h"
 #include "book/book_xml_list_utils.h"
