@@ -29,6 +29,14 @@ struct BidiCollectState {
   size_t fallback_cursor;
 };
 
+static bool IsRtlCodepoint(uint32_t cp) {
+  return (cp >= 0x0590 && cp <= 0x05FF) ||
+         (cp >= 0x0600 && cp <= 0x06FF) ||
+         (cp >= 0x08A0 && cp <= 0x08FF) ||
+         (cp >= 0xFB50 && cp <= 0xFDFF) ||
+         (cp >= 0xFE70 && cp <= 0xFEFF);
+}
+
 static fz_context *GetBidiContext() {
   if (!g_bidi_ctx_init_attempted) {
     g_bidi_ctx_init_attempted = true;
@@ -85,17 +93,8 @@ static void BidiFragmentCallback(const uint32_t *fragment,
 
 bool ContainsRTL(const uint32_t *codepoints, size_t count) {
   for (size_t i = 0; i < count; i++) {
-    uint32_t cp = codepoints[i];
-    // Hebrew: U+0590-U+05FF
-    if (cp >= 0x0590 && cp <= 0x05FF) return true;
-    // Arabic: U+0600-U+06FF
-    if (cp >= 0x0600 && cp <= 0x06FF) return true;
-    // Arabic Extended-A: U+08A0-U+08FF
-    if (cp >= 0x08A0 && cp <= 0x08FF) return true;
-    // Arabic Presentation Forms-A: U+FB50-U+FDFF
-    if (cp >= 0xFB50 && cp <= 0xFDFF) return true;
-    // Arabic Presentation Forms-B: U+FE70-U+FEFF
-    if (cp >= 0xFE70 && cp <= 0xFEFF) return true;
+    if (IsRtlCodepoint(codepoints[i]))
+      return true;
   }
   return false;
 }
