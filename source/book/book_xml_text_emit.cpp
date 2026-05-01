@@ -352,7 +352,6 @@ void EmitFlowedShapedText(
     if (p->in_paragraph)
       p->paragraph_has_content = true;
 
-    size_t segment_start = unit.text.byte_offset;
     text_layout_utils::LineBreakMeasureResult segment =
         text_layout_utils::FindLineBreakAndMeasure(run, unit_index,
                                                    maxLineWidth);
@@ -360,6 +359,7 @@ void EmitFlowedShapedText(
     if (segment_end_index <= unit_index)
       segment_end_index = unit_index + 1;
     u16 advance = (u16)segment.width;
+    size_t segment_start = unit.text.byte_offset;
     size_t segment_end = run[segment_end_index - 1].text.byte_offset +
                          run[segment_end_index - 1].text.byte_length;
 
