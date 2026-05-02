@@ -213,6 +213,126 @@ void TestPendingListItemContentTracksNearestItem() {
                     book_xml_list_utils::HasPendingListItemContent(&p));
 }
 
+void TestNestedListIndentPersistsForAllSiblings() {
+  // Simulates the parser stack behavior for nested ordered lists with <li>
+  // elements to verify that ALL siblings at the same nesting depth receive
+  // the same indentation, not just the first one.
+  parsedata_t p{};
+  parse_init(&p);
+
+  const int space_advance = 4;
+
+  // <ol> (depth 1)
+  parse_push(&p, TAG_OL);
+  book_xml_list_utils::ConfigureElementListSemantics(&p, NULL);
+
+  // <li> "1. Title"
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  int depth = book_xml_list_utils::GetActiveListDepth(&p);
+  int indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  test::ExpectEq("first item indent", indent, 0);
+  int first_margin = parse_current_block_margin_left(&p);
+
+  // </li> — simulates closing the first <li>
+  p.strip_leading_list_marker = false;
+  parse_pop(&p);
+  test::ExpectEq("margin restored after first li", parse_current_block_margin_left(&p), 0);
+
+  // <li> "2. Second top-level"
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  depth = book_xml_list_utils::GetActiveListDepth(&p);
+  indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  test::ExpectEq("second top-level indent", indent, 0);
+  test::ExpectEq("second top-level margin", parse_current_block_margin_left(&p), first_margin);
+
+  // Nested <ol> (depth 2)
+  parse_push(&p, TAG_OL);
+  book_xml_list_utils::ConfigureElementListSemantics(&p, NULL);
+
+  // <li> "a. Section"
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  depth = book_xml_list_utils::GetActiveListDepth(&p);
+  indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  int section_margin = parse_current_block_margin_left(&p);
+  test::ExpectEq("section indent non-zero", indent > 0, true);
+
+  // </li>
+  p.strip_leading_list_marker = false;
+  parse_pop(&p);
+
+  // Nested <ol> (depth 3)
+  parse_push(&p, TAG_OL);
+  book_xml_list_utils::ConfigureElementListSemantics(&p, NULL);
+
+  // <li> "i. Chapter 1"
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  depth = book_xml_list_utils::GetActiveListDepth(&p);
+  indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  int ch1_margin = parse_current_block_margin_left(&p);
+  test::ExpectEq("chapter 1 indent non-zero", indent > 0, true);
+
+  // </li>
+  p.strip_leading_list_marker = false;
+  parse_pop(&p);
+  int after_ch1_margin = parse_current_block_margin_left(&p);
+
+  // <li> "ii. Chapter 2" — THIS IS WHERE THE BUG MANIFESTS
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  depth = book_xml_list_utils::GetActiveListDepth(&p);
+  indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  int ch2_margin = parse_current_block_margin_left(&p);
+
+  // Chapter 2 margin should equal Chapter 1 margin — same depth, same indent
+  test::ExpectEq("chapter 2 same depth as chapter 1", depth, 3);
+  test::ExpectEq("chapter 2 margin equals chapter 1", ch2_margin, ch1_margin);
+
+  // </li>
+  p.strip_leading_list_marker = false;
+  parse_pop(&p);
+
+  // <li> "iii. Chapter 3"
+  parse_push(&p, TAG_LI);
+  book_xml_list_utils::MarkCurrentListItemPending(&p, true);
+  depth = book_xml_list_utils::GetActiveListDepth(&p);
+  indent = book_xml_list_utils::ResolveNestedListItemIndentPx(depth, space_advance);
+  if (indent != 0) {
+    parse_set_current_block_margins(&p, parse_current_block_margin_left(&p) + indent,
+                                    parse_current_block_margin_right(&p));
+  }
+  int ch3_margin = parse_current_block_margin_left(&p);
+
+  test::ExpectEq("chapter 3 same depth as chapter 1", depth, 3);
+  test::ExpectEq("chapter 3 margin equals chapter 1", ch3_margin, ch1_margin);
+
+  // Verify depth-3 indent is greater than depth-2 indent
+  test::ExpectEq("depth 3 indent > depth 2 indent", ch1_margin > section_margin, true);
+}
+
 void TestNestedListIndentOnlyAddsForNestedItems() {
   test::ExpectEq("no list has no indent",
                  book_xml_list_utils::ResolveNestedListItemIndentPx(0, 4), 0);
@@ -222,6 +342,10 @@ void TestNestedListIndentOnlyAddsForNestedItems() {
                  book_xml_list_utils::ResolveNestedListItemIndentPx(2, 4), 12);
   test::ExpectEq("indent has minimum for narrow fonts",
                  book_xml_list_utils::ResolveNestedListItemIndentPx(2, 1), 12);
+  test::ExpectEq("depth 3 indent doubles",
+                 book_xml_list_utils::ResolveNestedListItemIndentPx(3, 4), 24);
+  test::ExpectEq("depth 4 indent triples",
+                 book_xml_list_utils::ResolveNestedListItemIndentPx(4, 4), 36);
 }
 
 } // namespace
@@ -235,6 +359,7 @@ int main() {
   TestListMarkerSuppressionUsesCssClassMap();
   TestParseListMarkerHiddenCssClassLooksUpMapAtLiOpen();
   TestPendingListItemContentTracksNearestItem();
+  TestNestedListIndentPersistsForAllSiblings();
   TestNestedListIndentOnlyAddsForNestedItems();
   return 0;
 }

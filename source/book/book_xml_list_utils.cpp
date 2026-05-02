@@ -298,7 +298,8 @@ int ResolveNestedListItemIndentPx(unsigned int active_list_depth,
                                   int space_advance) {
   if (active_list_depth <= 1)
     return 0;
-  return std::max(12, std::max(0, space_advance) * 3);
+  const int base_indent = std::max(12, std::max(0, space_advance) * 3);
+  return base_indent * (int)(active_list_depth - 1);
 }
 
 unsigned int AdvanceOrderedListOrdinal(parsedata_t *p) {
