@@ -376,31 +376,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
   const EpubDeps deps = BuildEpubDeps(book);
   IStatusReporter *reporter = deps.reporter;
   int rc = 0;
-  // SAFETY: This static is reused across calls to avoid repeated heap
-  // allocation of the manifest/spine vectors for every EPUB open.
-  // epub_data_init() calls epub_data_delete() first, so no stale state leaks.
-  //
-  // This is safe under the current control flow because:
-  //   - Full parse (metadataonly=false) runs from Book::OpenPrepared(), which
-  //     is called either synchronously on the main thread or on the reflow
-  //     worker thread (core 1). In both cases the app is in Opening mode,
-  //     and ProcessJobs does not run (it is gated on mode==Browser).
-  //   - Metadata-only parse (metadataonly=true) runs from Book::Index(),
-  //     which is called from ProcessJobs on the main thread, only while
-  //     mode==Browser. The async worker is not active in Browser mode.
-  //   - epub_resolve_toc() uses its own local epub_data_t, not this one.
-  //   - epub_extract_cover() does not use epub_data_t at all.
-  //
-  // The mode transition (Browser → Opening) happens synchronously on the
-  // main thread BEFORE StartAsyncReflowOpen() signals the worker, so there
-  // is no window where both threads could enter epub() concurrently.
-  //
-  // TODO: This static is a maintenance hazard. If EPUB parsing paths ever
-  // become concurrent (e.g., background pre-parse, parallel metadata
-  // indexing, or worker-thread TOC resolve), this must be converted to a
-  // local or per-call allocation. Treat this as a known design smell that
-  // is release-safe but fragile under architectural changes.
-  static epub_data_t parsedata;
+  epub_data_t parsedata{};
 #ifdef DSLIBRIS_DEBUG
   u64 t_parse_begin = osGetTime();
   u64 t_after_container = t_parse_begin;
@@ -425,6 +401,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
   );
   if (rc == 2) {
     unzClose(uf);
+    epub_data_delete(&parsedata);
     return rc;
   }
   if (rc == 0 && ShouldAbortEpubOpen(book))
