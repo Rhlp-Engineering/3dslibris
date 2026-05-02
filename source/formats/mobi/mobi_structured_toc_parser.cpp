@@ -10,7 +10,7 @@
 
 #include <unordered_map>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/mobi/mobi_record_scan.h"
 #include "shared/status_reporter.h"
 

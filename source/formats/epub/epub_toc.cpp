@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub_toc.h"
 
 #include "book/book_parse_deps.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_manifest.h"
 #include "formats/epub/epub_ncx_parser.h"
@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub_toc_title_match_utils.h"
 #include "formats/epub/epub_zip_utils.h"
 #include "minizip/unzip.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/string_utils.h"
 #include <3ds.h>
 #include <algorithm>

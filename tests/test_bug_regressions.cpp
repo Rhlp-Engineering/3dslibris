@@ -1,5 +1,5 @@
 #include "shared/bugfix_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 
 #include <cstdio>
 #include <cstdlib>

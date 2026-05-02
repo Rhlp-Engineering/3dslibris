@@ -33,7 +33,7 @@
 #include "book/page_alignment_utils.h"
 #include "book/book_xml_css_style_utils.h"
 #include "book/page_buffer_utils.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/text_render_layout_utils.h"
 #include <algorithm>
 #include <list>

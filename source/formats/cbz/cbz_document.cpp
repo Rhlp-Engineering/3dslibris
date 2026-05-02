@@ -6,7 +6,7 @@
 #include "formats/cbz/cbz_worker.h"
 #include "formats/common/book_error.h"
 #include "formats/common/pdf_view_utils.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/debug_runtime_mode.h"
 
 #include <3ds.h>

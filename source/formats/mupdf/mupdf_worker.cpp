@@ -2,7 +2,7 @@
 
 #include "formats/mupdf/mupdf_worker.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/mupdf/mupdf_render_policy_utils.h"
 #include "formats/mupdf/mupdf_view.h"
 #include "shared/debug_runtime_mode.h"

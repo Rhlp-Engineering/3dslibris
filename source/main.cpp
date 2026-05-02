@@ -18,7 +18,7 @@
     (at your option) any later version.
 */
 
-#include "main.h"
+#include "shared/main.h"
 
 #include <3ds.h>
 #include <dirent.h>
@@ -29,9 +29,9 @@
 #include <time.h>
 
 #include "app/app.h"
-#include "debug_log.h"
-#include "path_utils.h"
-#include "version.h"
+#include "shared/debug_log.h"
+#include "shared/path_utils.h"
+#include "app/version.h"
 
 namespace
 {

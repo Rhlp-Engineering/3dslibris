@@ -2,7 +2,7 @@
 // This tests the auto-detection logic that decides which fonts to load
 // as CJK fallback faces at startup.
 
-#include "path_utils.h"
+#include "shared/path_utils.h"
 
 #include <cstdio>
 #include <cstdlib>

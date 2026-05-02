@@ -5,7 +5,7 @@
 #include <set>
 
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/string_utils.h"
 #include "shared/utf8_utils.h"
 #include "ui/text.h"

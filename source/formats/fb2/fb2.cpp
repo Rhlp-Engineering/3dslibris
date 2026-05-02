@@ -10,7 +10,7 @@
 
 #include "formats/fb2/fb2.h"
 
-#include "base64_utils.h"
+#include "shared/base64_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "stb_image.h"
 #include <ctype.h>

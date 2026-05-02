@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include <stdio.h>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/status_reporter.h"
 #include "shared/string_utils.h"
 

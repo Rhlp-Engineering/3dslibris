@@ -3,8 +3,8 @@
 #include <string.h>
 #include <vector>
 
-#include "debug_log.h"
-#include "screen_constants.h"
+#include "shared/debug_log.h"
+#include "ui/screen_constants.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
 

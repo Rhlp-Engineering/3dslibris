@@ -2,7 +2,7 @@
 
 #include "book/book.h"
 #include "book/book_parse_deps.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/plain_parser.h"
 #include "formats/mobi/mobi_markup_extract.h"
 #include "formats/mobi/mobi_safe_markup_extract.h"

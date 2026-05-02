@@ -6,7 +6,7 @@
 #include <stdint.h>
 typedef uint16_t u16;
 #endif
-#include "color_utils.h"
+#include "shared/color_utils.h"
 
 struct ThemePalette {
   // Bottom-screen gradient

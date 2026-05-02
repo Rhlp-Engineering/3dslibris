@@ -62,7 +62,7 @@ https://github.com/rhaleblian/dslibris
 #include "menus/chapter_menu.h"
 #include "settings/font.h"
 #include "ui/button.h"
-#include "main.h"
+#include "shared/main.h"
 #include "parse.h"
 #include "settings/prefs_button_ids.h"
 #include "ui/text.h"

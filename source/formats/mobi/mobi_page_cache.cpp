@@ -2,9 +2,9 @@
 
 #include "book/book.h"
 #include "book/page.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/page_cache_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 
 #include <3ds.h>
 #include <string.h>

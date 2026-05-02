@@ -1,6 +1,6 @@
 #include "formats/mobi/mobi_parser.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/buffered_status_log.h"
 #include "formats/common/book_error.h"
 #include "formats/common/plain_text_perf_utils.h"

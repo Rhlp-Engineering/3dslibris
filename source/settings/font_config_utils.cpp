@@ -2,7 +2,7 @@
 
 #include <cstring>
 
-#include "font_constants.h"
+#include "ui/font_constants.h"
 #include "shared/text_token_constants.h"
 
 namespace font_config_utils {

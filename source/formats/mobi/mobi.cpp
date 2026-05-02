@@ -13,7 +13,7 @@
 #include "formats/mobi/mobi_cover_meta_cache.h"
 #include "formats/mobi/mobi_record_scan.h"
 #include "formats/mobi/mobi_cover_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/status_reporter.h"
 #include "stb_image.h"
 #include "shared/string_utils.h"

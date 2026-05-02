@@ -37,8 +37,8 @@
 #include "app/status_controller.h"
 #include "app/startup_controller.h"
 #include "app/main_loop_controller.h"
-#include "debug_log.h"
-#include "path_utils.h"
+#include "shared/debug_log.h"
+#include "shared/path_utils.h"
 #include "parse.h"
 #include "shared/debug_runtime_mode.h"
 #include "settings/prefs.h"
@@ -53,7 +53,7 @@ namespace
 {
   static const u64 kBrowserReturnWarmupCooldownMs = 1200;
 } // end anonymous namespace
-#include "color_utils.h"
+#include "shared/color_utils.h"
 #include "ui/theme_colors.h"
 
 // Singleton instance management for App class, allowing global access to the app instance from other modules.

@@ -23,13 +23,13 @@
 #include "app/app.h"
 #include "app/library_controller.h"
 #include "book/book.h"
-#include "debug_log.h"
-#include "main.h"
-#include "path_utils.h"
+#include "shared/debug_log.h"
+#include "shared/main.h"
+#include "shared/path_utils.h"
 #include "settings/prefs.h"
 #include "ui/text.h"
 #include "ui/ui_button_skin.h"
-#include "version.h"
+#include "app/version.h"
 
 namespace
 {

@@ -10,7 +10,7 @@
 #include "shared/open_cancel_poll.h"
 #include "shared/status_reporter.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 
 void Book::ResetMuPdfState() {
   if (!mupdf_state)

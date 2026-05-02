@@ -1,5 +1,5 @@
 #include "book/book.h"
-#include "color_utils.h"
+#include "shared/color_utils.h"
 #include "formats/cbz/cbz_archive.h"
 #include "formats/cbz/cbz_decode.h"
 #include "formats/cbz/cbz_worker.h"
@@ -8,7 +8,7 @@
 #include "settings/prefs.h"
 #include "shared/debug_runtime_mode.h"
 #include "ui/text.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 
 #include <algorithm>
 #include <cmath>

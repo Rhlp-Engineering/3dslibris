@@ -1,7 +1,7 @@
 #include "formats/common/epub_image_utils.h"
 
-#include "base64_utils.h"
-#include "path_utils.h"
+#include "shared/base64_utils.h"
+#include "shared/path_utils.h"
 #include "shared/string_utils.h"
 #include "minizip/unzip.h"
 

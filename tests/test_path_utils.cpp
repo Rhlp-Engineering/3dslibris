@@ -1,4 +1,4 @@
-#include "../include/path_utils.h"
+#include "../include/shared/path_utils.h"
 #include "test_assert.h"
 
 #include <cstring>

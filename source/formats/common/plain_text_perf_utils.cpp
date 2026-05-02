@@ -6,7 +6,7 @@
 
 #include "formats/common/plain_text_perf_utils.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/status_reporter.h"
 
 namespace plain_text_perf_utils {

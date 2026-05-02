@@ -36,7 +36,7 @@
 #include "reader/suspend_policy_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/button.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/layout_reflow.h"
 #include "book/page.h"
 #include "parse.h"

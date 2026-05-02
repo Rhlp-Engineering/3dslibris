@@ -3,7 +3,7 @@
 #include "formats/mupdf/mupdf_view.h"
 
 #include "book/page.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "settings/prefs.h"
 #include "shared/debug_runtime_mode.h"

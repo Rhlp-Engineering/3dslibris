@@ -7,7 +7,7 @@
 #include "formats/epub/epub_cover.h"
 
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/book_error.h"
 #include "formats/common/epub_image_utils.h"
 #include "formats/epub/epub.h"
@@ -15,7 +15,7 @@
 #include "formats/epub/epub_limits.h"
 #include "formats/mupdf/mupdf_common.h"
 #include "minizip/unzip.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "stb_image.h"
 #include "shared/string_utils.h"
 #include <png.h>

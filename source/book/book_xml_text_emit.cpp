@@ -1,6 +1,6 @@
 #include "book/book_xml_text_emit.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/text_token_constants.h"
 #include "utf8proc.h"
 

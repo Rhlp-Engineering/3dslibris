@@ -1,6 +1,6 @@
 #include "reader/inline_link_utils.h"
 
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/text_token_constants.h"
 
 #include <limits>

@@ -10,11 +10,11 @@
 #include <unordered_map>
 
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/epub/epub_ncx_parser.h"
 #include "formats/epub/epub_package_toc_utils.h"
 #include "formats/epub/epub_toc_diag_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/status_reporter.h"
 #include "shared/string_utils.h"
 

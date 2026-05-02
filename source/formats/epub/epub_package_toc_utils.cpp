@@ -12,10 +12,10 @@
 #include <string.h>
 #include <vector>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_limits.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/status_reporter.h"
 #include "shared/string_utils.h"
 

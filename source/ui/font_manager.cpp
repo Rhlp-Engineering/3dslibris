@@ -7,11 +7,11 @@
 #include <string.h>
 
 #include "app/app.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/bugfix_utils.h"
-#include "font_constants.h"
-#include "path_utils.h"
-#include "screen_constants.h"
+#include "ui/font_constants.h"
+#include "shared/path_utils.h"
+#include "ui/screen_constants.h"
 #include "ui/text.h"
 #include "ui/text_cache_utils.h"
 #include "ui/text_limits.h"
