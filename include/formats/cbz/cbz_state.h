@@ -1,6 +1,7 @@
 #pragma once
 
 #include "book/book.h"
+#include "formats/common/fixed_layout_bitmap_cache.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "formats/cbz/cbz_types.h"
 
@@ -10,16 +11,8 @@
 #include <vector>
 
 struct Book::CbzState {
-  struct BitmapCache {
-    int page;
-    int zoom_index;
-    int bitmap_width;
-    int bitmap_height;
-    std::vector<u16> pixels;
-
-    BitmapCache()
-        : page(-1), zoom_index(-1), bitmap_width(0), bitmap_height(0),
-          pixels() {}
+  struct BitmapCache : fixed_layout_bitmap_cache::Base {
+    BitmapCache() : Base() {}
   };
 
   struct PageBitmap {

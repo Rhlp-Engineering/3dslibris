@@ -1,5 +1,6 @@
 #pragma once
 
+#include "formats/common/fixed_layout_bitmap_cache.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "shared/app_flow_utils.h"
 #include "shared/status_reporter.h"
@@ -7,20 +8,15 @@
 #include <vector>
 
 struct Book::MuPdfState {
-  struct BitmapCache {
-    int page;
-    int zoom_index;
+  struct BitmapCache : fixed_layout_bitmap_cache::Base {
     float left;
     float top;
     float width;
     float height;
-    int bitmap_width;
-    int bitmap_height;
-    std::vector<u16> pixels;
 
     BitmapCache()
-        : page(-1), zoom_index(-1), left(0.0f), top(0.0f), width(1.0f),
-          height(1.0f), bitmap_width(0), bitmap_height(0) {}
+        : Base(), left(0.0f), top(0.0f), width(1.0f),
+          height(1.0f) {}
   };
 
   struct AdjacentSlot {
