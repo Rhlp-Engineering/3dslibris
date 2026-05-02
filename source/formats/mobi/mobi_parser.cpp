@@ -597,6 +597,118 @@ static void FinalizeImmediateMobiParse(Book *book, const char *path,
   book->MarkMobiRenderSettingsApplied(deferred->line_wrap_fix_applied);
 }
 
+// --- Sync pagination (deferred path) ---
+
+template <typename LogFn>
+static u8 RunSyncMobiPagination(Book *book, const char *path,
+                                const BookParseDeps &deps,
+                                const std::string &raw,
+                                const MobiHeaderInfo &header,
+                                const std::string &decoded_utf8,
+                                MobiDeferredState *deferred,
+                                IStatusReporter *reporter,
+                                const Hooks &hooks,
+                                LogFn append_debug_log) {
+  const unsigned text_total_kb =
+      (deferred->text_utf8.size() > 1024u)
+          ? (unsigned)(deferred->text_utf8.size() / 1024u)
+          : 1u;
+  unsigned int pass_count = 0;
+  while (!deferred->stream.completed) {
+    if (ShouldAbortMobiOpen(book)) {
+      return BOOK_ERR_CANCELLED;
+    }
+    if (open_cancel_poll::Poll(book, reporter, "mobi-deferred-sync")) {
+      return BOOK_ERR_CANCELLED;
+    }
+    if (++pass_count > kMobiSynchronousPassLimit) {
+      return 1;
+    }
+    PlainTextStreamPerf perf;
+    const plain_text_stream::ContinueCallbacks callbacks =
+        hooks.make_plain_continue_callbacks();
+    const bool done = plain_text_stream::ContinueState(
+        &deferred->stream, deferred->text_utf8, kMobiSynchronousBudgetMs,
+        kMobiSynchronousPageBudget, 0, &deferred->text_cursor_per_page, &perf,
+        callbacks);
+#ifdef DSLIBRIS_DEBUG
+    LogPlainTextStreamPerf(reporter, "PLAIN-MOBI sync", perf, done);
+#endif
+    if (done) {
+      deferred->t_after_pages = osGetTime();
+      book->NotifySpineProgress(text_total_kb, text_total_kb);
+    } else {
+      const unsigned cursor_kb =
+          (unsigned)(deferred->stream.cursor / 1024u);
+      book->NotifySpineProgress(cursor_kb, text_total_kb);
+    }
+  }
+#ifdef DSLIBRIS_DEBUG
+  if (reporter) {
+    DBG_LOGF(reporter, "MOBI: stage=sync-pages-done");
+  }
+#endif
+  MobiTocFinalizeResult toc_result;
+  FinalizeImmediateMobiParse(book, path, deps, raw, header, decoded_utf8,
+                             deferred, &toc_result, hooks);
+#ifdef DSLIBRIS_DEBUG
+  if (reporter) {
+    DBG_LOGF(reporter, "MOBI: stage=finalized");
+  }
+#endif
+  if (reporter) {
+    append_debug_log("MOBI: parse end");
+  }
+  return book->GetPageCount() > 0 ? 0 : 1;
+}
+
+// --- Timing output ---
+
+static void LogMobiParseTimings(IStatusReporter *reporter,
+                                const MobiDeferredState *deferred,
+                                const Book *book,
+                                const MobiTocFinalizeResult &toc_result) {
+  if (!reporter)
+    return;
+  char msg[320];
+  snprintf(
+      msg, sizeof(msg),
+      "MOBI: text bytes=%u headings=%u mapped=%u structured=%u direct=%u "
+      "chapters=%u guess_utf8=%u guess_legacy=%u filepos_toc=%u",
+      (unsigned)deferred->text_utf8.size(),
+      (unsigned)deferred->heading_hints.size(),
+      (unsigned)toc_result.mapped_chapters,
+      (unsigned)toc_result.structured_entries,
+      (unsigned)toc_result.structured_direct,
+      (unsigned)book->GetChapters().size(), deferred->used_utf8_guess ? 1u : 0u,
+      deferred->used_legacy_guess ? 1u : 0u,
+      toc_result.structured_from_filepos ? 1u : 0u);
+  DBG_LOGF(reporter, "%s", msg);
+
+  char tmsg[320];
+  snprintf(
+      tmsg, sizeof(tmsg),
+      "MOBI: timing read=%llums decomp=%llums decode=%llums "
+      "markup_scan=%llums cleanup=%llums initial_pages=%llums "
+      "deferred_pages=%llums deferred_toc=%llums total=%llums",
+      (unsigned long long)(deferred->t_after_read - deferred->t_parse_begin),
+      (unsigned long long)(deferred->t_after_decompress -
+                           deferred->t_after_read),
+      (unsigned long long)(deferred->t_after_decode -
+                           deferred->t_after_decompress),
+      (unsigned long long)(deferred->t_after_markup_scan -
+                           deferred->t_after_decode),
+      (unsigned long long)(deferred->t_after_cleanup -
+                           deferred->t_after_markup_scan),
+      (unsigned long long)(deferred->t_after_initial_pages -
+                           deferred->t_after_cleanup),
+      (unsigned long long)(deferred->t_after_pages -
+                           deferred->t_after_initial_pages),
+      (unsigned long long)(deferred->t_after_toc - deferred->t_after_pages),
+      (unsigned long long)(deferred->t_after_toc - deferred->t_parse_begin));
+  DBG_LOGF(reporter, "%s", tmsg);
+}
+
 } // namespace
 
 u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
@@ -636,6 +748,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
 
   log_stage("after-erase");
 
+  // --- Phase: page cache check (early exit) ---
   if (TryLoadMobiPageCache(book, path, deps)) {
     log_stage("cache-hit");
     if (reporter) {
@@ -655,6 +768,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
     return 0;
   }
 
+  // --- Phase: load source ---
   std::string raw;
   u64 t_after_read = 0;
   u8 rc =
@@ -684,6 +798,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
   if (open_cancel_poll::Poll(book, reporter, "mobi-header"))
     return BOOK_ERR_CANCELLED;
 
+  // --- Phase: validate compression ---
   if (reporter) {
     char msg[224];
     snprintf(msg, sizeof(msg),
@@ -707,6 +822,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
 
   mobi_text_decode::ApplyEmbeddedTitle(book, raw, header);
 
+  // --- Phase: merge text records ---
   {
     const unsigned total_kb =
         (header.text_len > 1024u) ? (unsigned)(header.text_len / 1024u) : 1u;
@@ -726,6 +842,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
   if (open_cancel_poll::Poll(book, reporter, "mobi-text"))
     return BOOK_ERR_CANCELLED;
 
+  // --- Phase: decode text ---
 #ifdef DSLIBRIS_DEBUG
   if (reporter)
     DBG_LOGF(reporter,
@@ -753,6 +870,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
   if (open_cancel_poll::Poll(book, reporter, "mobi-decode"))
     return BOOK_ERR_CANCELLED;
 
+  // --- Phase: deferred state + TOC prepare ---
   // parsedata_t::buf[4096] = 16KB inside State; stack-allocating overflows 32KB main stack.
   std::unique_ptr<MobiDeferredState> deferred_uptr(
       new (std::nothrow) MobiDeferredState());
@@ -773,6 +891,7 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
 
   { std::string().swap(raw); }
 
+  // --- Phase: initial pagination ---
   bool pages_done_initial = false;
   if (!StartInitialMobiPagination(book, deps, &deferred, &pages_done_initial,
                                   hooks))
@@ -783,96 +902,20 @@ u8 ParseFile(Book *book, const char *path, const Hooks &hooks) {
   if (open_cancel_poll::Poll(book, reporter, "mobi-pages-initial"))
     return BOOK_ERR_CANCELLED;
 
+  // --- Phase: synchronous deferred pagination ---
   if (!pages_done_initial) {
-    const unsigned text_total_kb =
-        (deferred.text_utf8.size() > 1024u)
-            ? (unsigned)(deferred.text_utf8.size() / 1024u)
-            : 1u;
-    unsigned int pass_count = 0;
-    while (!deferred.stream.completed) {
-      if (ShouldAbortMobiOpen(book)) {
-        return BOOK_ERR_CANCELLED;
-      }
-      if (open_cancel_poll::Poll(book, reporter, "mobi-deferred-sync")) {
-        return BOOK_ERR_CANCELLED;
-      }
-      if (++pass_count > kMobiSynchronousPassLimit) {
-        return 1;
-      }
-      PlainTextStreamPerf perf;
-      const plain_text_stream::ContinueCallbacks callbacks =
-          hooks.make_plain_continue_callbacks();
-      const bool done = plain_text_stream::ContinueState(
-          &deferred.stream, deferred.text_utf8, kMobiSynchronousBudgetMs,
-          kMobiSynchronousPageBudget, 0, &deferred.text_cursor_per_page, &perf,
-          callbacks);
-#ifdef DSLIBRIS_DEBUG
-      LogPlainTextStreamPerf(reporter, "PLAIN-MOBI sync", perf, done);
-#endif
-      if (done) {
-        deferred.t_after_pages = osGetTime();
-        book->NotifySpineProgress(text_total_kb, text_total_kb);
-      } else {
-        const unsigned cursor_kb =
-            (unsigned)(deferred.stream.cursor / 1024u);
-        book->NotifySpineProgress(cursor_kb, text_total_kb);
-      }
-    }
-    log_stage("sync-pages-done");
-    MobiTocFinalizeResult toc_result;
-    FinalizeImmediateMobiParse(book, path, deps, raw, header, decoded.utf8,
-                               &deferred, &toc_result, hooks);
-    log_stage("finalized");
-    if (reporter) {
-      append_debug_log("MOBI: parse end");
-    }
-    return book->GetPageCount() > 0 ? 0 : 1;
+    return RunSyncMobiPagination(book, path, deps, raw, header, decoded.utf8,
+                                 &deferred, reporter, hooks, append_debug_log);
   }
 
+  // --- Phase: TOC finalize (immediate path) ---
   MobiTocFinalizeResult toc_result;
   FinalizeImmediateMobiParse(book, path, deps, raw, header, decoded.utf8,
                              &deferred, &toc_result, hooks);
   log_stage("finalized");
 
-  if (reporter) {
-    char msg[320];
-    snprintf(
-        msg, sizeof(msg),
-        "MOBI: text bytes=%u headings=%u mapped=%u structured=%u direct=%u "
-        "chapters=%u guess_utf8=%u guess_legacy=%u filepos_toc=%u",
-        (unsigned)deferred.text_utf8.size(),
-        (unsigned)deferred.heading_hints.size(),
-        (unsigned)toc_result.mapped_chapters,
-        (unsigned)toc_result.structured_entries,
-        (unsigned)toc_result.structured_direct,
-        (unsigned)book->GetChapters().size(), deferred.used_utf8_guess ? 1u : 0u,
-        deferred.used_legacy_guess ? 1u : 0u,
-        toc_result.structured_from_filepos ? 1u : 0u);
-    append_debug_log(msg);
-
-    char tmsg[320];
-    snprintf(
-        tmsg, sizeof(tmsg),
-        "MOBI: timing read=%llums decomp=%llums decode=%llums "
-        "markup_scan=%llums cleanup=%llums initial_pages=%llums "
-        "deferred_pages=%llums deferred_toc=%llums total=%llums",
-        (unsigned long long)(deferred.t_after_read - deferred.t_parse_begin),
-        (unsigned long long)(deferred.t_after_decompress -
-                             deferred.t_after_read),
-        (unsigned long long)(deferred.t_after_decode -
-                             deferred.t_after_decompress),
-        (unsigned long long)(deferred.t_after_markup_scan -
-                             deferred.t_after_decode),
-        (unsigned long long)(deferred.t_after_cleanup -
-                             deferred.t_after_markup_scan),
-        (unsigned long long)(deferred.t_after_initial_pages -
-                             deferred.t_after_cleanup),
-        (unsigned long long)(deferred.t_after_pages -
-                             deferred.t_after_initial_pages),
-        (unsigned long long)(deferred.t_after_toc - deferred.t_after_pages),
-        (unsigned long long)(deferred.t_after_toc - deferred.t_parse_begin));
-    append_debug_log(tmsg);
-  }
+  // --- Phase: timing output ---
+  LogMobiParseTimings(reporter, &deferred, book, toc_result);
 
   if (reporter)
     append_debug_log("MOBI: parse end");
