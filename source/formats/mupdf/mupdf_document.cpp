@@ -48,10 +48,10 @@ void Book::InitMuPdfView(u16 page_count, fz_context *ctx, fz_document *doc,
   mupdf_state->reporter = GetStatusReporter();
   mupdf_state->keep_preview_cache = policy.keep_preview_cache;
   mupdf_state->keep_tile_cache = policy.keep_tile_cache;
-  mupdf_state->max_zoom_index = policy.max_zoom_index;
-  mupdf_state->zoom_index = policy.default_zoom_index;
-  mupdf_state->viewport_center_x = 0.5f;
-  mupdf_state->viewport_center_y = 0.5f;
+  mupdf_state->viewport.max_zoom_index = policy.max_zoom_index;
+  mupdf_state->viewport.zoom_index = policy.default_zoom_index;
+  mupdf_state->viewport.center_x = 0.5f;
+  mupdf_state->viewport.center_y = 0.5f;
   mupdf_state->final_cache_pending =
       app_flow_utils::MuPdfWantsFinalQualityRender(document_kind);
   InitMuPdfWorker(mupdf_state);

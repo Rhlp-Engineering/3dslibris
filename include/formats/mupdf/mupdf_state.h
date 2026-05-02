@@ -1,5 +1,6 @@
 #pragma once
 
+#include "formats/common/fixed_layout_viewport_utils.h"
 #include "shared/app_flow_utils.h"
 #include "shared/status_reporter.h"
 
@@ -100,11 +101,7 @@ struct Book::MuPdfState {
   app_flow_utils::MuPdfDocumentKind document_kind;
   bool keep_preview_cache;
   bool keep_tile_cache;
-  int max_zoom_index;
-  int zoom_index;
-  float viewport_center_x;
-  float viewport_center_y;
-  bool viewport_interaction_active;
+  fixed_layout_viewport_utils::ViewportState viewport;
   BitmapCache current_preview;
   BitmapCache current_interactive_tile;
   BitmapCache current_final_zoom;
@@ -124,9 +121,8 @@ struct Book::MuPdfState {
         page_width(612.0f), page_height(792.0f), page_width_cache(),
         page_height_cache(), page_metrics_valid(), is_new_3ds(false),
         document_kind(app_flow_utils::MuPdfDocumentKind::Unknown),
-        keep_preview_cache(true), keep_tile_cache(false), max_zoom_index(3),
-        zoom_index(2), viewport_center_x(0.5f), viewport_center_y(0.5f),
-        viewport_interaction_active(false),
+        keep_preview_cache(true), keep_tile_cache(false),
+        viewport(),
         current_preview(), current_interactive_tile(), current_final_zoom(),
         final_cache_pending(false), cached_display_list(NULL),
         cached_display_list_page(-1), prev_slot(), next_slot(), incremental(),
