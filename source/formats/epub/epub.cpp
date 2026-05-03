@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/common/book_error.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_page_cache.h"
+#include "settings/prefs.h"
 #include "formats/epub/epub_cover.h"
 #include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_ncx_parser.h"
@@ -434,7 +435,8 @@ int epub(Book *book, std::string name, bool metadataonly) {
                                 deps.ts ? (int)deps.ts->margin.right : 0,
                                 deps.ts ? (int)deps.ts->margin.top : 0,
                                 deps.ts ? (int)deps.ts->margin.bottom : 0,
-                                deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL)) {
+                                deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL,
+                                deps.prefs ? deps.prefs->respect_publisher_font_size : false)) {
     if (reporter) {
       DBG_LOGF(reporter, "EPUB: page cache hit pages=%u chapters=%u",
                (unsigned)book->GetPageCount(),
@@ -459,7 +461,9 @@ int epub(Book *book, std::string name, bool metadataonly) {
             deps.ts ? (int)deps.ts->margin.right : 0,
             deps.ts ? (int)deps.ts->margin.top : 0,
             deps.ts ? (int)deps.ts->margin.bottom : 0,
-            deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL);
+            deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL,
+            false,
+            deps.prefs ? deps.prefs->respect_publisher_font_size : false);
       }
     }
     return FinalizeEpubParse(uf, &parsedata, book, name, deps, 0, false);

@@ -38,6 +38,7 @@
 #include "shared/debug_log.h"
 #include "parse.h"
 #include "book/reflow_cache_save_utils.h"
+#include "settings/prefs.h"
 #include "ui/screen_constants.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_render_layout_utils.h"

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 */
 
 #include "formats/epub/epub_cache.h"
+#include "settings/prefs.h"
 
 #include "shared/debug_log.h"
 #include "formats/epub/epub_manifest.h"
@@ -46,7 +47,8 @@ int FinalizeEpubParse(unzFile uf, epub_data_t *parsedata, Book *book,
           deps.ts ? (int)deps.ts->margin.bottom : 0,
           deps.regular_font_path.empty()
               ? NULL
-              : deps.regular_font_path.c_str());
+              : deps.regular_font_path.c_str(),
+          deps.prefs ? deps.prefs->respect_publisher_font_size : false);
     }
   }
   if (uf)
