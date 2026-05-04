@@ -30,8 +30,8 @@ int main() {
   ExpectFalse("synchronous opening should be cancelled on suspend",
               reader_suspend_policy_utils::ShouldKeepOpeningDuringSuspend(
                   true, false));
-  ExpectTrue("async opening survives HOME suspend",
-             reader_suspend_policy_utils::ShouldKeepOpeningDuringSuspend(
-                 true, true));
+  ExpectFalse("async opening should be cancelled on suspend (regression fix)",
+              reader_suspend_policy_utils::ShouldKeepOpeningDuringSuspend(
+                  true, true));
   return 0;
 }

@@ -21,9 +21,9 @@
 #include <vector>
 
 #include "app/app.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "ui/button.h"
-#include "font_constants.h"
+#include "ui/font_constants.h"
 #include "settings/font_config_utils.h"
 #include "settings/prefs.h"
 #include "shared/bugfix_utils.h"

@@ -303,6 +303,47 @@ h2.align-center-heading {
 .mb-1rem { margin-bottom: 1.5rem; }
 .mb-12pt { margin-bottom: 12pt; }
 
+/* text-align test classes — display: block from class definition */
+.paraCenter {
+  display: block;
+  text-align: center;
+}
+
+.paraRight {
+  display: block;
+  text-align: right;
+}
+
+/* display:block on span — margin, text-indent */
+.blockSpan {
+  display: block;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  margin-left: 32px;
+  margin-right: 32px;
+  text-indent: 0;
+}
+
+.ornament {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+/* float / clear from class — for promoted inline elements */
+.floatLeftBlock {
+  display: block;
+  float: left;
+  margin: 0 12px 0 0;
+}
+
+.clearBothBlock {
+  display: block;
+  clear: both;
+  margin-top: 8px;
+}
+
 /* Ornament separator — as reported in issue #74 */
 .spaceOrnament {
   display: block;
@@ -310,4 +351,30 @@ h2.align-center-heading {
   margin-top: 3%;
   text-align: center;
   text-indent: 0%;
+}
+
+.publisher-tiny {
+  font-size: 70%;
+}
+
+.publisher-large {
+  font-size: 140%;
+}
+
+.hr-indented {
+  margin-left: 10%;
+  margin-right: 10%;
+}
+
+.hr-spaced {
+  margin-top: 2em;
+  margin-bottom: 2em;
+}
+
+.hr-leftish {
+  text-align: left;
+}
+
+.hr-rightish {
+  text-align: right;
 }

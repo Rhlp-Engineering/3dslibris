@@ -17,12 +17,15 @@ namespace epub_page_cache {
 bool TryLoad(Book *book, const char *book_path, int pixel_size,
              int line_spacing, int paragraph_spacing, int paragraph_indent,
              int orientation, int margin_left, int margin_right, int margin_top,
-             int margin_bottom, const char *regular_font);
+             int margin_bottom, const char *regular_font,
+             bool respect_publisher_font_size = false);
 
 void Save(Book *book, const char *book_path, int pixel_size,
           int line_spacing, int paragraph_spacing, int paragraph_indent,
           int orientation, int margin_left, int margin_right, int margin_top,
-          int margin_bottom, const char *regular_font, bool closing = false);
+          int margin_bottom, const char *regular_font,
+          bool closing = false,
+          bool respect_publisher_font_size = false);
 
 void SavePending(Book *book, bool closing = false);
 
@@ -34,7 +37,8 @@ public:
   bool Begin(Book *book, const char *book_path, int pixel_size, int line_spacing,
              int paragraph_spacing, int paragraph_indent, int orientation,
              int margin_left, int margin_right, int margin_top, int margin_bottom,
-             const char *regular_font);
+             const char *regular_font,
+             bool respect_publisher_font_size = false);
 
   bool FlushPages(Book *book, u16 from_page);
 

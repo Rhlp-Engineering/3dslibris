@@ -18,7 +18,7 @@
 #include <string>
 
 #include "app/app.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "library/browser_warmup_utils.h"
 #include "shared/debug_runtime_mode.h"
 

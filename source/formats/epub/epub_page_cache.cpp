@@ -9,9 +9,9 @@
 #include "book/book.h"
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/page_cache_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/open_cancel_poll.h"
 #include <3ds.h>
 #include <string.h>
@@ -24,7 +24,7 @@ namespace {
 static const std::string &kEpubCacheBaseDir = paths::GetCacheBaseDir();
 static const std::string &kEpubCacheDir = paths::GetEpubCacheDir();
 static const u32 kEpubPageCacheMagic = 0x45504347U;
-static const u16 kEpubPageCacheVersion = 5;
+static const u16 kEpubPageCacheVersion = 6;
 static const u16 kPageCacheTitleMaxBytes = 1000;
 static const u16 kPageCachePageMaxBytes = 4096;
 static const u16 kPageCacheChapterTitleMaxBytes = 2048;
@@ -53,13 +53,15 @@ struct EpubCacheLayoutParams {
   int margin_top;
   int margin_bottom;
   std::string regular_font;
+  bool respect_publisher_font_size;
 };
 
 static EpubCacheLayoutParams
 BuildLayoutParams(const char *book_path, int pixel_size, int line_spacing,
                   int paragraph_spacing, int paragraph_indent, int orientation,
                   int margin_left, int margin_right, int margin_top,
-                  int margin_bottom, const char *regular_font) {
+                  int margin_bottom, const char *regular_font,
+                  bool respect_publisher_font_size) {
   EpubCacheLayoutParams params;
   if (!book_path)
     return params;
@@ -80,6 +82,7 @@ BuildLayoutParams(const char *book_path, int pixel_size, int line_spacing,
   params.margin_top = margin_top;
   params.margin_bottom = margin_bottom;
   params.regular_font = regular_font ? regular_font : "";
+  params.respect_publisher_font_size = respect_publisher_font_size;
   return params;
 }
 
@@ -100,6 +103,8 @@ static std::string BuildCachePath(const char *book_path,
   layout_params.margin_top = params.margin_top;
   layout_params.margin_bottom = params.margin_bottom;
   layout_params.regular_font = params.regular_font;
+  if (params.respect_publisher_font_size)
+    layout_params.variant_token = "pub1";
   return page_cache_utils::BuildPageCachePath(
       kEpubCacheDir, ".epc", book_path, layout_params);
 }
@@ -161,7 +166,8 @@ namespace epub_page_cache {
 bool TryLoad(Book *book, const char *book_path, int pixel_size,
              int line_spacing, int paragraph_spacing, int paragraph_indent,
              int orientation, int margin_left, int margin_right, int margin_top,
-             int margin_bottom, const char *regular_font) {
+             int margin_bottom, const char *regular_font,
+             bool respect_publisher_font_size) {
   if (!book || !book_path)
     return false;
 
@@ -170,7 +176,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
   EpubCacheLayoutParams params = BuildLayoutParams(
       book_path, pixel_size, line_spacing, paragraph_spacing, paragraph_indent,
       orientation, margin_left, margin_right, margin_top, margin_bottom,
-      regular_font);
+      regular_font, respect_publisher_font_size);
 
   std::string cache_path = BuildCachePath(book_path, params);
   if (cache_path.empty())
@@ -265,7 +271,8 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
 void Save(Book *book, const char *book_path, int pixel_size,
           int line_spacing, int paragraph_spacing, int paragraph_indent,
           int orientation, int margin_left, int margin_right, int margin_top,
-          int margin_bottom, const char *regular_font, bool closing) {
+          int margin_bottom, const char *regular_font, bool closing,
+          bool respect_publisher_font_size) {
   IStatusReporter *r = book ? book->GetStatusReporter() : nullptr;
   if (!book || !book_path || book->GetPageCount() == 0)
     return;
@@ -279,7 +286,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
   EpubCacheLayoutParams params = BuildLayoutParams(
       book_path, pixel_size, line_spacing, paragraph_spacing, paragraph_indent,
       orientation, margin_left, margin_right, margin_top, margin_bottom,
-      regular_font);
+      regular_font, respect_publisher_font_size);
 
   std::string cache_path = BuildCachePath(book_path, params);
   if (cache_path.empty())
@@ -408,7 +415,7 @@ void SavePending(Book *book, bool closing) {
        p.pixel_size, p.line_spacing, p.paragraph_spacing, p.paragraph_indent,
        p.orientation, p.margin_left, p.margin_right, p.margin_top,
        p.margin_bottom, p.regular_font.empty() ? NULL : p.regular_font.c_str(),
-       closing);
+       closing, p.respect_publisher_font_size);
 
   book->SetPendingEpubPageCacheSave(false);
 }
@@ -421,7 +428,8 @@ bool StreamWriter::Begin(Book *book, const char *book_path, int pixel_size,
                          int line_spacing, int paragraph_spacing,
                          int paragraph_indent, int orientation, int margin_left,
                          int margin_right, int margin_top, int margin_bottom,
-                         const char *regular_font) {
+                         const char *regular_font,
+                         bool respect_publisher_font_size) {
   if (fp_)
     Abort();
   if (!book || !book_path)
@@ -432,7 +440,7 @@ bool StreamWriter::Begin(Book *book, const char *book_path, int pixel_size,
   EpubCacheLayoutParams params = BuildLayoutParams(
       book_path, pixel_size, line_spacing, paragraph_spacing, paragraph_indent,
       orientation, margin_left, margin_right, margin_top, margin_bottom,
-      regular_font);
+      regular_font, respect_publisher_font_size);
 
   cache_path_ = BuildCachePath(book_path, params);
   if (cache_path_.empty())

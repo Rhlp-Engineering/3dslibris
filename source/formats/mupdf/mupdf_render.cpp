@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/mupdf/mupdf_render_policy_utils.h"
 
 extern "C" {

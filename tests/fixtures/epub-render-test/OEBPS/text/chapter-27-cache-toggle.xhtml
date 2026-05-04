@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Cache Toggle Test</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet.css"/>
+</head>
+<body>
+  <h1 id="qa-cache-toggle">Cache Toggle Test</h1>
+
+  <ol>
+    <li>Open this chapter with Publisher font sizes Off.</li>
+    <li>Observe that publisher CSS font-size examples are close to baseline.</li>
+    <li>Enable Publisher font sizes On.</li>
+    <li>Reopen/reflow the same book if required.</li>
+    <li>Return to this chapter.</li>
+    <li>The publisher CSS examples should now visibly change.</li>
+    <li>Toggle back Off and confirm the old cached page variant is not incorrectly reused.</li>
+  </ol>
+
+  <hr/>
+
+  <p>Baseline normal paragraph.</p>
+
+  <p style="font-size: 70%">Inline 70% paragraph.</p>
+
+  <p class="publisher-large">Class 140% paragraph.</p>
+
+  <small>Small text block.</small>
+  
+  <big>Big text block.</big>
+
+  <small>
+    <h2>Default H2 inside small</h2>
+  </small>
+
+  <hr style="width: 50%; margin-left: 10%; margin-right: 10%"/>
+
+  <p>End of test.</p>
+
+</body>
+</html>

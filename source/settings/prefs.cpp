@@ -15,12 +15,12 @@
 
 #include "3ds.h"
 #include "app/app.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/book.h"
 #include "book/book_xml.h"
 #include "formats/common/xml_parse_utils.h"
 #include "library/browser_view_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "settings/font_config_utils.h"
 #include "sys/stat.h"
 #include "sys/time.h"
@@ -195,6 +195,9 @@ void start(void *data, const XML_Char *name, const XML_Char **attr) {
       if (!strcmp(attr[i], "fixedLayoutRtl")) {
         p->prefs->fixed_layout_rtl = atoi(attr[i + 1]) != 0;
       }
+      if (!strcmp(attr[i], "respect_publisher_font_size")) {
+        p->prefs->respect_publisher_font_size = atoi(attr[i + 1]) != 0;
+      }
     }
   }
 }
@@ -308,10 +311,11 @@ int Prefs::Write() {
 
   fprintf(fp, "<dslibris format=\"2\">\n");
   fprintf(fp,
-          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" fixedLayoutRtl=\"%d\" />\n",
+          "<option swapshoulder=\"%d\" time24h=\"%d\" browserView=\"%s\" fixedLayoutRtl=\"%d\" respect_publisher_font_size=\"%d\" />\n",
           swapshoulder, time24h,
           browser_view_utils::ToPrefValue(browser_view_mode),
-          fixed_layout_rtl ? 1 : 0);
+          fixed_layout_rtl ? 1 : 0,
+          respect_publisher_font_size ? 1 : 0);
   fprintf(fp, "\t<screen colorMode=\"%d\" flip=\"%d\" />\n", colorMode,
           app->orientation);
   fprintf(fp,
@@ -410,4 +414,5 @@ void Prefs::Init() {
   time24h = true;
   browser_view_mode = BROWSER_VIEW_GALLERY;
   fixed_layout_rtl = false;
+  respect_publisher_font_size = false;
 }

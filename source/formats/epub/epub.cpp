@@ -32,15 +32,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub_manifest.h"
 #include "formats/epub/epub_toc.h"
 
-#include "base64_utils.h"
+#include "shared/base64_utils.h"
 #include "book/book.h"
 #include "book/book_parse_deps.h"
 #include "book/book_xml.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/epub_image_utils.h"
 #include "formats/common/book_error.h"
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_page_cache.h"
+#include "settings/prefs.h"
 #include "formats/epub/epub_cover.h"
 #include "formats/epub/epub_limits.h"
 #include "formats/epub/epub_ncx_parser.h"
@@ -49,7 +50,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 #include "formats/epub/epub_toc_package_loader_utils.h"
 #include "formats/epub/epub_toc_title_match_utils.h"
 #include "formats/epub/epub_zip_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "book/page.h"
 #include "shared/parser_limits.h"
 #include "shared/open_cancel_poll.h"
@@ -278,7 +279,7 @@ static int ParseEpubSpineDocuments(
         if (app) {
           DBG_LOGF(app, "EPUB: spine doc xml-err=%d path=%s (skipped)",
                    parse_rc, path.c_str());
-        }
+      }
         rc = 0;
         // Even on recoverable XML errors the parser may have produced pages
         // before hitting the error. Register those pages so that TOC resolution
@@ -328,7 +329,7 @@ static int ParseEpubSpineDocuments(
                  (unsigned)spine_doc_index, (unsigned)hrefs.size(),
                  (unsigned)book->GetPageCount(),
                  (unsigned)osGetMemRegionFree(MEMREGION_ALL));
-      }
+        }
 #endif
       if (spine_doc_index % 20 == 0 || spine_doc_index == 1)
         book->NotifySpineProgress((unsigned)spine_doc_index,
@@ -357,7 +358,7 @@ static int ParseEpubSpineDocuments(
       char msg[256];
       sprintf(msg, "NOT FOUND IN ZIP: %s", path.c_str());
       DBG_LOG(app, msg);
-    }
+  }
   }
 
   book->SetInlineImageProbeZip(NULL);
@@ -376,31 +377,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
   const EpubDeps deps = BuildEpubDeps(book);
   IStatusReporter *reporter = deps.reporter;
   int rc = 0;
-  // SAFETY: This static is reused across calls to avoid repeated heap
-  // allocation of the manifest/spine vectors for every EPUB open.
-  // epub_data_init() calls epub_data_delete() first, so no stale state leaks.
-  //
-  // This is safe under the current control flow because:
-  //   - Full parse (metadataonly=false) runs from Book::OpenPrepared(), which
-  //     is called either synchronously on the main thread or on the reflow
-  //     worker thread (core 1). In both cases the app is in Opening mode,
-  //     and ProcessJobs does not run (it is gated on mode==Browser).
-  //   - Metadata-only parse (metadataonly=true) runs from Book::Index(),
-  //     which is called from ProcessJobs on the main thread, only while
-  //     mode==Browser. The async worker is not active in Browser mode.
-  //   - epub_resolve_toc() uses its own local epub_data_t, not this one.
-  //   - epub_extract_cover() does not use epub_data_t at all.
-  //
-  // The mode transition (Browser → Opening) happens synchronously on the
-  // main thread BEFORE StartAsyncReflowOpen() signals the worker, so there
-  // is no window where both threads could enter epub() concurrently.
-  //
-  // TODO: This static is a maintenance hazard. If EPUB parsing paths ever
-  // become concurrent (e.g., background pre-parse, parallel metadata
-  // indexing, or worker-thread TOC resolve), this must be converted to a
-  // local or per-call allocation. Treat this as a known design smell that
-  // is release-safe but fragile under architectural changes.
-  static epub_data_t parsedata;
+  epub_data_t parsedata{};
 #ifdef DSLIBRIS_DEBUG
   u64 t_parse_begin = osGetTime();
   u64 t_after_container = t_parse_begin;
@@ -417,7 +394,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
 
   std::string folder;
   rc = LoadEpubPackageForParse(
-      uf, book, &parsedata, &folder, deps
+      uf, book, &parsedata, &folder, metadataonly, deps
 #ifdef DSLIBRIS_DEBUG
       ,
       &t_after_container, &t_after_rootfile
@@ -425,6 +402,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
   );
   if (rc == 2) {
     unzClose(uf);
+    epub_data_delete(&parsedata);
     return rc;
   }
   if (rc == 0 && ShouldAbortEpubOpen(book))
@@ -457,7 +435,8 @@ int epub(Book *book, std::string name, bool metadataonly) {
                                 deps.ts ? (int)deps.ts->margin.right : 0,
                                 deps.ts ? (int)deps.ts->margin.top : 0,
                                 deps.ts ? (int)deps.ts->margin.bottom : 0,
-                                deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL)) {
+                                deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL,
+                                deps.prefs ? deps.prefs->respect_publisher_font_size : false)) {
     if (reporter) {
       DBG_LOGF(reporter, "EPUB: page cache hit pages=%u chapters=%u",
                (unsigned)book->GetPageCount(),
@@ -482,7 +461,9 @@ int epub(Book *book, std::string name, bool metadataonly) {
             deps.ts ? (int)deps.ts->margin.right : 0,
             deps.ts ? (int)deps.ts->margin.top : 0,
             deps.ts ? (int)deps.ts->margin.bottom : 0,
-            deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL);
+            deps.ts ? deps.ts->GetFontFile(TEXT_STYLE_REGULAR).c_str() : NULL,
+            false,
+            deps.prefs ? deps.prefs->respect_publisher_font_size : false);
       }
     }
     return FinalizeEpubParse(uf, &parsedata, book, name, deps, 0, false);
@@ -544,7 +525,7 @@ int epub(Book *book, std::string name, bool metadataonly) {
                                                t_parse_begin),
              (unsigned)page_start_by_href.size(),
              (unsigned)book->GetPageCount());
-  }
+    }
 
 
   ResolveEpubTocFromPackageData(uf, book, parsedata, folder, page_start_by_href,

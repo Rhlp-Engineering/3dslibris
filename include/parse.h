@@ -19,8 +19,10 @@
 #include <vector>
 #include "book/epub_css_class_map.h"
 #include "shared/status_reporter.h"
+#include "shared/text_layout_utils.h"
 
 #define PAGEBUFSIZE 4096
+static const int LATIN1_ADVANCE_CACHE_SLOTS = 4;
 
 //! Symbols for known XHTML tags.
 
@@ -109,6 +111,14 @@ struct parsedata_t {
 	u8 style_font_size_stack[32];        // applied px for inline font-size at this depth; 0 = no change
 	u8 style_font_size_restore_stack[32]; // pre-change px to restore on element close; 0 = no change
 	bool text_transform_word_start;
+	u8 base_font_size_px;
+	bool coalesce_text_segments;
+	std::string inline_text_tail;
+	u8 latin1_advance_cache_next_slot;
+	u8 latin1_advance_cache_style[LATIN1_ADVANCE_CACHE_SLOTS];
+	u8 latin1_advance_cache_pixel_size[LATIN1_ADVANCE_CACHE_SLOTS];
+	u32 latin1_advance_cache_valid[LATIN1_ADVANCE_CACHE_SLOTS][8];
+	u8 latin1_advance_cache[LATIN1_ADVANCE_CACHE_SLOTS][256];
 	bool link_active_stack[32];
 	u16 link_href_id_stack[32];
 	bool block_text_align_stack[32];
@@ -174,11 +184,24 @@ struct parsedata_t {
 	std::string fb2_title_text;
 	u64 perf_chardata_ms;
 	u32 perf_chardata_calls;
+	u64 perf_element_ms;
+	u32 perf_element_calls;
+	u64 perf_flush_ms;
+	u32 perf_flush_calls;
 	u32 perf_inline_images;
 	u32 perf_page_overflows;
 	int status;
 	int totalbytes;
 	int pagecount;
+	//! Reusable shaped glyph buffer — avoids per-token heap alloc during
+	//! pagination. Passed as `out` to ShapeTextRunBidi/ShapeTextRunUtf8,
+	//! which call clear() before filling it.
+	std::vector<text_layout_utils::ShapedGlyph> shaped_run;
+	//! Reusable codepoint buffer for BiDi analysis inside ShapeTextRunBidi.
+	//! Avoids allocating a new vector for every token during pagination.
+	std::vector<uint32_t> bidi_cps;
+	//! Reusable BiDi run buffer for ShapeTextRunBidi.
+	std::vector<text_bidi_utils::BidiRun> bidi_runs;
 };
 
 bool iswhitespace(u32 c);

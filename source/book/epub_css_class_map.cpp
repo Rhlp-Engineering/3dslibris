@@ -198,6 +198,9 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
     const TextTransform text_transform =
         book_xml_css_style_utils::ParseTextTransform(b);
     const bool has_text_transform = (text_transform != TextTransform::None);
+    const bool is_display_block =
+        ContainsNoCase(block, "display:block") ||
+        ContainsNoCase(block, "display: block");
 
     if (mt.unit != MarginTopResult::Unit::None ||
         mb.unit != MarginTopResult::Unit::None ||
@@ -212,7 +215,7 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
         has_page_break_inside_avoid ||
         no_underline || reset_bold || reset_italic ||
         text_indent.unit != MarginTopResult::Unit::None ||
-        has_text_transform) {
+        has_text_transform || is_display_block) {
       for (size_t i = 0; i < class_names.size(); i++) {
         CssClassMargins &entry = (*out)[class_names[i]];
         if (mt.unit != MarginTopResult::Unit::None)
@@ -265,6 +268,8 @@ void ParseCssIntoClassMap(const char *css_text, size_t len, CssClassMap *out) {
           entry.has_text_transform = true;
           entry.text_transform = text_transform;
         }
+        if (is_display_block)
+          entry.is_display_block = true;
       }
     }
   }
@@ -773,6 +778,92 @@ MarginTopResult LookupMarginRightForClassAttr(const std::string &class_attr,
       return it->second.margin_right;
   }
   return MarginTopResult{};
+}
+
+bool LookupAllForClassAttr(const std::string &class_attr,
+                           const CssClassMap &class_map,
+                           CssClassMargins *out) {
+  if (!out)
+    return false;
+  *out = CssClassMargins{};
+  if (class_attr.empty() || class_map.empty())
+    return false;
+
+  bool found_any = false;
+  size_t pos = 0;
+  while (pos < class_attr.size()) {
+    while (pos < class_attr.size() &&
+           (class_attr[pos] == ' ' || class_attr[pos] == '\t' ||
+            class_attr[pos] == '\r' || class_attr[pos] == '\n'))
+      ++pos;
+    const size_t start = pos;
+    while (pos < class_attr.size() && IsIdentChar(class_attr[pos]))
+      ++pos;
+    if (pos == start) {
+      if (pos < class_attr.size())
+        ++pos;
+      continue;
+    }
+    const std::string class_name = class_attr.substr(start, pos - start);
+    CssClassMap::const_iterator it = class_map.find(class_name);
+    if (it == class_map.end())
+      continue;
+    const CssClassMargins &src = it->second;
+    if (src.margin_top.unit != MarginTopResult::Unit::None)
+      out->margin_top = src.margin_top;
+    if (src.margin_bottom.unit != MarginTopResult::Unit::None)
+      out->margin_bottom = src.margin_bottom;
+    if (src.margin_left.unit != MarginTopResult::Unit::None)
+      out->margin_left = src.margin_left;
+    if (src.margin_right.unit != MarginTopResult::Unit::None)
+      out->margin_right = src.margin_right;
+    if (src.font_size.unit != FontSizeSpec::Unit::None)
+      out->font_size = src.font_size;
+    if (src.hide_list_markers)
+      out->hide_list_markers = true;
+    if (src.has_text_align) {
+      out->has_text_align = true;
+      out->text_align = src.text_align;
+    }
+    if (src.has_white_space) {
+      out->has_white_space = true;
+      out->white_space = src.white_space;
+    }
+    if (src.superscript)
+      out->superscript = true;
+    if (src.subscript)
+      out->subscript = true;
+    if (src.page_break_before)
+      out->page_break_before = true;
+    if (src.page_break_after)
+      out->page_break_after = true;
+    if (src.page_break_inside_avoid)
+      out->page_break_inside_avoid = true;
+    if (src.has_float) {
+      out->has_float = true;
+      out->float_mode = src.float_mode;
+    }
+    if (src.has_clear) {
+      out->has_clear = true;
+      out->clear_mode = src.clear_mode;
+    }
+    if (src.no_underline)
+      out->no_underline = true;
+    if (src.reset_bold)
+      out->reset_bold = true;
+    if (src.reset_italic)
+      out->reset_italic = true;
+    if (src.text_indent.unit != MarginTopResult::Unit::None)
+      out->text_indent = src.text_indent;
+    if (src.has_text_transform) {
+      out->has_text_transform = true;
+      out->text_transform = src.text_transform;
+    }
+    if (src.is_display_block)
+      out->is_display_block = true;
+    found_any = true;
+  }
+  return found_any;
 }
 
 } // namespace epub_css_class_map

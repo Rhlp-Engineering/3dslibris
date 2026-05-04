@@ -30,11 +30,11 @@
 #include "utf8proc.h"
 #include "ui/button.h"
 #include "ui/ui_button_skin.h"
-#include "color_utils.h"
+#include "shared/color_utils.h"
 #include "ui/theme_colors.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "parse.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "settings/prefs.h"
 #include "settings/prefs_button_context_utils.h"
 #include "settings/go_to_page_slider_utils.h"
@@ -55,10 +55,11 @@ static const int PREFS_FOOTER_MID_X  = 72;
 static const int PREFS_FOOTER_RIGHT_X = 172;
 
 static const int kPage2Buttons[] = {
+    PREFS_BUTTON_PUBLISHER_FONTSIZE,
     PREFS_BUTTON_RESET_DEFAULTS,
     PREFS_BUTTON_CLEAR_CACHE,
 };
-static const int kPage2ButtonCount = 2;
+static const int kPage2ButtonCount = 3;
 static const int PREFS_ROW_X = 5;
 static const int PREFS_ROW_W = 230;
 static const u32 kGoToPageCoarseStep = 10;
@@ -469,7 +470,8 @@ void SettingsController::PrefsInit() {
   const std::vector<std::string> labels{
       "font configuration", "font size",    "paragraph spacing",
       "screen orientation", "clock format", "color mode", "library view",
-      "index",              "bookmarks",    "reset settings", "clear cache"};
+      "index",              "bookmarks",    "reset settings", "clear cache",
+      "publisher font sizes"};
 
   for (int i = 0; i < PREFS_BUTTON_COUNT; i++) {
     app->prefsButtons[i].Init(app->ts.get());
@@ -913,6 +915,11 @@ void SettingsController::PrefsRefreshButton(int index) {
               : std::string("(open selected book)"));
     }
     break;
+  case PREFS_BUTTON_PUBLISHER_FONTSIZE:
+    app->prefsButtons[PREFS_BUTTON_PUBLISHER_FONTSIZE].SetLabel2(
+        app->prefs->respect_publisher_font_size ? std::string("On")
+                                                : std::string("Off"));
+    break;
   case PREFS_BUTTON_RESET_DEFAULTS:
     app->prefsButtons[PREFS_BUTTON_RESET_DEFAULTS].SetLabel2(std::string("restore defaults >"));
     break;
@@ -1008,6 +1015,7 @@ void SettingsController::ResetToDefaults() {
   app->prefs->swapshoulder = false;
   app->prefs->browser_view_mode = BROWSER_VIEW_GALLERY;
   app->prefs->fixed_layout_rtl = false;
+  app->prefs->respect_publisher_font_size = false;
   app->MarkBookLayoutDirty();
   app->prefs->Write();
   for (int i = 0; i < PREFS_BUTTON_COUNT; i++)
@@ -1115,6 +1123,15 @@ void SettingsController::PrefsHandlePress() {
 
   if (selected_button == PREFS_BUTTON_FONT_CONFIG) {
     app->ShowFontView(AppMode::PrefsFont);
+    return;
+  }
+
+  if (selected_button == PREFS_BUTTON_PUBLISHER_FONTSIZE) {
+    app->prefs->respect_publisher_font_size = !app->prefs->respect_publisher_font_size;
+    PrefsRefreshButton(PREFS_BUTTON_PUBLISHER_FONTSIZE);
+    app->MarkBookLayoutDirty();
+    app->prefs->Write();
+    app->MarkPrefsDirty();
     return;
   }
 

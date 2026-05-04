@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/html_entity_utils.h"
 #include "formats/common/file_read_utils.h"
 #include "formats/mobi/mobi_record_decode.h"

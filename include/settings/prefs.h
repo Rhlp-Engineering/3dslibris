@@ -28,6 +28,7 @@ public:
   bool time24h;
   BrowserViewMode browser_view_mode;
   bool fixed_layout_rtl;
+  bool respect_publisher_font_size;
 
 private:
   App *app;

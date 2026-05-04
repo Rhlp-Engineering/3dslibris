@@ -14,8 +14,8 @@ void DrawOpeningSplashWithProgress(unsigned done, unsigned total,
 #include "app/app.h"
 #include "book/book.h"
 #include "book/book_context.h"
-#include "debug_log.h"
-#include "path_utils.h"
+#include "shared/debug_log.h"
+#include "shared/path_utils.h"
 #include "shared/app_flow_utils.h"
 #include "shared/utf8_utils.h"
 

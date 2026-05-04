@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "shared/text_bidi_utils.h"
 #include "shared/text_unicode_utils.h"
 
 namespace text_layout_utils {
@@ -45,10 +46,14 @@ struct PerfStats {
 
 bool ShapeTextRunUtf8(const char *s, size_t len, const char *lang,
                       MeasureCodepointFn measure_codepoint, void *measure_ctx,
-                      std::vector<ShapedGlyph> *out);
+                      std::vector<ShapedGlyph> *out,
+                      bool *contains_rtl = nullptr,
+                      bool *contains_arabic = nullptr);
 bool ShapeTextRunBidi(const char *s, size_t len, const char *lang,
-                      MeasureCodepointFn measure_codepoint, void *measure_ctx,
-                      std::vector<ShapedGlyph> *out, bool *has_rtl);
+                       MeasureCodepointFn measure_codepoint, void *measure_ctx,
+                       std::vector<ShapedGlyph> *out, bool *has_rtl,
+                       std::vector<uint32_t> *bidi_cps = nullptr,
+                       std::vector<text_bidi_utils::BidiRun> *bidi_runs = nullptr);
 PerfStats GetPerfStats();
 void ResetPerfStats();
 int MeasureTextRun(const std::vector<ShapedGlyph> &run, size_t start,

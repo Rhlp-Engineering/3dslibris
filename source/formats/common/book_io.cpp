@@ -18,7 +18,7 @@
 #include "formats/pdf/pdf.h"
 #include "formats/cbz/cbz.h"
 #include "formats/odt/odt_loader.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "shared/string_utils.h"
 #include <stdio.h>
 #include <sys/param.h>

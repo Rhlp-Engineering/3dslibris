@@ -11,7 +11,7 @@
 #include <stdio.h>
 
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/page_text_extract_utils.h"
 #include "formats/mobi/mobi_position_map.h"
 #include "shared/status_reporter.h"

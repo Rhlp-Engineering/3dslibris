@@ -18,7 +18,7 @@
 
 #include "app/app.h"
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/page.h"
 #include "shared/text_unicode_utils.h"
 #include "ui/text.h"

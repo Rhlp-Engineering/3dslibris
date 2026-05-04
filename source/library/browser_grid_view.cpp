@@ -4,7 +4,7 @@
 
 #include "app/app.h"
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "library/browser_grid_geometry_utils.h"
 #include "library/browser_presentation_hit_utils.h"
 #include "library/browser_presentation_utils.h"

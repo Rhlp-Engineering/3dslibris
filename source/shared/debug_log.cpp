@@ -1,4 +1,4 @@
-#include "debug_log.h"
+#include "shared/debug_log.h"
 
 #ifdef DSLIBRIS_DEBUG
 

@@ -3,7 +3,7 @@
 #include "formats/mupdf/mupdf_view.h"
 
 #include "book/page.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/common/fixed_layout_viewport_utils.h"
 #include "settings/prefs.h"
 #include "shared/debug_runtime_mode.h"
@@ -312,8 +312,8 @@ pdf_view_utils::NormalizedRect ComputeCurrentMuPdfViewport(
   GetMuPdfPreviewContentBounds(mupdf_state, &left, &top, &width, &height);
   return ComputeMuPdfViewportRect(
       mupdf_state->page_width, mupdf_state->page_height,
-      mupdf_state->document_kind, mupdf_state->zoom_index,
-      mupdf_state->viewport_center_x, mupdf_state->viewport_center_y, left,
+      mupdf_state->document_kind, mupdf_state->viewport.zoom_index,
+      mupdf_state->viewport.center_x, mupdf_state->viewport.center_y, left,
       top, width, height);
 }
 
@@ -518,12 +518,12 @@ bool Book::ChangeMuPdfZoom(int delta) {
   if (!IsPdf() || !mupdf_state || delta == 0)
     return false;
   const int next = std::min(
-      mupdf_state->max_zoom_index,
-      pdf_view_utils::ClampZoomIndexForDevice(mupdf_state->zoom_index + delta,
+      mupdf_state->viewport.max_zoom_index,
+      pdf_view_utils::ClampZoomIndexForDevice(mupdf_state->viewport.zoom_index + delta,
                                               mupdf_state->is_new_3ds));
-  if (next == mupdf_state->zoom_index)
+  if (next == mupdf_state->viewport.zoom_index)
     return false;
-  mupdf_state->zoom_index = next;
+  mupdf_state->viewport.zoom_index = next;
   if (debug_runtime::ForceSynchronousMuPdfRender()) {
     ResetMuPdfDeferredCachesForSynchronousRender(mupdf_state);
     return true;
@@ -532,7 +532,7 @@ bool Book::ChangeMuPdfZoom(int delta) {
           mupdf_state->document_kind) &&
       (mupdf_state->current_final_zoom.page != position ||
        mupdf_state->current_final_zoom.zoom_index <
-           mupdf_state->max_zoom_index)) {
+           mupdf_state->viewport.max_zoom_index)) {
     mupdf_state->final_cache_pending = true;
     CancelMuPdfIncrementalRenderState(mupdf_state);
   } else if (!app_flow_utils::MuPdfWantsFinalQualityRender(
@@ -567,12 +567,12 @@ bool Book::MoveMuPdfViewportToPreview(int touch_x, int touch_y) {
       ComputeCurrentMuPdfViewport(mupdf_state);
   const pdf_view_utils::NormalizedPoint center =
       RecenterMuPdfViewportFromPreview(preview, viewport, nav, touch_x, touch_y);
-  const float dx = std::abs(center.x - mupdf_state->viewport_center_x);
-  const float dy = std::abs(center.y - mupdf_state->viewport_center_y);
+  const float dx = std::abs(center.x - mupdf_state->viewport.center_x);
+  const float dy = std::abs(center.y - mupdf_state->viewport.center_y);
   if (dx < 0.0005f && dy < 0.0005f)
     return false;
-  mupdf_state->viewport_center_x = center.x;
-  mupdf_state->viewport_center_y = center.y;
+  mupdf_state->viewport.center_x = center.x;
+  mupdf_state->viewport.center_y = center.y;
   return true;
 }
 
@@ -580,21 +580,21 @@ bool Book::TranslateMuPdfViewport(float dx, float dy) {
   if (!IsPdf() || !mupdf_state)
     return false;
   const float new_x =
-      std::max(0.0f, std::min(1.0f, mupdf_state->viewport_center_x + dx));
+      std::max(0.0f, std::min(1.0f, mupdf_state->viewport.center_x + dx));
   const float new_y =
-      std::max(0.0f, std::min(1.0f, mupdf_state->viewport_center_y + dy));
-  if (std::abs(new_x - mupdf_state->viewport_center_x) < 0.0005f &&
-      std::abs(new_y - mupdf_state->viewport_center_y) < 0.0005f)
+      std::max(0.0f, std::min(1.0f, mupdf_state->viewport.center_y + dy));
+  if (std::abs(new_x - mupdf_state->viewport.center_x) < 0.0005f &&
+      std::abs(new_y - mupdf_state->viewport.center_y) < 0.0005f)
     return false;
-  mupdf_state->viewport_center_x = new_x;
-  mupdf_state->viewport_center_y = new_y;
+  mupdf_state->viewport.center_x = new_x;
+  mupdf_state->viewport.center_y = new_y;
   return true;
 }
 
 void Book::SetMuPdfViewportInteraction(bool active) {
   if (!IsPdf() || !mupdf_state)
     return;
-  mupdf_state->viewport_interaction_active = active;
+  mupdf_state->viewport.interaction_active = active;
 }
 
 void Book::ResetMuPdfViewport() {
@@ -606,9 +606,9 @@ void Book::ResetMuPdfViewport() {
           : fixed_layout_viewport_utils::PAGE_TURN_LEFT_TO_RIGHT;
   const fixed_layout_viewport_utils::ViewportCenter center =
       fixed_layout_viewport_utils::DefaultPageTurnViewportCenter(direction);
-  mupdf_state->viewport_center_x = center.x;
-  mupdf_state->viewport_center_y = center.y;
-  mupdf_state->viewport_interaction_active = false;
+  mupdf_state->viewport.center_x = center.x;
+  mupdf_state->viewport.center_y = center.y;
+  mupdf_state->viewport.interaction_active = false;
 }
 
 bool Book::JumpMuPdfChapter(int delta) {
@@ -689,12 +689,12 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   DBG_LOGF_CAT(GetStatusReporter(), DBG_LEVEL_DEBUG, DBG_CAT_RENDER,
                "MUPDF draw: enter page=%d page_count=%u zoom=%d doc_kind=%d",
                page_index, (unsigned)mupdf_state->page_count,
-               mupdf_state->zoom_index, (int)mupdf_state->document_kind);
+               mupdf_state->viewport.zoom_index, (int)mupdf_state->document_kind);
 
   if (mupdf_state->current_preview.page != page_index)
     ResetBitmapCache(&mupdf_state->current_preview);
   if (mupdf_state->current_interactive_tile.page != page_index ||
-      mupdf_state->current_interactive_tile.zoom_index != mupdf_state->zoom_index)
+      mupdf_state->current_interactive_tile.zoom_index != mupdf_state->viewport.zoom_index)
     ResetBitmapCache(&mupdf_state->current_interactive_tile);
   if (mupdf_state->current_final_zoom.page != page_index)
     ResetBitmapCache(&mupdf_state->current_final_zoom);
@@ -734,18 +734,18 @@ void Book::DrawCurrentMuPdfView(Text *ts) {
   }
 
   pdf_view_utils::NormalizedRect viewport = ComputeCurrentMuPdfViewport(mupdf_state);
-  mupdf_state->viewport_center_x = viewport.left + viewport.width * 0.5f;
-  mupdf_state->viewport_center_y = viewport.top + viewport.height * 0.5f;
+  mupdf_state->viewport.center_x = viewport.left + viewport.width * 0.5f;
+  mupdf_state->viewport.center_y = viewport.top + viewport.height * 0.5f;
   const bool has_final_cache =
       BitmapCacheValid(mupdf_state->current_final_zoom, page_index) &&
-      mupdf_state->current_final_zoom.zoom_index >= mupdf_state->max_zoom_index;
+      mupdf_state->current_final_zoom.zoom_index >= mupdf_state->viewport.max_zoom_index;
   const bool has_interactive_tile =
       BitmapCacheValid(mupdf_state->current_interactive_tile, page_index);
   const bool wants_final_cache =
       app_flow_utils::MuPdfWantsFinalQualityRender(mupdf_state->document_kind);
   mupdf_state->final_cache_pending = wants_final_cache && !has_final_cache;
   const bool high_quality_viewport =
-      !mupdf_state->viewport_interaction_active;
+      !mupdf_state->viewport.interaction_active;
   const float preview_source_width =
       std::max(1.0f, (float)mupdf_state->current_preview.bitmap_width);
   const float preview_source_height =

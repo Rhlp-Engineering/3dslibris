@@ -2,8 +2,9 @@
 
 #include "book/book_xml_css_style_utils.h"
 #include "parse.h"
-#include "screen_constants.h"
+#include "ui/screen_constants.h"
 #include "shared/text_token_constants.h"
+#include "ui/text_limits.h"
 
 #include <algorithm>
 #include <math.h>
@@ -13,6 +14,11 @@ namespace book_xml_parser_style_utils {
 inline int ComputeHeadingFontSize(
     int base_px, int heading_level, const std::string &style_attr,
     const std::string &class_attr,
+    const epub_css_class_map::CssClassMap &class_map);
+
+inline int ComputeHeadingFontSizeForContext(
+    int inherited_px, int default_heading_base, int heading_level,
+    const std::string &style_attr, const std::string &class_attr,
     const epub_css_class_map::CssClassMap &class_map);
 
 inline void EmitUnderlineStyleMarker(parsedata_t *p, u8 underline_style) {
@@ -165,22 +171,28 @@ inline void RestoreParsedHeadingFontSizeMarker(parsedata_t *p) {
       !p->heading_font_size_emitted_stack[heading_index])
     return;
 
-  int heading_px = p->heading_saved_font_size_stack[heading_index];
+  const int inherited_px = p->heading_saved_font_size_stack[heading_index];
+  const int default_heading_base =
+      (p->base_font_size_px != 0) ? (int)p->base_font_size_px : inherited_px;
+
+  std::string heading_style;
+  std::string heading_class;
   if (heading_level == 1) {
-    heading_px = ComputeHeadingFontSize(
-        p->heading_saved_font_size_stack[heading_index], heading_level,
-        p->last_h1_style, p->last_h1_class, p->css_class_map);
+    heading_style = p->last_h1_style;
+    heading_class = p->last_h1_class;
   } else if (heading_level == 2) {
-    heading_px = ComputeHeadingFontSize(
-        p->heading_saved_font_size_stack[heading_index], heading_level,
-        p->last_h2_style, p->last_h2_class, p->css_class_map);
+    heading_style = p->last_h2_style;
+    heading_class = p->last_h2_class;
   } else {
-    heading_px = ComputeHeadingFontSize(
-        p->heading_saved_font_size_stack[heading_index], heading_level,
-        p->last_h_style, p->last_h_class, p->css_class_map);
+    heading_style = p->last_h_style;
+    heading_class = p->last_h_class;
   }
 
-  if (heading_px != p->heading_saved_font_size_stack[heading_index]) {
+  const int heading_px = ComputeHeadingFontSizeForContext(
+      inherited_px, default_heading_base, heading_level,
+      heading_style, heading_class, p->css_class_map);
+
+  if (heading_px != inherited_px) {
     parse_append_page_byte(p, TEXT_FONT_SIZE);
     parse_append_page_byte(p, (u32)heading_px);
   }
@@ -276,6 +288,17 @@ inline int ClampHeadingFontSize(int base_px, int px) {
   return std::max(min_px, std::min(px, max_px));
 }
 
+inline int ClampInlineFontSize(int base_px, int px) {
+  if (base_px <= 0)
+    return ClampTextPixelSize(px);
+  const int min_px =
+      std::max(kTextPixelSizeMin, (int)floor((double)base_px * 0.75 + 0.5));
+  const int max_px = std::min(
+      kTextPixelSizeMax,
+      std::max(min_px, (int)floor((double)base_px * 2.0 + 0.5)));
+  return std::max(min_px, std::min(px, max_px));
+}
+
 inline int DefaultHeadingFontSize(int base_px, int heading_level) {
   double multiplier = 1.0;
   if (heading_level == 1)
@@ -296,12 +319,31 @@ inline int ComputeHeadingFontSize(
   if (book_xml_css_style_utils::TryParseFontSize(style_attr.c_str(),
                                                  &font_size) ||
       epub_css_class_map::LookupFontSizeForClassAttr(class_attr, class_map,
-                                                     &font_size)) {
+                                                      &font_size)) {
     const int css_px =
         book_xml_css_style_utils::ResolveFontSizePx(font_size, base_px);
     return ClampHeadingFontSize(base_px, css_px);
   }
   return ClampHeadingFontSize(base_px, fallback_px);
+}
+
+inline int ComputeHeadingFontSizeForContext(
+    int inherited_px, int default_heading_base, int heading_level,
+    const std::string &style_attr, const std::string &class_attr,
+    const epub_css_class_map::CssClassMap &class_map) {
+  book_xml_css_style_utils::FontSizeSpec font_size;
+  const bool has_explicit_heading_css =
+      book_xml_css_style_utils::TryParseFontSize(style_attr.c_str(),
+                                                 &font_size) ||
+      epub_css_class_map::LookupFontSizeForClassAttr(class_attr, class_map,
+                                                      &font_size);
+  if (has_explicit_heading_css) {
+    const int css_px =
+        book_xml_css_style_utils::ResolveFontSizePx(font_size, inherited_px);
+    return ClampHeadingFontSize(inherited_px, css_px);
+  }
+  const int heading_px = DefaultHeadingFontSize(default_heading_base, heading_level);
+  return ClampHeadingFontSize(default_heading_base, heading_px);
 }
 
 } // namespace book_xml_parser_style_utils

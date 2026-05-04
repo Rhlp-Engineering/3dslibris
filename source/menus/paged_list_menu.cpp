@@ -16,7 +16,7 @@
 #include "app/app.h"
 #include "book/book.h"
 #include "ui/button.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/page.h"
 #include "ui/touch_utils.h"
 

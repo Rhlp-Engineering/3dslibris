@@ -6,15 +6,16 @@
 
 #include "formats/epub/epub_toc_package_loader_utils.h"
 
+#include <algorithm>
 #include <set>
 #include <unordered_map>
 
 #include "book/book.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/epub/epub_ncx_parser.h"
 #include "formats/epub/epub_package_toc_utils.h"
 #include "formats/epub/epub_toc_diag_utils.h"
-#include "path_utils.h"
+#include "shared/path_utils.h"
 #include "shared/status_reporter.h"
 #include "shared/string_utils.h"
 
@@ -48,6 +49,68 @@ static bool IsLikelyContentItem(const epub_item *item) {
   return (href.size() >= 6 && href.substr(href.size() - 6) == ".xhtml") ||
          (href.size() >= 5 && href.substr(href.size() - 5) == ".html") ||
          (href.size() >= 4 && href.substr(href.size() - 4) == ".htm");
+}
+
+// Reorders nav_entries to match the document reading order defined by the
+// spine. Some EPUB3 books have NAV entries in an order that differs from the
+// spine; this causes the chapter menu to show chapters in the wrong sequence.
+// The fix reorders entries by their document's position in the manifest/spine,
+// falling back to the original order when a document is not in the spine.
+static void ReorderNavEntriesBySpine(const epub_data_t &parsedata,
+                                     const std::string &opf_folder,
+                                     std::vector<toc_entry_t> *nav_entries) {
+  if (!nav_entries || nav_entries->empty() || parsedata.spine.empty())
+    return;
+
+  // Build a map: normalized document path -> spine position.
+  // Iterate spine in order; each position is its order in the book.
+  std::unordered_map<std::string, size_t> doc_order;
+  for (size_t i = 0; i < parsedata.spine.size(); i++) {
+    const epub_itemref *itemref = parsedata.spine[i];
+    if (!itemref)
+      continue;
+    const epub_item *item = FindManifestItemById(parsedata, itemref->idref);
+    if (!item || item->href.empty())
+      continue;
+    std::string doc_path = NormalizePath(BuildDocPath(opf_folder, item->href));
+    // Only record the first (earliest) occurrence.
+    if (doc_order.find(doc_path) == doc_order.end())
+      doc_order[doc_path] = i;
+  }
+  if (doc_order.empty())
+    return;
+
+  // Strip fragment/query from each entry's href to match document path.
+  std::vector<std::pair<size_t, std::string>> order_keys;
+  order_keys.reserve(nav_entries->size());
+  for (const auto &entry : *nav_entries) {
+    std::string key = NormalizePath(StripFragmentAndQuery(entry.href));
+    auto it = doc_order.find(key);
+    size_t order = (it != doc_order.end()) ? it->second : SIZE_MAX;
+    order_keys.push_back(std::make_pair(order, entry.href));
+  }
+
+  // Stable-sort by spine order; entries whose doc is not in spine keep original
+  // relative order (they get SIZE_MAX and stable_sort preserves that).
+  std::stable_sort(order_keys.begin(), order_keys.end(),
+                   [](const std::pair<size_t, std::string> &a,
+                      const std::pair<size_t, std::string> &b) {
+                     return a.first < b.first;
+                   });
+
+  // Reconstruct entries in sorted order.
+  std::vector<toc_entry_t> sorted;
+  sorted.reserve(nav_entries->size());
+  for (const auto &ok : order_keys) {
+    for (const auto &entry : *nav_entries) {
+      if (entry.href == ok.second) {
+        sorted.push_back(entry);
+        break;
+      }
+    }
+  }
+  if (!sorted.empty())
+    *nav_entries = std::move(sorted);
 }
 
 } // namespace
@@ -195,6 +258,7 @@ bool LoadTocEntriesFromPackage(unzFile uf, epub_data_t &parsedata,
       if (parsed_nav && app)
         LogTocEntrySamples(app, "NAV parsed", nav_entries, 4);
       if (parsed_nav && looks_reasonable_toc(nav_entries)) {
+        ReorderNavEntriesBySpine(parsedata, opf_folder, &nav_entries);
         *toc_entries = nav_entries;
         toc_loaded = true;
         if (app)
@@ -264,6 +328,7 @@ bool LoadTocEntriesFromPackage(unzFile uf, epub_data_t &parsedata,
           if (parsed_nav && app)
             LogTocEntrySamples(app, "NAV fallback parsed", nav_entries, 4);
           if (parsed_nav && looks_reasonable_toc(nav_entries)) {
+            ReorderNavEntriesBySpine(parsedata, opf_folder, &nav_entries);
             *toc_entries = nav_entries;
             toc_loaded = true;
             if (app)

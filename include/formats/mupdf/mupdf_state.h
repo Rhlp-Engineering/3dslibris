@@ -1,25 +1,22 @@
 #pragma once
 
+#include "formats/common/fixed_layout_bitmap_cache.h"
+#include "formats/common/fixed_layout_viewport_utils.h"
 #include "shared/app_flow_utils.h"
 #include "shared/status_reporter.h"
 
 #include <vector>
 
 struct Book::MuPdfState {
-  struct BitmapCache {
-    int page;
-    int zoom_index;
+  struct BitmapCache : fixed_layout_bitmap_cache::Base {
     float left;
     float top;
     float width;
     float height;
-    int bitmap_width;
-    int bitmap_height;
-    std::vector<u16> pixels;
 
     BitmapCache()
-        : page(-1), zoom_index(-1), left(0.0f), top(0.0f), width(1.0f),
-          height(1.0f), bitmap_width(0), bitmap_height(0) {}
+        : Base(), left(0.0f), top(0.0f), width(1.0f),
+          height(1.0f) {}
   };
 
   struct AdjacentSlot {
@@ -100,11 +97,7 @@ struct Book::MuPdfState {
   app_flow_utils::MuPdfDocumentKind document_kind;
   bool keep_preview_cache;
   bool keep_tile_cache;
-  int max_zoom_index;
-  int zoom_index;
-  float viewport_center_x;
-  float viewport_center_y;
-  bool viewport_interaction_active;
+  fixed_layout_viewport_utils::ViewportState viewport;
   BitmapCache current_preview;
   BitmapCache current_interactive_tile;
   BitmapCache current_final_zoom;
@@ -124,9 +117,8 @@ struct Book::MuPdfState {
         page_width(612.0f), page_height(792.0f), page_width_cache(),
         page_height_cache(), page_metrics_valid(), is_new_3ds(false),
         document_kind(app_flow_utils::MuPdfDocumentKind::Unknown),
-        keep_preview_cache(true), keep_tile_cache(false), max_zoom_index(3),
-        zoom_index(2), viewport_center_x(0.5f), viewport_center_y(0.5f),
-        viewport_interaction_active(false),
+        keep_preview_cache(true), keep_tile_cache(false),
+        viewport(),
         current_preview(), current_interactive_tile(), current_final_zoom(),
         final_cache_pending(false), cached_display_list(NULL),
         cached_display_list_page(-1), prev_slot(), next_slot(), incremental(),

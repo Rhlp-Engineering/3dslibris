@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Heading Size Restoration</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet.css"/>
+</head>
+<body>
+  <h1 id="qa-headings">Heading Size Restoration</h1>
+
+  <p><strong>Expected behavior:</strong></p>
+  <ul>
+    <li>Default headings inside &lt;small&gt; should still look like headings, not like tiny body text.</li>
+    <li>After the heading, text should return to the surrounding &lt;small&gt; size.</li>
+    <li>Explicit heading CSS should keep resolving against the inherited context for now.</li>
+    <li>The Publisher font sizes toggle should not break the default heading document-base fix.</li>
+  </ul>
+
+  <hr/>
+
+  <p>Normal text before normal headings.</p>
+  
+  <h1>Normal H1</h1>
+  <h2>Normal H2</h2>
+  <h3>Normal H3</h3>
+
+  <p>Normal text before small block.</p>
+
+  <small>
+    <p>This is text inside a small block.</p>
+    <h2>Heading inside small (H2)</h2>
+    <p>This is text after the H2 inside the small block.</p>
+    <h1>Heading inside small (H1)</h1>
+    <p>This is text after the H1 inside the small block.</p>
+    <h2 style="font-size: 1.3em">Explicit CSS H2 inside small (1.3em)</h2>
+    <p>This is text after the explicit CSS H2.</p>
+  </small>
+
+  <p>Normal text after small block.</p>
+
+  <big>
+    <p>This is text inside a big block.</p>
+    <h2>Heading inside big (H2)</h2>
+    <p>This is text after the H2 inside the big block.</p>
+  </big>
+
+  <p>Normal text after big block.</p>
+
+</body>
+</html>

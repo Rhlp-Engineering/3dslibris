@@ -129,7 +129,38 @@
       <content src="text/chapter-19-css-resets.xhtml#capitulo-19"/>
     </navPoint>
 
-    <navPoint id="nav-24" playOrder="24">
+    <navPoint id="nav-25" playOrder="25">
+      <navLabel><text>Capítulo 21: text-align desde clase CSS</text></navLabel>
+      <content src="text/chapter-21-css-text-align.xhtml#capitulo-21"/>
+    </navPoint>
+    <navPoint id="nav-26" playOrder="26">
+      <navLabel><text>v2.6.2 Manual QA Index</text></navLabel>
+      <content src="text/chapter-22-v262-qa-index.xhtml#qa-index"/>
+    </navPoint>
+    <navPoint id="nav-27" playOrder="27">
+      <navLabel><text>Publisher Font Sizes</text></navLabel>
+      <content src="text/chapter-23-publisher-fonts.xhtml#qa-pub-fonts"/>
+    </navPoint>
+    <navPoint id="nav-28" playOrder="28">
+      <navLabel><text>Small and Big Tags</text></navLabel>
+      <content src="text/chapter-24-small-big.xhtml#qa-small-big"/>
+    </navPoint>
+    <navPoint id="nav-29" playOrder="29">
+      <navLabel><text>Heading Size Restoration</text></navLabel>
+      <content src="text/chapter-25-headings.xhtml#qa-headings"/>
+    </navPoint>
+    <navPoint id="nav-30" playOrder="30">
+      <navLabel><text>Horizontal Rule Styling</text></navLabel>
+      <content src="text/chapter-26-hr-styling.xhtml#qa-hr"/>
+    </navPoint>
+    <navPoint id="nav-31" playOrder="31">
+      <navLabel><text>Cache Toggle Test</text></navLabel>
+      <content src="text/chapter-27-cache-toggle.xhtml#qa-cache-toggle"/>
+    </navPoint>
+    <navPoint id="nav-32" playOrder="32">
+      <navLabel><text>Large Opening Stress Chapter</text></navLabel>
+      <content src="text/chapter-28-stress-test.xhtml#qa-stress"/>
+    </navPoint>    <navPoint id="nav-24" playOrder="24">
       <navLabel><text>Capítulo 20: Listas anidadas</text></navLabel>
       <content src="text/chapter-20-nested-lists.xhtml#capitulo-20"/>
     </navPoint>

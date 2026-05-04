@@ -2,7 +2,7 @@
 
 #include "formats/mupdf/mupdf_worker.h"
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/mupdf/mupdf_render_policy_utils.h"
 #include "formats/mupdf/mupdf_view.h"
 #include "shared/debug_runtime_mode.h"
@@ -177,7 +177,7 @@ bool EnsureCurrentMuPdfInteractiveTile(Book::MuPdfState *mupdf_state,
                                            kPdfZoomScreenWidth, kPdfZoomScreenHeight) *
                            ComputeEffectiveMuPdfZoom(
                                mupdf_state->document_kind,
-                               mupdf_state->zoom_index),
+                               mupdf_state->viewport.zoom_index),
                        &rendered, &page_width, &page_height, NULL,
                        display_list, display_list ? NULL : &new_list,
                        mupdf_state->reporter);
@@ -186,7 +186,7 @@ bool EnsureCurrentMuPdfInteractiveTile(Book::MuPdfState *mupdf_state,
   }
 
   StoreBitmapCache(&mupdf_state->current_interactive_tile, page_index,
-                   mupdf_state->zoom_index, 0.0f, 0.0f, 1.0f, 1.0f, &rendered);
+                   mupdf_state->viewport.zoom_index, 0.0f, 0.0f, 1.0f, 1.0f, &rendered);
   mupdf_state->page_width = page_width;
   mupdf_state->page_height = page_height;
   if (new_list && !display_list) {
@@ -408,7 +408,7 @@ bool PumpMuPdfIncrementalStripWorker(Book::MuPdfState *mupdf_state,
       promoted.height = inc.partial_height;
       promoted.pixels.swap(inc.partial_pixels);
       StoreBitmapCache(&mupdf_state->current_final_zoom, page_index,
-                       mupdf_state->max_zoom_index, 0.0f, 0.0f, 1.0f, 1.0f,
+                       mupdf_state->viewport.max_zoom_index, 0.0f, 0.0f, 1.0f, 1.0f,
                        &promoted);
       mupdf_state->final_cache_pending = false;
       CancelMuPdfIncrementalRenderState(mupdf_state);
@@ -467,7 +467,7 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
   Book::MuPdfState::IncrementalRenderState &inc = mupdf_state->incremental;
 
   if (BitmapCacheValid(mupdf_state->current_final_zoom, page_index) &&
-      mupdf_state->current_final_zoom.zoom_index >= mupdf_state->max_zoom_index) {
+      mupdf_state->current_final_zoom.zoom_index >= mupdf_state->viewport.max_zoom_index) {
     mupdf_state->final_cache_pending = false;
     CancelMuPdfIncrementalRenderState(mupdf_state);
     return false;
@@ -475,7 +475,7 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
 
   if (!inc.active ||
       inc.target_page != page_index ||
-      inc.target_zoom_index != mupdf_state->max_zoom_index) {
+      inc.target_zoom_index != mupdf_state->viewport.max_zoom_index) {
     CancelMuPdfIncrementalRenderState(mupdf_state);
 
     fz_display_list *display_list = NULL;
@@ -486,7 +486,7 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
     const float scale = ComputeMuPdfFinalScale(mupdf_state->document_kind,
                                                mupdf_state->page_width,
                                                mupdf_state->page_height,
-                                               mupdf_state->max_zoom_index);
+                                               mupdf_state->viewport.max_zoom_index);
     fz_page *pg = NULL;
     fz_rect bounds = fz_empty_rect;
     fz_var(pg);
@@ -510,7 +510,7 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
 
     inc.active = true;
     inc.target_page = page_index;
-    inc.target_zoom_index = mupdf_state->max_zoom_index;
+    inc.target_zoom_index = mupdf_state->viewport.max_zoom_index;
     inc.strips_completed = 0;
     inc.strips_total = mupdf_state->is_new_3ds ? kPdfStripsNew3DS : kPdfStripsOld3DS;
     inc.partial_width = full_w;
@@ -568,7 +568,7 @@ bool PumpMuPdfIncrementalStrip(Book::MuPdfState *mupdf_state, int page_index) {
     promoted.height = inc.partial_height;
     promoted.pixels.swap(inc.partial_pixels);
     StoreBitmapCache(&mupdf_state->current_final_zoom, page_index,
-                     mupdf_state->max_zoom_index, 0.0f, 0.0f, 1.0f, 1.0f,
+                     mupdf_state->viewport.max_zoom_index, 0.0f, 0.0f, 1.0f, 1.0f,
                      &promoted);
     mupdf_state->final_cache_pending = false;
     CancelMuPdfIncrementalRenderState(mupdf_state);
@@ -634,7 +634,7 @@ bool PrepareAdjacentMuPdfSlot(Book::MuPdfState *mupdf_state, int current_page,
                                              kPdfZoomScreenWidth, kPdfZoomScreenHeight) *
                              ComputeEffectiveMuPdfZoom(
                                  mupdf_state->document_kind,
-                                 mupdf_state->zoom_index),
+                                 mupdf_state->viewport.zoom_index),
                          &interactive, &page_width, &page_height, NULL,
                          display_list, NULL, mupdf_state->reporter);
     if (!render_ok) {
@@ -642,7 +642,7 @@ bool PrepareAdjacentMuPdfSlot(Book::MuPdfState *mupdf_state, int current_page,
       return false;
     }
   }
-  StoreBitmapCache(&slot->interactive_tile, page_index, mupdf_state->zoom_index,
+  StoreBitmapCache(&slot->interactive_tile, page_index, mupdf_state->viewport.zoom_index,
                    0.0f, 0.0f, 1.0f, 1.0f, &interactive);
 
   slot->page = page_index;

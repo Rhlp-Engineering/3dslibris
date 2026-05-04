@@ -6,8 +6,16 @@
 [![Release](https://img.shields.io/github/v/release/RigleGit/3dslibris?label=release)](https://github.com/RigleGit/3dslibris/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/RigleGit/3dslibris/ci.yml?branch=main&label=ci)](https://github.com/RigleGit/3dslibris/actions/workflows/ci.yml)
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-rigle-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/rigle)
-[![Universal-Updater](https://img.shields.io/badge/Universal--Updater-available-blue)](https://db.universal-team.net/3ds/3dslibris)
 [![License: AGPL v3+](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](#license)
+
+[![Platform: 3DS](https://img.shields.io/badge/Platform-3DS-informational.svg)](https://en.wikipedia.org/wiki/Nintendo_3DS)
+[![Universal-Updater](https://img.shields.io/badge/Universal--Updater-available-blue)](https://db.universal-team.net/3ds/3dslibris)
+![Language: C/C++](https://img.shields.io/badge/Language-C%20%2F%20C%2B%2B-orange.svg)
+
+![GitHub stars](https://img.shields.io/github/stars/RigleGit/3dslibris?style=social)
+![GitHub issues](https://img.shields.io/github/issues/RigleGit/3dslibris)
+![Last commit](https://img.shields.io/github/last-commit/RigleGit/3dslibris)
+![Download](https://img.shields.io/github/downloads/RigleGit/3dslibris/total)
 
 Nintendo 3DS homebrew ebook and manga reader based on the original Nintendo DS project [`dslibris`](https://github.com/rhaleblian/dslibris).
 
@@ -44,6 +52,7 @@ Recommended install (`.cia` via Universal-Updater):
 2. Launch it once so `sdmc:/3ds/3dslibris/` is created if needed.
 3. Copy your books to `sdmc:/3ds/3dslibris/book/`.
 4. Launch the installed title.
+5. **New user?** Read the bundled `QuickStart.txt` inside your book library to learn about menus, settings, and navigation.
 
 Manual install (`.3dsx`):
 
@@ -180,6 +189,7 @@ Expected outputs:
 
 ## Documentation
 
+- [sdmc/3ds/3dslibris/book/QuickStart.txt](sdmc/3ds/3dslibris/book/QuickStart.txt) - Quickstart guide explaining menus, options, and controls
 - [CONTRIBUTING.md](CONTRIBUTING.md)
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 - [docs/PDF_SOURCE_RELEASE.md](docs/PDF_SOURCE_RELEASE.md) - source release and rebuild notes for distributed binaries

@@ -60,7 +60,7 @@ SOURCES		:=	source \
 
 EXTRA_CPPFILES	:=	source/book/book_xml_parser.cpp
 
-DATA		:=	data
+DATA		:=
 INCLUDES	:=	include third_party/stb third_party/utf8proc third_party/libunibreak/src \
 			third_party/mupdf/include
 GRAPHICS	:=
@@ -122,7 +122,7 @@ CIA_BANNER_BIN	:=	$(CIA_TMPDIR)/banner.bin
 CIA_ICON_BIN	:=	$(CIA_TMPDIR)/icon.icn
 ICON_FLAGS	:=	--flags visible,ratingrequired --cero 153 --esrb 153 --usk 153 --pegigen 153 --pegiptr 153 --pegibbfc 153 --cob 153 --grb 153 --cgsrr 153
 
-VERSION_STR	:=	$(strip $(shell grep '^#define VERSION ' "$(TOPDIR)/include/version.h" | cut -d '"' -f2))
+VERSION_STR	:=	$(strip $(shell grep '^#define VERSION ' "$(TOPDIR)/include/app/version.h" | cut -d '"' -f2))
 VERSION_MAJOR	:=	$(word 1,$(subst ., ,$(VERSION_STR)))
 VERSION_MINOR	:=	$(word 2,$(subst ., ,$(VERSION_STR)))
 VERSION_MICRO	:=	$(word 3,$(subst ., ,$(VERSION_STR)))

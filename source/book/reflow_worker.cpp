@@ -2,7 +2,7 @@
 
 #include <3ds.h>
 
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "formats/epub/epub.h"
 #include "reader/reflow_open_gate_utils.h"
 #include "shared/debug_runtime_mode.h"

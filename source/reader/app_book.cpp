@@ -36,7 +36,7 @@
 #include "reader/suspend_policy_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/button.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/layout_reflow.h"
 #include "book/page.h"
 #include "parse.h"
@@ -743,6 +743,13 @@ void ReaderController::OnAppletSuspended()
 {
   Book *bookcurrent_ = app_.GetCurrentBook();
   Book *opening_book = app_.GetOpeningBook();
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(&app_,
+           "[APT][SUSPEND] entry mode=%d has_current=%d has_opening=%d",
+           (int)app_.GetMode(),
+           bookcurrent_ ? 1 : 0,
+           opening_book ? 1 : 0);
+#endif
   app_.SetPdfTouchDragActive(false);
   app_.SetPdfTouchLastX(-1);
   app_.SetPdfTouchLastY(-1);
@@ -751,6 +758,7 @@ void ReaderController::OnAppletSuspended()
   {
     bookcurrent_->SetFixedLayoutViewportInteraction(false);
     bookcurrent_->CancelFixedLayoutDeferredWork();
+    bookcurrent_->SuspendFixedLayoutWorkers();
   }
   if (!opening_book)
     return;
@@ -797,8 +805,16 @@ void ReaderController::OnAppletResumed()
   Book *bookcurrent_ = app_.GetCurrentBook();
   if (!bookcurrent_)
     return;
+#ifdef DSLIBRIS_DEBUG
+  DBG_LOGF(&app_,
+           "[APT][RESUME] entry mode=%d is_fixed=%d book=%s",
+           (int)app_.GetMode(),
+           bookcurrent_->IsFixedLayout() ? 1 : 0,
+           bookcurrent_->GetFileName() ? bookcurrent_->GetFileName() : "");
+#endif
   if (bookcurrent_->IsFixedLayout())
   {
+    bookcurrent_->ResumeFixedLayoutWorkers();
     const u32 delay_ms = bookcurrent_->GetFixedLayoutDeferredDelayMs();
     app_.SetPdfDeferredReadyAtMs(delay_ms ? (osGetTime() + delay_ms) : 0);
   }

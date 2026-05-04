@@ -10,8 +10,8 @@
 
 #include "ui/ui_button_skin.h"
 
-#include "color_utils.h"
-#include "path_utils.h"
+#include "shared/color_utils.h"
+#include "shared/path_utils.h"
 #include "ui/theme_colors.h"
 #include <algorithm>
 #include <cmath>
@@ -182,8 +182,8 @@ static void try_load_icons_once() {
       "resources/ui/icons/png",
       "resources/ui/icons",
       paths::GetResourceBase(),
-      "data/ui/icons/png",
-      "./data/ui/icons/png",
+      "gfx/ui_icons",
+      "./gfx/ui_icons",
   };
 
   char path[512];

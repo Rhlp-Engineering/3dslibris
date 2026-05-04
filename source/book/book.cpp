@@ -14,17 +14,18 @@
 #include "book/book.h"
 
 #include "book/book_context.h"
-#include "debug_log.h"
+#include "shared/debug_log.h"
 #include "book/heading_layout.h"
+#include "formats/common/href_normalization.h"
 #include "formats/epub/epub.h"
 #include "formats/epub/epub_page_cache.h"
 #include "formats/mobi/mobi_page_cache.h"
-#include "main.h"
+#include "shared/main.h"
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
 #include "parse.h"
 #include "book/reflow_cache_save_utils.h"
-#include "screen_constants.h"
+#include "ui/screen_constants.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_unicode_utils.h"
 #include <algorithm>
@@ -34,7 +35,6 @@
 
 namespace
 {
-  // Helper function to check if the file extension of a given name matches the specified extension, case-insensitively.
   static bool HasExtCaseInsensitive(const std::string &name, const char *ext)
   {
     if (!ext)
@@ -56,180 +56,6 @@ namespace
         return false;
     }
     return true;
-  }
-
-  // Returns the basename after the last '/' in the path, or the full path if there are no slashes.
-  static std::string BasenamePathLocal(const std::string &path)
-  {
-    size_t slash = path.find_last_of('/');
-    if (slash == std::string::npos)
-      return path;
-    if (slash + 1 >= path.size())
-      return "";
-    return path.substr(slash + 1);
-  }
-
-  // Returns a lowercase ASCII version of the basename of the path, used for case-insensitive comparisons of file names.
-  static std::string AnchorTokenKey(const std::string &s)
-  {
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++)
-    {
-      unsigned char c = (unsigned char)s[i];
-      if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
-        out.push_back((char)c);
-    }
-    return out;
-  }
-
-  // Returns only the digit characters from the basename of the path, used for numeric anchor matching.
-  static std::string AnchorDigits(const std::string &s)
-  {
-    std::string out;
-    out.reserve(s.size());
-    for (size_t i = 0; i < s.size(); i++)
-    {
-      unsigned char c = (unsigned char)s[i];
-      if (c >= '0' && c <= '9')
-        out.push_back((char)c);
-    }
-    return out;
-  }
-
-  // Helper function to trim leading and trailing paths
-  static std::string NormalizePathForAnchor(const std::string &path)
-  {
-    std::string in = path;
-    std::replace(in.begin(), in.end(), '\\', '/');
-    while (!in.empty() && in[0] == '/')
-      in.erase(in.begin());
-
-    std::vector<std::string> parts;
-    std::string cur;
-    for (size_t i = 0; i <= in.size(); i++)
-    {
-      if (i == in.size() || in[i] == '/')
-      {
-        if (cur == "..")
-        {
-          if (!parts.empty())
-            parts.pop_back();
-        }
-        else if (!cur.empty() && cur != ".")
-        {
-          parts.push_back(cur);
-        }
-        cur.clear();
-      }
-      else
-      {
-        cur.push_back(in[i]);
-      }
-    }
-
-    std::string out;
-    for (size_t i = 0; i < parts.size(); i++)
-    {
-      if (i)
-        out.push_back('/');
-      out += parts[i];
-    }
-    return out;
-  }
-
-  // Decodes %xx URL-encoded sequences in the input string, returning the decoded result.
-  static std::string UrlDecodeComponent(const std::string &input)
-  {
-    std::string out;
-    out.reserve(input.size());
-    for (size_t i = 0; i < input.size(); i++)
-    {
-      if (input[i] == '%' && i + 2 < input.size())
-      {
-        int value = 0;
-        if (sscanf(input.substr(i + 1, 2).c_str(), "%x", &value) == 1)
-        {
-          out.push_back((char)value);
-          i += 2;
-          continue;
-        }
-      }
-      out.push_back(input[i]);
-    }
-    return out;
-  }
-
-  // Lowercase ASCII
-  static std::string ToLowerAsciiLocal(const std::string &s)
-  {
-    std::string out = s;
-    std::transform(out.begin(), out.end(), out.begin(),
-                   [](unsigned char c)
-                   { return (char)tolower(c); });
-    return out;
-  }
-
-  // Produces a key for matching chapter hrefs to anchors by normalizing the path and anchor components of the href.
-  static std::string BuildAnchorKey(const std::string &docpath,
-                                    const std::string &anchor_raw)
-  {
-    if (docpath.empty() || anchor_raw.empty())
-      return "";
-
-    std::string doc = UrlDecodeComponent(docpath);
-    std::string anchor = UrlDecodeComponent(anchor_raw);
-    while (!anchor.empty() && anchor[0] == '#')
-      anchor.erase(anchor.begin());
-    if (anchor.empty())
-      return "";
-    if (anchor.size() > 512)
-      anchor.resize(512);
-
-    std::string key = NormalizePathForAnchor(doc);
-    if (key.empty())
-      return "";
-    key.push_back('#');
-    key += anchor;
-    return key;
-  }
-
-  // Converts a TOC href to a normalized key for chapter anchor lookup, handling URL decoding and stripping of fragments/queries as needed.
-  static std::string NormalizeAnchorHrefKey(const std::string &href)
-  {
-    if (href.empty())
-      return "";
-    std::string decoded = UrlDecodeComponent(href);
-    size_t hash = decoded.find('#');
-    if (hash == std::string::npos || hash + 1 >= decoded.size())
-      return "";
-    std::string path = decoded.substr(0, hash);
-    std::string anchor = decoded.substr(hash + 1);
-    size_t q = anchor.find('?');
-    if (q != std::string::npos)
-      anchor = anchor.substr(0, q);
-    return BuildAnchorKey(path, anchor);
-  }
-
-  // Normalizes a document path for use as a key in chapter doc-start page lookup, optionally stripping fragments and queries.
-  static std::string NormalizeDocStartPathKey(const std::string &raw_path,
-                                              bool strip_fragment_and_query)
-  {
-    if (raw_path.empty())
-      return "";
-
-    std::string decoded = UrlDecodeComponent(raw_path);
-    if (strip_fragment_and_query)
-    {
-      size_t hash = decoded.find('#');
-      if (hash != std::string::npos)
-        decoded = decoded.substr(0, hash);
-      size_t q = decoded.find('?');
-      if (q != std::string::npos)
-        decoded = decoded.substr(0, q);
-    }
-
-    return NormalizePathForAnchor(decoded);
   }
 
 } // namespace
@@ -386,8 +212,6 @@ void Book::ClearInlineLinks()
   focused_inline_link_index = -1;
 }
 
-// TODO: If more formats/endpoints reuse chapter href normalization logic,
-// consider moving the path/anchor normalization helpers into a small shared module. 
 void Book::AddChapterAnchor(const std::string &docpath,
                             const std::string &anchor_id)
 {
@@ -396,7 +220,7 @@ void Book::AddChapterAnchor(const std::string &docpath,
   if (chapter_anchor_pages.size() >= 8192)
     return;
 
-  std::string key = BuildAnchorKey(docpath, anchor_id);
+  std::string key = href_normalization::BuildAnchorKey(docpath, anchor_id);
   if (key.empty())
     return;
 
@@ -432,7 +256,7 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
 {
   if (!page_out)
     return false;
-  std::string key = NormalizeAnchorHrefKey(href);
+  std::string key = href_normalization::NormalizeAnchorHrefKey(href);
   if (key.empty())
     return false;
 
@@ -444,10 +268,10 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
   }
 
   // Fallback only for malformed files with inconsistent anchor case.
-  std::string key_lc = ToLowerAsciiLocal(key);
+  std::string key_lc = href_normalization::ToLowerAsciiLocal(key);
   for (const auto &kv : chapter_anchor_pages)
   {
-    if (ToLowerAsciiLocal(kv.first) == key_lc)
+    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc)
     {
       *page_out = kv.second;
       return true;
@@ -459,9 +283,9 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
   size_t hash = key.find('#');
   if (hash != std::string::npos && hash + 1 < key.size())
   {
-    std::string key_path_lc = ToLowerAsciiLocal(key.substr(0, hash));
-    std::string key_base_lc = ToLowerAsciiLocal(BasenamePathLocal(key_path_lc));
-    std::string key_anchor_lc = ToLowerAsciiLocal(key.substr(hash + 1));
+    std::string key_path_lc = href_normalization::ToLowerAsciiLocal(key.substr(0, hash));
+    std::string key_base_lc = href_normalization::ToLowerAsciiLocal(href_normalization::BasenamePathLocal(key_path_lc));
+    std::string key_anchor_lc = href_normalization::ToLowerAsciiLocal(key.substr(hash + 1));
     u16 target_doc_page = 0;
     bool has_target_doc =
         FindChapterDocStartPage(key_path_lc, &target_doc_page);
@@ -478,18 +302,18 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
     bool fuzzy_doc_found = false;
     u16 fuzzy_doc_page = 0;
     bool fuzzy_doc_ambiguous = false;
-    const std::string key_token = AnchorTokenKey(key_anchor_lc);
-    const std::string key_digits = AnchorDigits(key_anchor_lc);
+    const std::string key_token = href_normalization::AnchorTokenKey(key_anchor_lc);
+    const std::string key_digits = href_normalization::AnchorDigits(key_anchor_lc);
 
     for (const auto &kv : chapter_anchor_pages)
     {
       size_t kv_hash = kv.first.find('#');
       if (kv_hash == std::string::npos || kv_hash + 1 >= kv.first.size())
         continue;
-      std::string kv_path_lc = ToLowerAsciiLocal(kv.first.substr(0, kv_hash));
-      std::string kv_base_lc = ToLowerAsciiLocal(BasenamePathLocal(kv_path_lc));
+      std::string kv_path_lc = href_normalization::ToLowerAsciiLocal(kv.first.substr(0, kv_hash));
+      std::string kv_base_lc = href_normalization::ToLowerAsciiLocal(href_normalization::BasenamePathLocal(kv_path_lc));
       std::string kv_anchor_lc =
-          ToLowerAsciiLocal(kv.first.substr(kv_hash + 1));
+          href_normalization::ToLowerAsciiLocal(kv.first.substr(kv_hash + 1));
       bool exact_anchor = (kv_anchor_lc == key_anchor_lc);
 
       if (exact_anchor)
@@ -542,8 +366,8 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
         if (FindChapterDocStartPage(kv.first, &candidate_doc_page) &&
             candidate_doc_page == target_doc_page)
         {
-          std::string cand_token = AnchorTokenKey(kv_anchor_lc);
-          std::string cand_digits = AnchorDigits(kv_anchor_lc);
+          std::string cand_token = href_normalization::AnchorTokenKey(kv_anchor_lc);
+          std::string cand_digits = href_normalization::AnchorDigits(kv_anchor_lc);
           bool fuzzy_match = false;
           if (!cand_token.empty() && cand_token == key_token)
           {
@@ -615,7 +439,7 @@ void Book::SetChapterDocStartPage(const std::string &docpath, u16 page)
 {
   if (docpath.empty())
     return;
-  std::string key = NormalizeDocStartPathKey(docpath, false);
+  std::string key = href_normalization::NormalizeDocStartPathKey(docpath, false);
   if (key.empty())
     return;
   if (chapter_doc_start_pages.find(key) == chapter_doc_start_pages.end())
@@ -627,7 +451,7 @@ bool Book::FindChapterDocStartPage(const std::string &href,
 {
   if (!page_out)
     return false;
-  std::string key = NormalizeDocStartPathKey(href, true);
+  std::string key = href_normalization::NormalizeDocStartPathKey(href, true);
   if (key.empty())
     return false;
 
@@ -638,10 +462,10 @@ bool Book::FindChapterDocStartPage(const std::string &href,
     return true;
   }
 
-  std::string key_lc = ToLowerAsciiLocal(key);
+  std::string key_lc = href_normalization::ToLowerAsciiLocal(key);
   for (const auto &kv : chapter_doc_start_pages)
   {
-    if (ToLowerAsciiLocal(kv.first) == key_lc)
+    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc)
     {
       *page_out = kv.second;
       return true;
@@ -860,7 +684,7 @@ void Book::SetPendingEpubPageCacheSaveWithParams(
     int pixel_size, int line_spacing, int paragraph_spacing,
     int paragraph_indent, int orientation,
     int margin_left, int margin_right, int margin_top, int margin_bottom,
-    const char *regular_font)
+    const char *regular_font, bool respect_publisher_font_size)
 {
   epub_page_cache_save_pending = true;
   epub_cache_save_params.pixel_size = pixel_size;
@@ -873,6 +697,7 @@ void Book::SetPendingEpubPageCacheSaveWithParams(
   epub_cache_save_params.margin_top = margin_top;
   epub_cache_save_params.margin_bottom = margin_bottom;
   epub_cache_save_params.regular_font = regular_font ? regular_font : "";
+  epub_cache_save_params.respect_publisher_font_size = respect_publisher_font_size;
 }
 
 const Book::EpubCacheSaveParams &Book::GetEpubCacheSaveParams() const
