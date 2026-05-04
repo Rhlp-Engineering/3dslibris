@@ -182,8 +182,8 @@ static void try_load_icons_once() {
       "resources/ui/icons/png",
       "resources/ui/icons",
       paths::GetResourceBase(),
-      "data/ui/icons/png",
-      "./data/ui/icons/png",
+      "gfx/ui_icons",
+      "./gfx/ui_icons",
   };
 
   char path[512];

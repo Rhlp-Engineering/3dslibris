@@ -60,7 +60,7 @@ SOURCES		:=	source \
 
 EXTRA_CPPFILES	:=	source/book/book_xml_parser.cpp
 
-DATA		:=	data
+DATA		:=
 INCLUDES	:=	include third_party/stb third_party/utf8proc third_party/libunibreak/src \
 			third_party/mupdf/include
 GRAPHICS	:=
