@@ -334,6 +334,8 @@ public:
   u32 GetFixedLayoutDeferredDelayMs() const;
   bool PumpDeferredFixedLayoutWork(u32 budget_ms);
   void CancelFixedLayoutDeferredWork();
+  void SuspendFixedLayoutWorkers();
+  void ResumeFixedLayoutWorkers();
   void SetCbzViewportInteraction(bool active);
   void ResetCbzViewport();
   bool ChangeCbzZoom(int delta);
