@@ -352,3 +352,29 @@ h2.align-center-heading {
   text-align: center;
   text-indent: 0%;
 }
+
+.publisher-tiny {
+  font-size: 70%;
+}
+
+.publisher-large {
+  font-size: 140%;
+}
+
+.hr-indented {
+  margin-left: 10%;
+  margin-right: 10%;
+}
+
+.hr-spaced {
+  margin-top: 2em;
+  margin-bottom: 2em;
+}
+
+.hr-leftish {
+  text-align: left;
+}
+
+.hr-rightish {
+  text-align: right;
+}

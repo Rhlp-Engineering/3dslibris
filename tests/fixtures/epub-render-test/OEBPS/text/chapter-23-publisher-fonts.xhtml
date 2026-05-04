@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Publisher Font Sizes</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet.css"/>
+</head>
+<body>
+  <h1 id="qa-pub-fonts">Publisher Font Sizes</h1>
+  
+  <p><strong>Expected behavior with Publisher font sizes Off:</strong></p>
+  <ul>
+    <li>Normal body text should mostly follow the user-selected 3dslibris font size.</li>
+    <li>Publisher CSS font-size should not globally shrink/enlarge normal text.</li>
+    <li>These paragraphs should look much closer to the baseline.</li>
+  </ul>
+
+  <p><strong>Expected behavior with Publisher font sizes On:</strong></p>
+  <ul>
+    <li>The smaller/larger publisher CSS examples should visibly change size.</li>
+  </ul>
+
+  <hr/>
+
+  <p>This is a baseline normal paragraph. It should follow the user setting in both modes.</p>
+
+  <p style="font-size: 70%">INLINE 70% — should only look smaller when Publisher font sizes is ON.</p>
+
+  <p style="font-size: 140%">INLINE 140% — should only look larger when Publisher font sizes is ON.</p>
+
+  <p class="publisher-tiny">CLASS TINY (70%) — should only look smaller when Publisher font sizes is ON.</p>
+
+  <p class="publisher-large">CLASS LARGE (140%) — should only look larger when Publisher font sizes is ON.</p>
+
+  <p>This is a normal paragraph with <span style="font-size: 70%">INLINE 70% SPAN</span> and <span class="publisher-tiny">CLASS TINY SPAN</span> mixed in. They should only be small when Publisher sizes are ON.</p>
+
+</body>
+</html>

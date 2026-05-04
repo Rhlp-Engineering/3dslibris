@@ -38,7 +38,13 @@
     <item id="ch19" href="text/chapter-19-css-resets.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch20" href="text/chapter-20-nested-lists.xhtml" media-type="application/xhtml+xml"/>
     <item id="ch21" href="text/chapter-21-css-text-align.xhtml" media-type="application/xhtml+xml"/>
-  </manifest>
+    <item id="ch22" href="text/chapter-22-v262-qa-index.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch23" href="text/chapter-23-publisher-fonts.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch24" href="text/chapter-24-small-big.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch25" href="text/chapter-25-headings.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch26" href="text/chapter-26-hr-styling.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch27" href="text/chapter-27-cache-toggle.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch28" href="text/chapter-28-stress-test.xhtml" media-type="application/xhtml+xml"/>  </manifest>
 
   <spine toc="ncx">
     <itemref idref="nav"/>
@@ -65,7 +71,13 @@
     <itemref idref="ch19"/>
     <itemref idref="ch20"/>
     <itemref idref="ch21"/>
-  </spine>
+    <itemref idref="ch22"/>
+    <itemref idref="ch23"/>
+    <itemref idref="ch24"/>
+    <itemref idref="ch25"/>
+    <itemref idref="ch26"/>
+    <itemref idref="ch27"/>
+    <itemref idref="ch28"/>  </spine>
 
   <guide>
     <reference type="toc" title="Índice" href="nav.xhtml"/>

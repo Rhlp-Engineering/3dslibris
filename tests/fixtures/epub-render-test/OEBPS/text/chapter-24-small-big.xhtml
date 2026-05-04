@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <title>Small and Big Tags</title>
+  <link rel="stylesheet" type="text/css" href="../styles/stylesheet.css"/>
+</head>
+<body>
+  <h1 id="qa-small-big">Small and Big Tags</h1>
+
+  <p><strong>Expected behavior:</strong></p>
+  <ul>
+    <li>&lt;small&gt; should remain smaller in both modes.</li>
+    <li>&lt;big&gt; should remain larger in both modes.</li>
+    <li>This should not depend on the Publisher font sizes toggle.</li>
+  </ul>
+
+  <hr/>
+
+  <p>This is normal text.</p>
+
+  <small>This is small text inside a small block.</small>
+
+  <big>This is big text inside a big block.</big>
+
+  <p>Nested double small: <small><small>this should be very small</small></small> if supported safely.</p>
+
+  <p>This is a paragraph of normal text containing a <small>small section</small> and a <big>big section</big> within the same line.</p>
+
+</body>
+</html>
