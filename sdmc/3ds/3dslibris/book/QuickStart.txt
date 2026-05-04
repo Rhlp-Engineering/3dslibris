@@ -75,6 +75,9 @@ Other:
 - Select: open BOOK settings
 - During "opening book ...", B / Start / Select cancels the load and
   returns to the library
+- The bottom screen displays the HUD by default (clock and approximate
+  battery percentage, plus a '+' when charging). This can be toggled
+  in GENERAL settings.
 
 Bookmark persistence:
 - Bookmarks are saved in `sdmc:/3ds/3dslibris/3dslibris.xml`.
@@ -166,13 +169,14 @@ MOBI notes:
   - font size
   - paragraph spacing
   - screen orientation
-  - clock format
+  - clock format & battery indicator
   - color mode
   - library view
 - BOOK settings contain only book/document-specific actions such as:
   - go to page
   - index
   - bookmarks
+  - publisher font sizes (toggle CSS font sizes, off by default)
   - format-specific options like MOBI line-wrap fix
   - reading direction toggle (Left to right / Right to left) for PDF/CBZ/XPS
 - Go to page:
