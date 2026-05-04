@@ -597,8 +597,7 @@ bool Book::EnsureInlineImageMetadata(u16 image_id, InlineImageMetadata *out) {
           have_info = true;
         }
       }
-      if (have_info && info_w > 0 && info_h > 0 &&
-          ((long long)info_w * (long long)info_h <= 1500000LL)) {
+      if (have_info && info_w > 0 && info_h > 0) {
         entry.metadata_ok = true;
         entry.source_width = info_w;
         entry.source_height = info_h;
@@ -825,7 +824,7 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
     start_y = placement.start_y;
   }
 
-  // Guard: cap draw buffer to 1.5M pixels (same as EnsureInlineImageMetadata).
+  // Guard: cap draw buffer to 1.5M pixels to bound memory usage.
   if ((long long)draw_w * (long long)draw_h > 1500000LL) {
     stbi_image_free(pixels);
     return false;
