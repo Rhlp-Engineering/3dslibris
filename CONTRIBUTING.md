@@ -51,3 +51,7 @@ Use imperative, scoped messages, for example:
 - Describe user-visible behavior changes.
 - Include logs/screenshots for parsing, TOC, or UI-touch behavior changes.
 - Mention performance impact if touching parsing/pagination paths.
+
+## AI assistance
+- AI assisted contributions are allowed, but contributors are responsible for ensuring code quality, correctness, and adherence to project guidelines.
+- Do not add AI tools as commit co-authors or in commit messages. The contribution is attributed to the human contributor submitting the PR.
