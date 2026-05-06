@@ -4,9 +4,9 @@
 #include "book/book_parse_deps.h"
 #include "formats/cbz/cbz.h"
 #include "formats/common/book_error.h"
-#include "formats/common/plain_parser.h"
 #include "formats/common/xml_book_parser.h"
 #include "formats/epub/epub.h"
+#include "formats/fb2/fb2_parser.h"
 #include "formats/mobi/mobi_book_hooks.h"
 #include "formats/mobi/mobi_parser.h"
 #include "formats/odt/odt_parser.h"
@@ -90,6 +90,15 @@ uint8_t ParseCbz(Book *book, const char *path, bool) {
   return ParseCbzFile(book, path);
 }
 
+bool CanParseFb2(Book *book, bool fulltext) {
+  return fulltext && IsExt(book, ".fb2");
+}
+
+uint8_t ParseFb2(Book *book, const char *path, bool fulltext) {
+  const BookParseDeps deps = BuildBookParseDeps(book);
+  return fb2_parser::Parse(book, path, fulltext, deps);
+}
+
 static const BookParserEntry kBookParsers[] = {
     {"txt", CanParseTxt, ParseTxt},
     {"rtf", CanParseRtf, ParseRtf},
@@ -97,6 +106,7 @@ static const BookParserEntry kBookParsers[] = {
     {"mobi", CanParseMobi, ParseMobi},
     {"pdf", CanParsePdf, ParsePdf},
     {"cbz", CanParseCbz, ParseCbz},
+    {"fb2", CanParseFb2, ParseFb2},
 };
 
 std::string BuildPath(Book *book) {
@@ -147,9 +157,8 @@ uint8_t Parse(Book *book, bool fulltext) {
   }
 
   const BookParseDeps deps = BuildBookParseDeps(book);
-  return xml_book_parser::ParseXmlBookFile(
-      book, path, fulltext, deps, plain_parser::BuildFb2FallbackChapters,
-      plain_parser::SetNonEpubTocConfidence);
+  return xml_book_parser::ParseXmlBookFile(book, path, fulltext, deps,
+                                           nullptr, nullptr);
 }
 
 uint8_t IndexMetadata(Book *book, const char *path) {

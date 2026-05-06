@@ -42,6 +42,5 @@ plain_text_stream::ContinueCallbacks MakeContinueCallbacks();
 
 u8 ParseBuffer(Book *book, const std::string &text_utf8,
                bool detect_heuristic_headings = true);
-void BuildFb2FallbackChapters(Book *book);
 
 } // namespace plain_parser
