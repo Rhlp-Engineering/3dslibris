@@ -1035,6 +1035,14 @@ static void EmitFlowedFragmentRaw(parsedata_t *p, const XML_Char *txt,
   emit_metrics.linespacing = linespacing;
   emit_metrics.spaceadvance = spaceadvance;
   emit_metrics.text_already_transformed = text_already_transformed;
+  // overflow_threshold: read-only for WRAP_TRACE logging.
+  {
+    const text_render_layout_utils::ReadingScreenMetrics sm =
+        text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+            p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+            MIN(ts->margin.bottom, 16));
+    emit_metrics.overflow_threshold = sm.max_height - sm.bottom_margin;
+  }
 
   if (white_space == book_xml_css_style_utils::WhiteSpaceMode::Pre ||
       white_space == book_xml_css_style_utils::WhiteSpaceMode::PreWrap) {

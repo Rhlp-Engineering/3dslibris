@@ -11,8 +11,39 @@ namespace book_xml_text_emit {
 
 namespace {
 
+#ifdef DSLIBRIS_DEBUG
+// Build a short ASCII-printable excerpt from a shaped run segment [s, e).
+// Non-ASCII codepoints are rendered as '?'.
+static std::string SegmentExcerpt(
+    const std::vector<text_layout_utils::ShapedGlyph> &run,
+    size_t s, size_t e, size_t max_chars = 20) {
+  std::string out;
+  for (size_t i = s; i < e && out.size() < max_chars; i++) {
+    uint32_t cp = run[i].text.codepoint;
+    if (cp >= 0x20 && cp < 0x7F)
+      out += (char)cp;
+    else if (cp == 0x00A0)
+      out += '_'; // NBSP
+    else
+      out += '?';
+  }
+  return out;
+}
+#endif // DSLIBRIS_DEBUG
+
 bool IsClosingAttachedPunctuation(uint32_t cp) {
-  return cp == '!' || cp == '?';
+  switch (cp) {
+    case '.': case ',': case ';': case ':': case '!': case '?':
+    case ')': case ']': case '}':
+    case 0x2019: // RIGHT SINGLE QUOTATION MARK '
+    case 0x201D: // RIGHT DOUBLE QUOTATION MARK "
+    case 0x00BB: // RIGHT-POINTING DOUBLE ANGLE QUOTATION MARK »
+    case 0x203A: // SINGLE RIGHT-POINTING ANGLE QUOTATION MARK ›
+    case 0x2026: // HORIZONTAL ELLIPSIS …
+      return true;
+    default:
+      return false;
+  }
 }
 
 bool SegmentIsOnlyClosingAttachedPunctuation(
@@ -227,12 +258,16 @@ void EmitFlowedShapedText(
     }
     if (has_rtl) {
       if (p->linebegan && p->pen.x > metrics.margin_left) {
+        // Save pre-wrap pen.y: overflow check must use it (matches renderer).
+        const int pen_y_before = p->pen.y;
         parse_append_page_byte(p, '\n');
         p->pen.x = metrics.margin_left;
-        p->pen.y += (metrics.lineheight + metrics.linespacing);
         p->linebegan = false;
         AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
                             advance_ctx);
+        // Advance pen.y only if no screen advance occurred.
+        if (p->pen.y == pen_y_before)
+          p->pen.y += (metrics.lineheight + metrics.linespacing);
       }
 
       if (p->in_paragraph)
@@ -308,12 +343,14 @@ void EmitFlowedShapedText(
       }
 
       if (unit_index < run.size() && run[unit_index].text.codepoint != '\n') {
+        const int pen_y_before = p->pen.y;
         parse_append_page_byte(p, '\n');
         p->pen.x = metrics.margin_left;
-        p->pen.y += (metrics.lineheight + metrics.linespacing);
         p->linebegan = false;
         AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
                             advance_ctx);
+        if (p->pen.y == pen_y_before)
+          p->pen.y += (metrics.lineheight + metrics.linespacing);
       }
       continue;
     }
@@ -325,15 +362,19 @@ void EmitFlowedShapedText(
         p->pen.x += metrics.spaceadvance;
       } else if (!unit.text.breakable_space) {
         u16 unit_advance = (u16)unit.advance;
+        const int pen_y_before_nbsp = p->pen.y;
+        bool nbsp_did_wrap = false;
         if ((p->pen.x + unit_advance) >=
             (metrics.display_width - metrics.margin_right)) {
           parse_append_page_byte(p, '\n');
           p->pen.x = metrics.margin_left;
-          p->pen.y += (metrics.lineheight + metrics.linespacing);
           p->linebegan = false;
+          nbsp_did_wrap = true;
         }
         AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
                             advance_ctx);
+        if (nbsp_did_wrap && p->pen.y == pen_y_before_nbsp)
+          p->pen.y += (metrics.lineheight + metrics.linespacing);
         EmitFreshLineStartX(p, metrics);
         if (metrics.text_already_transformed) {
           AppendParsedCodepointsRaw(p, txt + unit.text.byte_offset,
@@ -366,16 +407,83 @@ void EmitFlowedShapedText(
     const bool attached_closing_punctuation =
         SegmentIsOnlyClosingAttachedPunctuation(run, unit_index,
                                                 segment_end_index);
-    if ((p->pen.x + advance) >= (metrics.display_width - metrics.margin_right) &&
-        !(p->linebegan && attached_closing_punctuation)) {
+    // Punctuation glue: if a trailing space was already emitted into the
+    // buffer just before this closing-punctuation segment (e.g. from a
+    // collapsed newline at an inline style boundary), remove it so the
+    // punctuation appears adjacent to the previous word.
+    if (attached_closing_punctuation && p->linebegan &&
+        p->buflen > 0 && p->buf[p->buflen - 1] == (u32)' ') {
+      p->buflen--;
+      p->pen.x = (p->pen.x > (int)metrics.spaceadvance)
+                     ? (p->pen.x - metrics.spaceadvance)
+                     : metrics.margin_left;
+#ifdef DSLIBRIS_DEBUG
+      DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+                   "[PUNCT_WRAP] punct=U+%04X removed_trailing_space=1 "
+                   "action=glue-to-prev\n",
+                   run[unit_index].text.codepoint);
+#endif
+    }
+    const bool need_wrap =
+        ((p->pen.x + advance) >= (metrics.display_width - metrics.margin_right) &&
+         !(p->linebegan && attached_closing_punctuation));
+#ifdef DSLIBRIS_DEBUG
+    const int y_before_wrap = p->pen.y;
+#endif
+    if (need_wrap) {
       parse_append_page_byte(p, '\n');
       p->pen.x = metrics.margin_left;
       p->pen.y += (metrics.lineheight + metrics.linespacing);
       p->linebegan = false;
     }
-
-    AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
-                        advance_ctx);
+    // Advance to the next screen/page only if the candidate line (p->pen.y
+    // after any wrap) itself lies beyond the visible threshold.
+    // Without this guard, AdvancePageIfNeeded uses WouldOverflow which checks
+    // (pen.y + step > threshold), incorrectly refusing the last visible line.
+    {
+      const bool within_threshold = (metrics.overflow_threshold > 0) &&
+                                     (p->pen.y <= metrics.overflow_threshold);
+      if (!within_threshold) {
+        AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
+                            advance_ctx);
+      }
+    }
+#ifdef DSLIBRIS_DEBUG
+    {
+      const int step = metrics.lineheight + metrics.linespacing;
+      const int y_after_wrap =
+          y_before_wrap + (need_wrap ? step : 0);
+      const int threshold = metrics.overflow_threshold;
+      const bool candidate_line_vis = (threshold <= 0) ||
+                                      (y_after_wrap <= threshold);
+      const bool following_line_vis = (threshold <= 0) ||
+                                      (y_after_wrap + step <= threshold);
+      const bool advance_fired = (p->pen.y != y_after_wrap);
+      const std::string seg_txt =
+          SegmentExcerpt(run, unit_index, segment_end_index);
+      DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+                   "[WRAP_TRACE] text=\"%s\" seg=[%zu,%zu)"
+                   " x_before=%d y_before=%d"
+                   " width=%d max_width=%d"
+                   " need_wrap=%d"
+                   " y_after_wrap=%d"
+                   " step=%d threshold=%d"
+                   " cand_vis=%d foll_vis=%d"
+                   " adv_fired=%d screen=%d"
+                   " y_after=%d\n",
+                   seg_txt.c_str(),
+                   unit_index, segment_end_index,
+                   p->pen.x - advance, y_before_wrap,
+                   (int)advance,
+                   metrics.display_width - metrics.margin_right - metrics.margin_left,
+                   (int)need_wrap,
+                   y_after_wrap,
+                   step, threshold,
+                   (int)candidate_line_vis, (int)following_line_vis,
+                   (int)advance_fired, p->screen,
+                   p->pen.y);
+    }
+#endif
     EmitFreshLineStartX(p, metrics);
     if (has_rtl)
       EmitBidiSegment(p, run, unit_index, segment_end_index, bidi_runs,

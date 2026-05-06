@@ -17,6 +17,12 @@ struct FlowEmitMetrics {
   int linespacing;
   int spaceadvance;
   bool text_already_transformed;
+  // Visible threshold: max_height - bottom_margin for the current screen.
+  // Used to guard the LTR advance check: a candidate line at pen.y is allowed
+  // if pen.y <= overflow_threshold, even if pen.y + step > overflow_threshold.
+  // When zero (e.g. in tests that don't populate it), the guard is disabled
+  // and the old WouldOverflow behavior is preserved.
+  int overflow_threshold;
 };
 
 typedef void (*AdvancePageOnOverflowFn)(parsedata_t *p, int lineheight,
