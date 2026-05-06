@@ -31,5 +31,6 @@ struct Hooks {
 };
 
 u8 ParseFile(Book *book, const char *path, const Hooks &hooks);
+u8 Parse(Book *book, const char *path);
 
 } // namespace mobi_parser

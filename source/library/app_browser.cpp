@@ -31,14 +31,14 @@
 #include "book/book.h"
 #include "ui/browser_nav.h"
 #include "formats/common/book_error.h"
-#include "formats/cbz/cbz.h"
+#include "formats/cbz/cbz_parser.h"
 #include "ui/button.h"
 #include "menus/chapter_menu.h"
 #include "shared/debug_log.h"
-#include "formats/epub/epub.h"
+#include "formats/epub/epub_parser.h"
 #include "formats/fb2/fb2.h"
 #include "formats/mobi/mobi.h"
-#include "formats/pdf/pdf.h"
+#include "formats/pdf/pdf_parser.h"
 #include "parse.h"
 #include "shared/app_flow_utils.h"
 #include "shared/color_utils.h"
@@ -349,7 +349,7 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
             book->ClearBrowserDisplayNameCache();
         }
         if (book->metadataIndexTried && !book->coverImagePath.empty())
-          src_rc = epub_extract_cover(book, book_path);
+          src_rc = epub_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_XHTML &&
                  HasExtCI(book->GetFileName(), ".fb2")) {
         src_rc = fb2_extract_cover(book, book_path);
@@ -357,9 +357,9 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
                  HasExtCI(book->GetFileName(), ".mobi")) {
         src_rc = mobi_extract_cover(book, book_path);
       } else if (book->format == FORMAT_PDF) {
-        src_rc = pdf_extract_cover(book, book_path);
+        src_rc = pdf_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_CBZ) {
-        src_rc = cbz_extract_cover(book, book_path);
+        src_rc = cbz_parser::ExtractCover(book, book_path);
       }
       if (src_rc == 0 && book->coverPixels) {
         SaveCoverCache(book, book_path);
@@ -890,7 +890,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             EnqueueJob(APP_JOB_EXTRACT_COVER, book);
           } else {
             if (!book->coverImagePath.empty()) {
-              rc = epub_extract_cover(book, path);
+              rc = epub_parser::ExtractCover(book, path);
               if (rc == 0 && book->coverPixels) {
                 SaveCoverCache(book, path);
                 book->coverAttempts = kCoverMaxAttempts;
@@ -932,7 +932,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             book->coverAttempts = kCoverMaxAttempts;
           }
         } else if (book->format == FORMAT_PDF) {
-          rc = pdf_extract_cover(book, path);
+          rc = pdf_parser::ExtractCover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
@@ -947,7 +947,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
             book->coverAttempts = kCoverMaxAttempts;
           }
         } else if (book->format == FORMAT_CBZ) {
-          rc = cbz_extract_cover(book, path);
+          rc = cbz_parser::ExtractCover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
@@ -1014,7 +1014,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
         std::string path = BuildBookPath(book);
         if (path.empty())
           continue;
-        rc = epub_resolve_toc(book, path);
+        rc = epub_parser::ResolveToc(book, path);
         book->tocResolveTried = true;
         book->tocResolved = (rc == 0);
         if (rc == 0 && app_.GetMode() == AppMode::Chapters &&

@@ -2,15 +2,14 @@
 
 #include "book/book.h"
 #include "book/book_parse_deps.h"
-#include "formats/cbz/cbz.h"
+#include "formats/cbz/cbz_parser.h"
 #include "formats/common/book_error.h"
 #include "formats/common/xml_book_parser.h"
-#include "formats/epub/epub.h"
+#include "formats/epub/epub_parser.h"
 #include "formats/fb2/fb2_parser.h"
-#include "formats/mobi/mobi_book_hooks.h"
 #include "formats/mobi/mobi_parser.h"
 #include "formats/odt/odt_parser.h"
-#include "formats/pdf/pdf.h"
+#include "formats/pdf/pdf_parser.h"
 #include "formats/rtf/rtf_parser.h"
 #include "formats/txt/txt_parser.h"
 #include "shared/debug_log.h"
@@ -63,13 +62,8 @@ bool CanParseMobi(Book *book, bool fulltext) {
   return fulltext && IsExt(book, ".mobi");
 }
 
-const mobi_parser::Hooks &SharedMobiHooks() {
-  static const mobi_parser::Hooks hooks = mobi_book_hooks::Make();
-  return hooks;
-}
-
 uint8_t ParseMobi(Book *book, const char *path, bool) {
-  return mobi_parser::ParseFile(book, path, SharedMobiHooks());
+  return mobi_parser::Parse(book, path);
 }
 
 bool CanParsePdf(Book *book, bool fulltext) {
@@ -79,7 +73,7 @@ bool CanParsePdf(Book *book, bool fulltext) {
 }
 
 uint8_t ParsePdf(Book *book, const char *path, bool) {
-  return ParsePdfFile(book, path);
+  return pdf_parser::Parse(book, path);
 }
 
 bool CanParseCbz(Book *book, bool fulltext) {
@@ -87,7 +81,7 @@ bool CanParseCbz(Book *book, bool fulltext) {
 }
 
 uint8_t ParseCbz(Book *book, const char *path, bool) {
-  return ParseCbzFile(book, path);
+  return cbz_parser::Parse(book, path);
 }
 
 bool CanParseFb2(Book *book, bool fulltext) {
@@ -134,7 +128,7 @@ uint8_t OpenPrepared(Book *book) {
 
   uint8_t err = 1;
   if (book->format == FORMAT_EPUB)
-    err = epub(book, path, false);
+    err = epub_parser::Open(book, path);
   else
     err = Parse(book, true);
 
@@ -165,11 +159,11 @@ uint8_t IndexMetadata(Book *book, const char *path) {
   if (!book || !path)
     return 1;
   if (book->format == FORMAT_EPUB)
-    return (uint8_t)epub(book, path, true);
+    return epub_parser::Index(book, path);
   if (book->format == FORMAT_PDF)
-    return IndexPdfMetadata(book, path);
+    return pdf_parser::Index(book, path);
   if (book->format == FORMAT_CBZ)
-    return IndexCbzMetadata(book, path);
+    return cbz_parser::Index(book, path);
   return 0;
 }
 
