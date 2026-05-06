@@ -1,6 +1,7 @@
 #include "formats/fb2/fb2_parser.h"
 
 #include "book/book.h"
+#include "formats/fb2/fb2.h"
 #include "formats/common/page_text_extract_utils.h"
 #include "formats/common/plain_parser.h"
 #include "formats/common/xml_book_parser.h"
@@ -66,6 +67,10 @@ uint8_t Parse(Book *book, const char *path, bool fulltext,
   return xml_book_parser::ParseXmlBookFile(book, path, fulltext, deps,
                                            BuildFb2FallbackChapters,
                                            plain_parser::SetNonEpubTocConfidence);
+}
+
+int ExtractCover(Book *book, const std::string &path) {
+  return fb2_extract_cover(book, path);
 }
 
 } // namespace fb2_parser

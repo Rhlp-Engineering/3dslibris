@@ -31,13 +31,13 @@
 #include "book/book.h"
 #include "ui/browser_nav.h"
 #include "formats/common/book_error.h"
-#include "formats/cbz/cbz_parser.h"
 #include "ui/button.h"
 #include "menus/chapter_menu.h"
 #include "shared/debug_log.h"
+#include "formats/cbz/cbz_parser.h"
 #include "formats/epub/epub_parser.h"
-#include "formats/fb2/fb2.h"
-#include "formats/mobi/mobi.h"
+#include "formats/fb2/fb2_parser.h"
+#include "formats/mobi/mobi_parser.h"
 #include "formats/pdf/pdf_parser.h"
 #include "parse.h"
 #include "shared/app_flow_utils.h"
@@ -352,10 +352,10 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
           src_rc = epub_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_XHTML &&
                  HasExtCI(book->GetFileName(), ".fb2")) {
-        src_rc = fb2_extract_cover(book, book_path);
+        src_rc = fb2_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_XHTML &&
                  HasExtCI(book->GetFileName(), ".mobi")) {
-        src_rc = mobi_extract_cover(book, book_path);
+        src_rc = mobi_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_PDF) {
         src_rc = pdf_parser::ExtractCover(book, book_path);
       } else if (book->format == FORMAT_CBZ) {
@@ -907,7 +907,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           }
         } else if (book->format == FORMAT_XHTML &&
                    HasExtCI(book->GetFileName(), ".fb2")) {
-          rc = fb2_extract_cover(book, path);
+          rc = fb2_parser::ExtractCover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;
@@ -920,7 +920,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           }
         } else if (book->format == FORMAT_XHTML &&
                    HasExtCI(book->GetFileName(), ".mobi")) {
-          rc = mobi_extract_cover(book, path);
+          rc = mobi_parser::ExtractCover(book, path);
           if (rc == 0 && book->coverPixels) {
             SaveCoverCache(book, path);
             book->coverAttempts = kCoverMaxAttempts;

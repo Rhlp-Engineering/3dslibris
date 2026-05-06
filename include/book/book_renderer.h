@@ -7,9 +7,7 @@ class Text;
 
 namespace book_renderer {
 
-// Transitional renderer boundary: kept during Book parser/renderer split.
-//
-// Renderer dispatch is selected once per Book::DrawCurrentView call, outside
+// Renderer dispatch is selected once per DrawCurrentView call, outside
 // glyph/pixel hot loops.
 void DrawCurrentView(Book *book, Text *text);
 void SetFixedLayoutViewportInteraction(Book *book, bool active);
