@@ -5,8 +5,6 @@
 #include "formats/common/book_error.h"
 #include "formats/common/page_text_extract_utils.h"
 #include "formats/common/plain_text_stream.h"
-#include "formats/rtf/rtf_loader.h"
-#include "formats/txt/txt_loader.h"
 #include "shared/text_render_layout_utils.h"
 #include "parse.h"
 
@@ -616,20 +614,6 @@ u8 ParseBuffer(Book *book, const std::string &text_utf8,
                                                 state.completed);
 #endif
   return 0;
-}
-
-u8 ParseTxtFile(Book *book, const char *path) {
-  std::string text;
-  if (!txt_loader::ReadAndNormalize(path, &text))
-    return BOOK_ERR_CORRUPT;
-  return ParseBuffer(book, text);
-}
-
-u8 ParseRtfFile(Book *book, const char *path) {
-  std::string text;
-  if (!rtf_loader::ReadAndDecode(path, &text))
-    return BOOK_ERR_CORRUPT;
-  return ParseBuffer(book, text);
 }
 
 void BuildFb2FallbackChapters(Book *book) {

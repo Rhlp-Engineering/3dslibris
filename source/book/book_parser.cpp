@@ -9,8 +9,10 @@
 #include "formats/epub/epub.h"
 #include "formats/mobi/mobi_book_hooks.h"
 #include "formats/mobi/mobi_parser.h"
-#include "formats/odt/odt_loader.h"
+#include "formats/odt/odt_parser.h"
 #include "formats/pdf/pdf.h"
+#include "formats/rtf/rtf_parser.h"
+#include "formats/txt/txt_parser.h"
 #include "shared/debug_log.h"
 #include "shared/string_utils.h"
 
@@ -38,7 +40,7 @@ bool CanParseTxt(Book *book, bool fulltext) {
 }
 
 uint8_t ParseTxt(Book *book, const char *path, bool) {
-  return plain_parser::ParseTxtFile(book, path);
+  return txt_parser::Parse(book, path);
 }
 
 bool CanParseRtf(Book *book, bool fulltext) {
@@ -46,7 +48,7 @@ bool CanParseRtf(Book *book, bool fulltext) {
 }
 
 uint8_t ParseRtf(Book *book, const char *path, bool) {
-  return plain_parser::ParseRtfFile(book, path);
+  return rtf_parser::Parse(book, path);
 }
 
 bool CanParseOdt(Book *book, bool fulltext) {
@@ -54,7 +56,7 @@ bool CanParseOdt(Book *book, bool fulltext) {
 }
 
 uint8_t ParseOdt(Book *book, const char *path, bool) {
-  return odt_loader::ParseOdtFile(book, path);
+  return odt_parser::Parse(book, path);
 }
 
 bool CanParseMobi(Book *book, bool fulltext) {
