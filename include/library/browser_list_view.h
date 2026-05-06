@@ -1,6 +1,6 @@
 #pragma once
 
-class App;
+#include "library/browser_draw_context.h"
 
 namespace browser_list_view {
 
@@ -11,6 +11,6 @@ static const int kRowH = 36;
 static const int kRowPitch = 38;
 
 int HitTestBookIndex(int x, int y, int page_start, int book_count, int page_size);
-void DrawPage(App &app, int page_start, int page_size);
+void DrawPage(const BrowserDrawContext &ctx, int page_start, int page_size);
 
 } // namespace browser_list_view

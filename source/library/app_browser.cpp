@@ -1418,10 +1418,12 @@ void LibraryController::browser_draw(void) {
   const BrowserViewMode view_mode = CurrentBrowserViewMode(app_);
   const int page_size = CurrentBrowserPageSize(app_);
 
+  BrowserDrawContext ctx{app_.ts.get(), &app_.books, app_.GetSelectedBook(),
+                         &app_.buttons};
   if (view_mode == BROWSER_VIEW_LIST)
-    browser_list_view::DrawPage(app_, app_.GetBrowserPageStart(), page_size);
+    browser_list_view::DrawPage(ctx, app_.GetBrowserPageStart(), page_size);
   else
-    browser_grid_view::DrawPage(app_, g_marquee, app_.GetBrowserPageStart());
+    browser_grid_view::DrawPage(ctx, g_marquee, app_.GetBrowserPageStart());
 
   app_.ts->SetPixelSize(savedPixelSize);
 
@@ -1451,5 +1453,5 @@ void LibraryController::browser_draw(void) {
 }
 
 void LibraryController::browser_tick_marquee() {
-  browser_grid_view::TickMarquee(app_, g_marquee);
+  browser_grid_view::TickMarquee(app_.ts.get(), g_marquee);
 }
