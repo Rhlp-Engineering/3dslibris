@@ -615,6 +615,9 @@ static void AdvanceParsedPageOnOverflowThunk(parsedata_t *p, int lineheight,
 static void linefeed_r(parsedata_t *p, const char *tag, const char *reason,
                        int is_real);
 
+// Forward declaration — AdvanceParsedScreen is defined later in this file.
+static void AdvanceParsedScreen(parsedata_t *p);
+
 // Returns true only when the current screen has no drawable content since
 // the last screen/page advance.  This is the correct way to determine that
 // we are at the top of a visually empty screen.
@@ -856,6 +859,68 @@ static void EmitFlowedUtf8Segment(
       AdvanceParsedPageOnOverflowThunk, NULL);
 }
 
+static bool FlowedTextFitsCurrentVisualLine(
+    parsedata_t *p, const char *txt, size_t txtlen,
+    const ParsedTextMeasureContext &measure_ctx,
+    const book_xml_text_emit::FlowEmitMetrics &emit_metrics,
+    book_xml_css_style_utils::WhiteSpaceMode white_space) {
+  if (!p || !txt || txtlen == 0)
+    return false;
+  if (white_space == book_xml_css_style_utils::WhiteSpaceMode::Pre ||
+      white_space == book_xml_css_style_utils::WhiteSpaceMode::PreWrap)
+    return false;
+
+  std::string normalized;
+  const char *measure_txt = txt;
+  size_t measure_len = txtlen;
+  if (white_space == book_xml_css_style_utils::WhiteSpaceMode::Normal ||
+      white_space == book_xml_css_style_utils::WhiteSpaceMode::Nowrap ||
+      white_space == book_xml_css_style_utils::WhiteSpaceMode::PreLine) {
+    normalized = book_xml_css_style_utils::NormalizeWhiteSpaceText(
+        txt, txtlen, white_space);
+    measure_txt = normalized.c_str();
+    measure_len = normalized.size();
+  }
+  if (measure_len == 0)
+    return true;
+  for (size_t i = 0; i < measure_len; i++) {
+    if (measure_txt[i] == '\n' || measure_txt[i] == '\r')
+      return false;
+  }
+
+  std::vector<text_layout_utils::ShapedGlyph> &run = p->shaped_run;
+  bool has_rtl = false;
+  if (!text_layout_utils::ShapeTextRunBidi(
+          measure_txt, measure_len, NULL, MeasureParsedTextAdvance,
+          (void *)&measure_ctx, &run, &has_rtl, &p->bidi_cps, &p->bidi_runs))
+    return false;
+
+  size_t start = 0;
+  while (start < run.size() && run[start].text.whitespace &&
+         run[start].text.breakable_space) {
+    start++;
+  }
+  if (start >= run.size())
+    return true;
+
+  const int content_right =
+      emit_metrics.display_width - emit_metrics.margin_right;
+  int start_x = p->linebegan ? p->pen.x : emit_metrics.margin_left;
+  if (!p->linebegan) {
+    const int existing_offset = p->pen.x - emit_metrics.base_margin_left;
+    start_x = std::max(0, emit_metrics.margin_left + existing_offset);
+  }
+  const int available = content_right - start_x;
+  if (available <= 0)
+    return false;
+
+  return text_layout_utils::MeasureTextRun(run, start, run.size()) < available;
+}
+
+static bool IsSimpleParagraphTextFlush(const parsedata_t *p) {
+  return p && p->stacksize > 0 && p->stack[p->stacksize - 1] == TAG_P;
+}
+
 static void EmitPreformattedUtf8Segment(
     parsedata_t *p, const char *txt, size_t txtlen,
     const ParsedTextMeasureContext &measure_ctx, int lineheight,
@@ -999,19 +1064,6 @@ static void EmitFlowedFragmentRaw(parsedata_t *p, const XML_Char *txt,
   int linespacing = ts->linespacing;
   int spaceadvance = MeasureParsedTextAdvance((u16)' ', (void *)&measure_ctx);
 
-  if (p->buflen == 0) {
-    p->pen.x = ts->margin.left;
-    p->pen.y = ts->margin.top + lineheight;
-    p->linebegan = false;
-    ClearPendingBlockSpacing(p); // already at top of screen; discard spacing
-  } else {
-    // Flush any accumulated layout-only block spacing before the first real
-    // text token using the two-phase content-aware rule.
-    FlushPendingBlockSpacingBeforeContent(p, "text");
-  }
-  // Text is about to be emitted — mark the screen as having drawable content.
-  p->current_screen_has_drawable_content = true;
-
   std::string transformed_text;
   const char *flow_txt = txt;
   size_t flow_txtlen = (size_t)txtlen;
@@ -1035,6 +1087,96 @@ static void EmitFlowedFragmentRaw(parsedata_t *p, const XML_Char *txt,
   emit_metrics.linespacing = linespacing;
   emit_metrics.spaceadvance = spaceadvance;
   emit_metrics.text_already_transformed = text_already_transformed;
+
+  if (p->buflen == 0) {
+    p->pen.x = ts->margin.left;
+    p->pen.y = ts->margin.top + lineheight;
+    p->linebegan = false;
+    ClearPendingBlockSpacing(p); // already at top of screen; discard spacing
+  } else {
+    // Flush any accumulated layout-only block spacing before the first real
+    // text token using the two-phase content-aware rule.
+    FlushPendingBlockSpacingBeforeContent(p, "text");
+
+    // Paragraph-start quality guard: if this is the first text content of a
+    // normal flowed paragraph and the current screen has fewer than 2 visible
+    // line slots remaining, advance to the next screen/page before emitting.
+    //
+    // Without this guard, a paragraph that starts on the last visible line
+    // (y <= threshold, but y + step > threshold) will place its first line on
+    // the current screen and wrap all remaining text to the next screen — a
+    // visually poor split.
+    //
+    // Conditions for the guard:
+    //   - in_paragraph && !paragraph_has_content: this IS the paragraph start.
+    //   - The screen is not already visually empty (no point advancing a blank).
+    //   - White-space mode is not Pre/PreWrap (those must not be reflowed).
+    //   - The available slot count (after the flush) is exactly 1.
+#ifdef DSLIBRIS_DEBUG
+    DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+        "[PARA_GUARD_EVAL] in_para=%d para_content=%d visual_empty=%d"
+        " y=%d screen=%d linebegan=%d\n",
+        (int)p->in_paragraph, (int)p->paragraph_has_content,
+        (int)IsCurrentReadingScreenVisuallyEmpty(p),
+        p->pen.y, p->screen, (int)p->linebegan);
+#endif
+    if (p->in_paragraph && !p->paragraph_has_content &&
+        !IsCurrentReadingScreenVisuallyEmpty(p)) {
+      const book_xml_css_style_utils::WhiteSpaceMode ws_mode =
+          ResolveActiveWhiteSpace(p);
+      const bool is_pre =
+          ws_mode == book_xml_css_style_utils::WhiteSpaceMode::Pre ||
+          ws_mode == book_xml_css_style_utils::WhiteSpaceMode::PreWrap;
+      if (!is_pre) {
+        const int lh = ts->GetHeight();
+        const int ls = ts->linespacing;
+        const int step = lh + (ls > 0 ? ls : 0);
+        if (step > 0) {
+          const text_render_layout_utils::ReadingScreenMetrics sm =
+              text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+                  p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
+                  MIN(ts->margin.bottom, 16));
+#ifdef DSLIBRIS_DEBUG
+          const int threshold = sm.max_height - sm.bottom_margin;
+#endif
+          // pen.y after flush points to the line where text would start.
+          // A "line slot" is usable if the current line visually fits.
+          // The paragraph needs at least 2 slots: the current line AND one
+          // more to show it is not isolated.
+          const bool slot1 =
+              text_render_layout_utils::CurrentLineFitsScreen(
+                  p->pen.y, lh, ls, sm.max_height, sm.bottom_margin);
+          const bool slot2 =
+              text_render_layout_utils::HasRoomForFollowingLine(
+                  p->pen.y, lh, ls, sm.max_height, sm.bottom_margin);
+          bool one_line_paragraph = false;
+          if (slot1 && !slot2 && IsSimpleParagraphTextFlush(p)) {
+            one_line_paragraph = FlowedTextFitsCurrentVisualLine(
+                p, flow_txt, flow_txtlen, measure_ctx, emit_metrics,
+                white_space);
+          }
+          const bool should_advance =
+              text_render_layout_utils::ShouldAdvanceParagraphStartGuard(
+                  slot1, slot2, one_line_paragraph);
+#ifdef DSLIBRIS_DEBUG
+          DBG_LOGF_CAT(p->reporter, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+              "[PARA_START_GUARD] y=%d threshold=%d step=%d"
+              " slot1=%d slot2=%d one_line=%d action=%s\n",
+              p->pen.y, threshold, step,
+              (int)slot1, (int)slot2,
+              (int)one_line_paragraph,
+              should_advance ? "advance-screen" : "no-action");
+#endif
+          if (should_advance) {
+            AdvanceParsedScreen(p);
+          }
+        }
+      }
+    }
+  }
+  // Text is about to be emitted — mark the screen as having drawable content.
+  p->current_screen_has_drawable_content = true;
+
   // overflow_threshold: read-only for WRAP_TRACE logging.
   {
     const text_render_layout_utils::ReadingScreenMetrics sm =
@@ -1042,6 +1184,8 @@ static void EmitFlowedFragmentRaw(parsedata_t *p, const XML_Char *txt,
             p->book->GetOrientation() != 0, p->screen, ts->margin.bottom,
             MIN(ts->margin.bottom, 16));
     emit_metrics.overflow_threshold = sm.max_height - sm.bottom_margin;
+    emit_metrics.screen_max_height = sm.max_height;
+    emit_metrics.screen_bottom_margin = sm.bottom_margin;
   }
 
   if (white_space == book_xml_css_style_utils::WhiteSpaceMode::Pre ||
@@ -3217,9 +3361,9 @@ void end(void *data, const char *el) {
           MIN(ts->margin.bottom, 16));
   int maxHeight = metrics.max_height;
   int bottomMargin = metrics.bottom_margin;
-  int lineheight = ts->GetHeight();
-  if (text_render_layout_utils::WouldOverflowReadingScreen(
-          p->pen.y, lineheight, ts->linespacing, maxHeight, bottomMargin)) {
+  if (!text_render_layout_utils::CurrentLineFitsScreen(
+          p->pen.y, ts->GetHeight(), ts->linespacing, maxHeight,
+          bottomMargin)) {
     if (p->screen == 1) {
       // End of right screen; end of page.
       // Copy in buffered char data into a new page.

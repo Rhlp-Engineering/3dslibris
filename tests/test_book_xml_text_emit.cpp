@@ -489,6 +489,67 @@ void TestBeyondLastVisibleLineAdvances() {
              ctx.fired);
 }
 
+void TestContinuationWrapUsesVisualLastLineWhenMetricsAvailable() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 200;
+  p.pen.y = 291;
+  p.linebegan = true;
+  p.in_paragraph = true;
+  p.paragraph_has_content = true;
+
+  const char *text = "p.mt-class-qualified";
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = false;
+  ExpectTrue("shape qualified class text",
+             text_layout_utils::ShapeTextRunBidi(
+                 text, std::strlen(text), NULL, MeasureMono, NULL, &run,
+                 &has_rtl));
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  m.screen_max_height = 320;
+  m.screen_bottom_margin = 16;
+  MockOverflowCtx ctx{};
+  book_xml_text_emit::EmitFlowedShapedText(
+      &p, text, run, has_rtl, std::vector<text_bidi_utils::BidiRun>(),
+      m, MockAdvancePage, &ctx);
+
+  ExpectTrue("advance not fired for visually fitting continuation line",
+             !ctx.fired);
+  ExpectEq("wrapped continuation uses compact bleed line", p.pen.y, 306);
+}
+
+void TestContinuationWrapBeyondCompactBleedAdvances() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 200;
+  p.pen.y = 294;
+  p.linebegan = true;
+  p.in_paragraph = true;
+  p.paragraph_has_content = true;
+
+  const char *text = "p.mt-class-qualified";
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = false;
+  ExpectTrue("shape qualified class text beyond bleed",
+             text_layout_utils::ShapeTextRunBidi(
+                 text, std::strlen(text), NULL, MeasureMono, NULL, &run,
+                 &has_rtl));
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  m.screen_max_height = 320;
+  m.screen_bottom_margin = 16;
+  MockOverflowCtx ctx{};
+  book_xml_text_emit::EmitFlowedShapedText(
+      &p, text, run, has_rtl, std::vector<text_bidi_utils::BidiRun>(),
+      m, MockAdvancePage, &ctx);
+
+  ExpectTrue("advance fires when wrapped line exceeds compact bleed",
+             ctx.fired);
+}
+
 // Chapter 19 regression: a phrase starting at y=279 where the first word
 // wraps to y=294 must NOT be displaced to the next screen/page.
 // Both the wrapping word and subsequent words on y=294 must stay on the
@@ -548,6 +609,97 @@ void TestChapter11NintendoNotAdvanced() {
   ExpectEq("pen.y is 294 after Nintendo wrap", p.pen.y, 294);
 }
 
+void EmitTextRun(parsedata_t *p, const char *text,
+                 const book_xml_text_emit::FlowEmitMetrics &m,
+                 MockOverflowCtx *ctx) {
+  std::vector<text_layout_utils::ShapedGlyph> run;
+  bool has_rtl = false;
+  ExpectTrue("shape run",
+             text_layout_utils::ShapeTextRunBidi(
+                 text, std::strlen(text), NULL, MeasureMono, NULL, &run,
+                 &has_rtl));
+  book_xml_text_emit::EmitFlowedShapedText(
+      p, text, run, has_rtl, std::vector<text_bidi_utils::BidiRun>(),
+      m, MockAdvancePage, ctx);
+}
+
+void TestPunctuationRunStaysWithPreviousTokenOnLastVisibleLine() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 0;
+  p.pen.y = 298;
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  MockOverflowCtx ctx{};
+
+  EmitTextRun(&p, "64px", m, &ctx);
+  ExpectEq("64px y stays on last visible line", p.pen.y, 298);
+  ExpectTrue("64px does not advance", !ctx.fired);
+
+  EmitTextRun(&p, ".", m, &ctx);
+  ExpectTrue("period does not advance away from previous token", !ctx.fired);
+  ExpectEq("period remains on last visible line", p.pen.y, 298);
+  ExpectEq("period attached after 64px", (int)p.buf[4], '.');
+}
+
+void TestInlineStylePeriodRunHasNoSpaceOrScreenBreak() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 0;
+  p.pen.y = 298;
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  MockOverflowCtx ctx{};
+
+  EmitTextRun(&p, "em", m, &ctx);
+  parse_append_page_byte(&p, (u32)' ');
+  p.pen.x += m.spaceadvance;
+  EmitTextRun(&p, ".", m, &ctx);
+
+  ExpectTrue("period after inline style does not advance", !ctx.fired);
+  ExpectEq("space removed before inline period", (int)p.buf[2], '.');
+}
+
+void TestInlineSpanCommaRunHasNoSpaceOrScreenBreak() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 0;
+  p.pen.y = 298;
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  MockOverflowCtx ctx{};
+
+  EmitTextRun(&p, "reset", m, &ctx);
+  parse_append_page_byte(&p, (u32)' ');
+  p.pen.x += m.spaceadvance;
+  EmitTextRun(&p, ", y", m, &ctx);
+
+  ExpectTrue("comma after span does not advance", !ctx.fired);
+  ExpectEq("space removed before inline comma", (int)p.buf[5], ',');
+}
+
+void TestNewRunWordUsesCurrentVisibleLineIfItFits() {
+  parsedata_t p{};
+  parse_init(&p);
+  p.pen.x = 0;
+  p.pen.y = 294;
+
+  book_xml_text_emit::FlowEmitMetrics m = ThresholdMetrics();
+  m.display_width = 216;
+  MockOverflowCtx ctx{};
+
+  EmitTextRun(&p, "Capitalize", m, &ctx);
+  ExpectEq("Capitalize y stays at last visible line", p.pen.y, 294);
+  ExpectTrue("Capitalize does not advance", !ctx.fired);
+
+  EmitTextRun(&p, " Via Clase", m, &ctx);
+  ExpectTrue("new word run does not advance when it fits", !ctx.fired);
+  ExpectEq("new word run remains on current visible line", p.pen.y, 294);
+}
+
 } // namespace
 
 int main() {
@@ -566,7 +718,13 @@ int main() {
   // LTR wrap invariant: last visible line tests.
   TestLastVisibleLineIsUsed();
   TestBeyondLastVisibleLineAdvances();
+  TestContinuationWrapUsesVisualLastLineWhenMetricsAvailable();
+  TestContinuationWrapBeyondCompactBleedAdvances();
   TestChapter19DeVueltaNotSplit();
   TestChapter11NintendoNotAdvanced();
+  TestPunctuationRunStaysWithPreviousTokenOnLastVisibleLine();
+  TestInlineStylePeriodRunHasNoSpaceOrScreenBreak();
+  TestInlineSpanCommaRunHasNoSpaceOrScreenBreak();
+  TestNewRunWordUsesCurrentVisibleLineIfItFits();
   return 0;
 }

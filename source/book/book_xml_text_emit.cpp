@@ -2,6 +2,7 @@
 
 #include "shared/debug_log.h"
 #include "shared/text_token_constants.h"
+#include "shared/text_render_layout_utils.h"
 #include "utf8proc.h"
 
 #include <algorithm>
@@ -79,6 +80,30 @@ void EmitFreshLineStartX(parsedata_t *p, const FlowEmitMetrics &metrics) {
   parse_append_page_byte(p, TEXT_LINE_START_X);
   parse_append_page_byte(p, (u32)p->pen.x);
 }
+
+bool CurrentLineFitsEmitMetrics(int pen_y, const FlowEmitMetrics &metrics) {
+  if (metrics.screen_max_height > 0 && metrics.screen_bottom_margin >= 0) {
+    return text_render_layout_utils::CurrentLineFitsScreen(
+        pen_y, metrics.lineheight, metrics.linespacing,
+        metrics.screen_max_height, metrics.screen_bottom_margin);
+  }
+  return (metrics.overflow_threshold <= 0) ||
+         (pen_y <= metrics.overflow_threshold);
+}
+
+#ifdef DSLIBRIS_DEBUG
+bool HasFollowingLineRoomEmitMetrics(int pen_y,
+                                     const FlowEmitMetrics &metrics) {
+  if (metrics.screen_max_height > 0 && metrics.screen_bottom_margin >= 0) {
+    return text_render_layout_utils::HasRoomForFollowingLine(
+        pen_y, metrics.lineheight, metrics.linespacing,
+        metrics.screen_max_height, metrics.screen_bottom_margin);
+  }
+  const int step = metrics.lineheight + metrics.linespacing;
+  return (metrics.overflow_threshold <= 0) ||
+         (pen_y + step <= metrics.overflow_threshold);
+}
+#endif
 
 } // namespace
 
@@ -437,13 +462,10 @@ void EmitFlowedShapedText(
       p->linebegan = false;
     }
     // Advance to the next screen/page only if the candidate line (p->pen.y
-    // after any wrap) itself lies beyond the visible threshold.
-    // Without this guard, AdvancePageIfNeeded uses WouldOverflow which checks
-    // (pen.y + step > threshold), incorrectly refusing the last visible line.
+    // after any wrap) itself cannot be drawn. A candidate line may be valid
+    // even when there is no room for a following line.
     {
-      const bool within_threshold = (metrics.overflow_threshold > 0) &&
-                                     (p->pen.y <= metrics.overflow_threshold);
-      if (!within_threshold) {
+      if (!CurrentLineFitsEmitMetrics(p->pen.y, metrics)) {
         AdvancePageIfNeeded(p, metrics.lineheight, advance_page_on_overflow,
                             advance_ctx);
       }
@@ -458,6 +480,10 @@ void EmitFlowedShapedText(
                                       (y_after_wrap <= threshold);
       const bool following_line_vis = (threshold <= 0) ||
                                       (y_after_wrap + step <= threshold);
+      const bool line_fits =
+          CurrentLineFitsEmitMetrics(y_after_wrap, metrics);
+      const bool room_for_next =
+          HasFollowingLineRoomEmitMetrics(y_after_wrap, metrics);
       const bool advance_fired = (p->pen.y != y_after_wrap);
       const std::string seg_txt =
           SegmentExcerpt(run, unit_index, segment_end_index);
@@ -469,6 +495,8 @@ void EmitFlowedShapedText(
                    " y_after_wrap=%d"
                    " step=%d threshold=%d"
                    " cand_vis=%d foll_vis=%d"
+                   " line_fits=%d room_for_next=%d"
+                   " in_para=%d para_content=%d"
                    " adv_fired=%d screen=%d"
                    " y_after=%d\n",
                    seg_txt.c_str(),
@@ -480,6 +508,8 @@ void EmitFlowedShapedText(
                    y_after_wrap,
                    step, threshold,
                    (int)candidate_line_vis, (int)following_line_vis,
+                   (int)line_fits, (int)room_for_next,
+                   (int)p->in_paragraph, (int)p->paragraph_has_content,
                    (int)advance_fired, p->screen,
                    p->pen.y);
     }

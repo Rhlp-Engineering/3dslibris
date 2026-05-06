@@ -68,4 +68,36 @@ inline bool WouldOverflowReadingScreen(int pen_y, int line_height,
   return (pen_y + line_height + line_spacing) > (max_height - bottom_margin);
 }
 
+inline bool HasRoomForFollowingLine(int pen_y, int line_height,
+                                    int line_spacing, int max_height,
+                                    int bottom_margin) {
+  return !WouldOverflowReadingScreen(pen_y, line_height, line_spacing,
+                                     max_height, bottom_margin);
+}
+
+inline bool CurrentLineFitsScreen(int pen_y, int line_height,
+                                  int line_spacing, int max_height,
+                                  int bottom_margin) {
+  (void)line_height;
+  (void)line_spacing;
+  static const int kCompactScreenBaselineBleedPx = 2;
+  const int visual_bottom_margin =
+      (bottom_margin <= 16)
+          ? std::max(0, bottom_margin - kCompactScreenBaselineBleedPx)
+          : bottom_margin;
+  return pen_y <= (max_height - visual_bottom_margin);
+}
+
+inline bool CurrentLineBeyondReadingScreen(int pen_y, int max_height,
+                                           int bottom_margin) {
+  return pen_y > (max_height - bottom_margin);
+}
+
+inline bool ShouldAdvanceParagraphStartGuard(bool current_line_fits,
+                                             bool has_room_for_following_line,
+                                             bool upcoming_fits_one_line) {
+  return current_line_fits && !has_room_for_following_line &&
+         !upcoming_fits_one_line;
+}
+
 } // namespace text_render_layout_utils

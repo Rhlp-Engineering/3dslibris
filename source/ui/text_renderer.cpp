@@ -451,7 +451,9 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
   int bottomClip = parent->margin.bottom;
   if (face == parent->GetFace(TEXT_STYLE_BROWSER))
     bottomClip = 0;
-  if (pen.y > maxY - bottomClip) {
+  if (!text_render_layout_utils::CurrentLineFitsScreen(
+          (int)pen.y, parent->GetHeight(), parent->linespacing, maxY,
+          bottomClip)) {
     pen.x += advance;
     codeprev = ucs;
     return;
@@ -565,7 +567,8 @@ bool TextRenderer::PrintNewLine() {
   int height = parent->GetHeight();
   int maxHeight = (parent->screen == parent->screenleft) ? 400 : 320;
   int y = pen.y + height + parent->linespacing;
-  if (y > (maxHeight - parent->margin.bottom)) {
+  if (!text_render_layout_utils::CurrentLineFitsScreen(
+          y, height, parent->linespacing, maxHeight, parent->margin.bottom)) {
     if (style == TEXT_STYLE_BROWSER)
       return false;
     if (parent->screen == parent->screenleft) {

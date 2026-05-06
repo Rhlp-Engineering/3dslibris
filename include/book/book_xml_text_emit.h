@@ -23,6 +23,8 @@ struct FlowEmitMetrics {
   // When zero (e.g. in tests that don't populate it), the guard is disabled
   // and the old WouldOverflow behavior is preserved.
   int overflow_threshold;
+  int screen_max_height;
+  int screen_bottom_margin;
 };
 
 typedef void (*AdvancePageOnOverflowFn)(parsedata_t *p, int lineheight,

@@ -379,11 +379,17 @@ void Page::Draw(Text *ts) {
       // overflow threshold check, NOT written back to ts->margin.bottom so the
       // renderer's pixel clip remains at the unguarded boundary.
       int currentBottomMargin = metrics.bottom_margin;
-      if (text_render_layout_utils::WouldOverflowReadingScreen(
+      if (!text_render_layout_utils::HasRoomForFollowingLine(
               ts->GetPenY(), ts->GetHeight(), ts->linespacing, maxHeight,
               currentBottomMargin)) {
         // Move to second page
-        if (ts->GetScreen() == first_screen) {
+        const int next_y =
+            ts->GetPenY() + ts->GetHeight() + ts->linespacing;
+        if (text_render_layout_utils::CurrentLineFitsScreen(
+                next_y, ts->GetHeight(), ts->linespacing, maxHeight,
+                currentBottomMargin) && ts->linebegan) {
+          ts->PrintNewLine();
+        } else if (ts->GetScreen() == first_screen) {
 #ifdef OFFSCREEN
           ts->SetScreen(second_screen);
           ts->CopyScreen(ts->offscreen, ts->screen);

@@ -153,6 +153,54 @@ void TestWouldCurrentLineOverflowReadingScreen() {
                  365, 0, 0, 400, 36));
 }
 
+void TestCurrentLineVisibilityIgnoresFollowingLine() {
+  const int max_height = 320;
+  const int bottom_margin = 16;
+  const int threshold = max_height - bottom_margin;
+
+  ExpectFalse("last visible current line is still valid",
+              text_render_layout_utils::CurrentLineBeyondReadingScreen(
+                  threshold, max_height, bottom_margin));
+  ExpectTrue("line below visible threshold is invalid",
+             text_render_layout_utils::CurrentLineBeyondReadingScreen(
+                 threshold + 1, max_height, bottom_margin));
+}
+
+void TestParagraphStartGuardAllowsOneLineParagraphInLastSlot() {
+  ExpectFalse("one-line paragraph may use last visible slot",
+              text_render_layout_utils::ShouldAdvanceParagraphStartGuard(
+                  true, false, true));
+  ExpectTrue("long paragraph advances when only one slot remains",
+             text_render_layout_utils::ShouldAdvanceParagraphStartGuard(
+                 true, false, false));
+  ExpectFalse("two slots remaining does not advance",
+              text_render_layout_utils::ShouldAdvanceParagraphStartGuard(
+                  true, true, false));
+}
+
+void TestCurrentLineFitAllowsVisualLastLineWithoutFollowingRoom() {
+  const int max_height = 320;
+  const int bottom_margin = 16;
+  const int line_h = 13;
+  const int line_ls = 2;
+
+  ExpectTrue("line may bleed two pixels below compact threshold",
+             text_render_layout_utils::CurrentLineFitsScreen(
+                 306, line_h, line_ls, max_height, bottom_margin));
+  ExpectTrue("line beyond compact bleed does not fit",
+             !text_render_layout_utils::CurrentLineFitsScreen(
+                 307, line_h, line_ls, max_height, bottom_margin));
+  ExpectFalse("line at compact bleed has no following line room",
+              text_render_layout_utils::HasRoomForFollowingLine(
+                  306, line_h, line_ls, max_height, bottom_margin));
+  ExpectTrue("far below screen does not fit",
+             !text_render_layout_utils::CurrentLineFitsScreen(
+                 321, line_h, line_ls, max_height, bottom_margin));
+  ExpectTrue("full-height HUD margin remains strict",
+             !text_render_layout_utils::CurrentLineFitsScreen(
+                 365, line_h, line_ls, 400, 36));
+}
+
 // Regression test for Bug 1 (descender clipping near HUD).
 //
 // The renderer keeps ts->margin.bottom at the unguarded value so the pixel clip
@@ -216,6 +264,9 @@ int main() {
   TestResolveCompactReadingBottomMargin();
   TestWouldOverflowReadingScreen();
   TestWouldCurrentLineOverflowReadingScreen();
+  TestCurrentLineVisibilityIgnoresFollowingLine();
+  TestParagraphStartGuardAllowsOneLineParagraphInLastSlot();
+  TestCurrentLineFitAllowsVisualLastLineWithoutFollowingRoom();
   TestBottomSafeAreaRendererClipAboveOverflowThreshold();
   return 0;
 }
