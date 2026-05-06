@@ -5,6 +5,12 @@
 #include "app/app.h"
 
 class Book;
+class Text;
+
+struct LibraryGradientContext {
+  Text *ts;
+  const u8 *color_mode;
+};
 
 class LibraryController {
 public:
@@ -33,4 +39,5 @@ public:
 private:
   App &app_;
   std::deque<app_job_t> job_queue_;
+  LibraryGradientContext gradient_ctx_;
 };
