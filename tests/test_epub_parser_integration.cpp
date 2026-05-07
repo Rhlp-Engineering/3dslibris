@@ -136,12 +136,87 @@ void TestEpubInvalidFile() {
   delete book;
 }
 
+// Index helper: PrepareForOpen + epub_parser::Index (metadata-only path).
+uint8_t EpubIndex(Book *book) {
+  book->PrepareForOpen();
+  std::string path = std::string(book->GetFolderName()) + "/" +
+                     std::string(book->GetFileName());
+  return epub_parser::Index(book, path);
+}
+
+void TestEpubIndexMetadata() {
+  const char *fixture = TEST_FIXTURES_DIR "/books/basic.epub";
+  FILE *fp = fopen(fixture, "r");
+  if (!fp) {
+    fprintf(stderr, "SKIP TestEpubIndexMetadata: fixture not found: %s\n", fixture);
+    return;
+  }
+  fclose(fp);
+
+  Book *book = MakeEpubBook(TEST_FIXTURES_DIR "/books", "basic.epub");
+  uint8_t err = EpubIndex(book);
+  ExpectFalse("epub index: no error", err != 0);
+
+  const char *title = book->GetTitle();
+  ExpectTrue("epub index: title set", title != nullptr && title[0] != '\0');
+  ExpectTrue("epub index: title matches",
+             title != nullptr && std::string(title) == "Basic EPUB Fixture");
+
+  const std::string &author = book->GetAuthor();
+  ExpectTrue("epub index: author set", !author.empty());
+  ExpectTrue("epub index: author matches", author == "3dslibris Test");
+
+  book->Close();
+  g_pass++;  // close survived
+  delete book;
+}
+
+void TestEpubIndexMissingFile() {
+  Book *book = MakeEpubBook("/tmp", "nonexistent_3dslibris_epub.epub");
+  uint8_t err = EpubIndex(book);
+  ExpectTrue("epub index missing: returns error", err != 0);
+  book->Close();
+  delete book;
+}
+
+void TestEpubIndexThenOpen() {
+  const char *fixture = TEST_FIXTURES_DIR "/books/basic.epub";
+  FILE *fp = fopen(fixture, "r");
+  if (!fp) {
+    fprintf(stderr, "SKIP TestEpubIndexThenOpen: fixture not found: %s\n", fixture);
+    return;
+  }
+  fclose(fp);
+
+  Book *book = MakeEpubBook(TEST_FIXTURES_DIR "/books", "basic.epub");
+
+  uint8_t err_idx = EpubIndex(book);
+  ExpectFalse("epub index-then-open: index no error", err_idx != 0);
+
+  const char *title_after_index = book->GetTitle();
+  ExpectTrue("epub index-then-open: title set after index",
+             title_after_index != nullptr && title_after_index[0] != '\0');
+
+  book->Close();
+
+  uint8_t err_open = EpubOpen(book);
+  ExpectFalse("epub index-then-open: open no error", err_open != 0);
+  ExpectGt("epub index-then-open: pages > 0", (int)book->GetPageCount(), 0);
+
+  book->Close();
+  g_pass++;  // close survived
+  delete book;
+}
+
 } // namespace
 
 int main() {
   TestEpubOpen();
   TestEpubReopen();
   TestEpubInvalidFile();
+  TestEpubIndexMetadata();
+  TestEpubIndexMissingFile();
+  TestEpubIndexThenOpen();
 
   fprintf(stderr, "Results: %d/%d passed, %d failed\n", g_pass, g_pass + g_fail,
           g_fail);
