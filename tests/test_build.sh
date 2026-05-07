@@ -12,6 +12,18 @@ fi
 TEST_OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
 mkdir -p "$TEST_OUTDIR"
 
+CC_BIN="${CC:-cc}"
+CXX_BIN="${CXX:-c++}"
+
+split_flags() {
+  if [ -n "${1:-}" ]; then
+    # Intentionally split on shell whitespace for compiler flag env vars.
+    # shellcheck disable=SC2086
+    set -- $1
+    printf '%s\n' "$@"
+  fi
+}
+
 # Compile third-party C dependencies once
 _build_third_party_objs() {
   local -a objs
@@ -20,7 +32,15 @@ _build_third_party_objs() {
   # utf8proc
   if [ -f "$TEST_ROOT/third_party/utf8proc/utf8proc.c" ]; then
     if [ ! -f "$TEST_OUTDIR/utf8proc.o" ]; then
-      cc -std=c99 -c "$TEST_ROOT/third_party/utf8proc/utf8proc.c" \
+      local -a ccflags
+      ccflags=()
+      while IFS= read -r flag; do
+        [ -n "$flag" ] || continue
+        ccflags+=("$flag")
+      done <<EOF
+$(split_flags "${CFLAGS:-}")
+EOF
+      "$CC_BIN" -std=c99 "${ccflags[@]}" -c "$TEST_ROOT/third_party/utf8proc/utf8proc.c" \
         -I"$TEST_ROOT/third_party/utf8proc" \
         -o "$TEST_OUTDIR/utf8proc.o"
     fi
@@ -32,7 +52,15 @@ _build_third_party_objs() {
     for f in linebreak linebreakdata linebreakdef eastasianwidthdata eastasianwidthdef unibreakbase unibreakdef; do
       local src="$TEST_ROOT/third_party/libunibreak/src/${f}.c"
       if [ -f "$src" ] && [ ! -f "$TEST_OUTDIR/${f}.o" ]; then
-        cc -std=c99 -c "$src" -I"$TEST_ROOT/third_party/libunibreak/src" -o "$TEST_OUTDIR/${f}.o"
+        local -a ccflags
+        ccflags=()
+        while IFS= read -r flag; do
+          [ -n "$flag" ] || continue
+          ccflags+=("$flag")
+        done <<EOF
+$(split_flags "${CFLAGS:-}")
+EOF
+        "$CC_BIN" -std=c99 "${ccflags[@]}" -c "$src" -I"$TEST_ROOT/third_party/libunibreak/src" -o "$TEST_OUTDIR/${f}.o"
       fi
       if [ -f "$TEST_OUTDIR/${f}.o" ]; then
         objs+=("$TEST_OUTDIR/${f}.o")
@@ -63,7 +91,22 @@ _build_expat_objs() {
     for f in xmlparse xmlrole xmltok; do
       local src="$TEST_ROOT/third_party/expat/${f}.c"
       if [ -f "$src" ] && [ ! -f "$TEST_OUTDIR/expat_${f}.o" ]; then
-        cc -std=c99 $expat_flags $expat_inc -c "$src" -o "$TEST_OUTDIR/expat_${f}.o"
+        local -a ccflags expat_split
+        ccflags=()
+        expat_split=()
+        while IFS= read -r flag; do
+          [ -n "$flag" ] || continue
+          ccflags+=("$flag")
+        done <<EOF
+$(split_flags "${CFLAGS:-}")
+EOF
+        while IFS= read -r flag; do
+          [ -n "$flag" ] || continue
+          expat_split+=("$flag")
+        done <<EOF
+$(split_flags "$expat_flags $expat_inc")
+EOF
+        "$CC_BIN" -std=c99 "${ccflags[@]}" "${expat_split[@]}" -c "$src" -o "$TEST_OUTDIR/expat_${f}.o"
       fi
       if [ -f "$TEST_OUTDIR/expat_${f}.o" ]; then
         objs+=("$TEST_OUTDIR/expat_${f}.o")
@@ -117,7 +160,23 @@ build_test() {
   done
 
   local -a expat_objs
+  local -a cxxflags
+  local -a ldflags
   expat_objs=()
+  cxxflags=()
+  ldflags=()
+  while IFS= read -r flag; do
+    [ -n "$flag" ] || continue
+    cxxflags+=("$flag")
+  done <<EOF
+$(split_flags "${CXXFLAGS:-}")
+EOF
+  while IFS= read -r flag; do
+    [ -n "$flag" ] || continue
+    ldflags+=("$flag")
+  done <<EOF
+$(split_flags "${LDFLAGS:-}")
+EOF
   if [ "$use_expat" = "1" ]; then
     while IFS= read -r obj; do
       [ -n "$obj" ] || continue
@@ -128,7 +187,10 @@ EOFEXPAT
   fi
 
   local -a cmd
-  cmd=(c++ -std=c++11)
+  cmd=("$CXX_BIN" -std=c++11)
+  if [ ${#cxxflags[@]} -gt 0 ]; then
+    cmd+=("${cxxflags[@]}")
+  fi
   if [ ${#sources[@]} -gt 0 ]; then
     cmd+=("${sources[@]}")
   fi
@@ -146,6 +208,9 @@ EOFEXPAT
   fi
   if [ ${#libs[@]} -gt 0 ]; then
     cmd+=("${libs[@]}")
+  fi
+  if [ ${#ldflags[@]} -gt 0 ]; then
+    cmd+=("${ldflags[@]}")
   fi
   cmd+=(-o "$TEST_OUTDIR/$name")
 

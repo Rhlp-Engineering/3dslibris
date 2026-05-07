@@ -1,6 +1,9 @@
 set -eu
 source "$(dirname "$0")/test_build.sh"
 
+CC_BIN="${CC:-cc}"
+CXX_BIN="${CXX:-c++}"
+
 # Zlib and minizip must be compiled separately since test_build.sh does not
 # include them in THIRD_PARTY_OBJS.  Zlib is vendored inside the MuPDF tree.
 ZLIB_DIR="$TEST_ROOT/third_party/mupdf/thirdparty/zlib"
@@ -13,7 +16,8 @@ _build_zlib_objs() {
     local src="$ZLIB_DIR/${f}.c"
     local obj="$TEST_OUTDIR/zlib_${f}.o"
     if [ -f "$src" ] && [ ! -f "$obj" ]; then
-      cc -std=c99 -I"$ZLIB_DIR" -c "$src" -o "$obj"
+      # shellcheck disable=SC2086
+      "$CC_BIN" -std=c99 ${CFLAGS:-} -I"$ZLIB_DIR" -c "$src" -o "$obj"
     fi
     [ -f "$obj" ] && objs+=("$obj")
   done
@@ -21,7 +25,8 @@ _build_zlib_objs() {
     local src="$MINIZIP_DIR/${f}.c"
     local obj="$TEST_OUTDIR/minizip_${f}.o"
     if [ -f "$src" ] && [ ! -f "$obj" ]; then
-      cc -std=c99 -I"$ZLIB_DIR" -I"$ZLIB_DIR/contrib" -c "$src" -o "$obj"
+      # shellcheck disable=SC2086
+      "$CC_BIN" -std=c99 ${CFLAGS:-} -I"$ZLIB_DIR" -I"$ZLIB_DIR/contrib" -c "$src" -o "$obj"
     fi
     [ -f "$obj" ] && objs+=("$obj")
   done
@@ -47,7 +52,8 @@ if [ -f "$TEST_ROOT/third_party/expat/xmlparse.c" ]; then
     src="$TEST_ROOT/third_party/expat/${f}.c"
     obj="$TEST_OUTDIR/expat_${f}.o"
     if [ -f "$src" ] && [ ! -f "$obj" ]; then
-      cc -std=c99 $expat_flags $expat_inc -c "$src" -o "$obj"
+      # shellcheck disable=SC2086
+      "$CC_BIN" -std=c99 ${CFLAGS:-} $expat_flags $expat_inc -c "$src" -o "$obj"
     fi
     [ -f "$obj" ] && EXPAT_OBJS+=("$obj")
   done
@@ -57,7 +63,8 @@ fi
 # override the FreeType-dependent real headers.
 # No book_parser.cpp: EPUB test calls epub_parser::Open directly,
 # avoiding the full format dispatch table and other format parsers.
-c++ -std=c++11 \
+"$CXX_BIN" -std=c++11 \
+  ${CXXFLAGS:-} \
   -DDSLIBRIS_HOST_TEST \
   "-I$TEST_ROOT/tests/stubs" \
   "-I$TEST_ROOT/include" \
@@ -138,6 +145,7 @@ c++ -std=c++11 \
   "${THIRD_PARTY_OBJS[@]}" \
   "${EXPAT_OBJS[@]}" \
   "${ZLIB_MINIZIP_OBJS[@]}" \
+  ${LDFLAGS:-} \
   -o "$TEST_OUTDIR/test_epub_parser_integration"
 
 "$TEST_OUTDIR/test_epub_parser_integration"

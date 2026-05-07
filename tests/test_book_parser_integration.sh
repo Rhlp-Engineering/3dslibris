@@ -1,6 +1,9 @@
 set -eu
 source "$(dirname "$0")/test_build.sh"
 
+CC_BIN="${CC:-cc}"
+CXX_BIN="${CXX:-c++}"
+
 # Build expat objects (reuse test_build.sh internal)
 EXPAT_OBJS=()
 while IFS= read -r obj; do
@@ -15,7 +18,8 @@ if [ -f "$TEST_ROOT/third_party/expat/xmlparse.c" ]; then
   for f in xmlparse xmlrole xmltok; do
     src="$TEST_ROOT/third_party/expat/${f}.c"
     if [ -f "$src" ] && [ ! -f "$TEST_OUTDIR/expat_${f}.o" ]; then
-      cc -std=c99 $expat_flags $expat_inc -c "$src" -o "$TEST_OUTDIR/expat_${f}.o"
+      # shellcheck disable=SC2086
+      "$CC_BIN" -std=c99 ${CFLAGS:-} $expat_flags $expat_inc -c "$src" -o "$TEST_OUTDIR/expat_${f}.o"
     fi
     [ -f "$TEST_OUTDIR/expat_${f}.o" ] && EXPAT_OBJS+=("$TEST_OUTDIR/expat_${f}.o")
   done
@@ -23,7 +27,8 @@ fi
 
 # tests/stubs MUST precede include/ so stub ui/text.h and shared/main.h
 # override the FreeType-dependent real headers.
-c++ -std=c++11 \
+"$CXX_BIN" -std=c++11 \
+  ${CXXFLAGS:-} \
   "-I$TEST_ROOT/tests/stubs" \
   "-I$TEST_ROOT/include" \
   "-I$TEST_ROOT/third_party/utf8proc" \
@@ -98,6 +103,7 @@ c++ -std=c++11 \
   "$TEST_ROOT/source/shared/utf8_utils.cpp" \
   "${THIRD_PARTY_OBJS[@]}" \
   "${EXPAT_OBJS[@]}" \
+  ${LDFLAGS:-} \
   -o "$TEST_OUTDIR/test_book_parser_integration"
 
 "$TEST_OUTDIR/test_book_parser_integration"

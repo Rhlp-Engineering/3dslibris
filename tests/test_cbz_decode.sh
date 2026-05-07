@@ -5,13 +5,15 @@ OUTDIR="${TMPDIR:-/tmp}/3dslibris-tests"
 WORKDIR="$OUTDIR/cbz-decode"
 mkdir -p "$OUTDIR" "$WORKDIR"
 
-c++ -std=c++11 \
+"${CXX:-c++}" -std=c++11 \
+  ${CXXFLAGS:-} \
   "$ROOT/tests/test_cbz_decode.cpp" \
   "$ROOT/source/formats/cbz/cbz_decode.cpp" \
   "$ROOT/source/core/stb_image_impl.cpp" \
   "$ROOT/source/formats/common/pdf_view_utils.cpp" \
   -I"$ROOT/include" \
   -I"$ROOT/third_party/stb" \
+  ${LDFLAGS:-} \
   -o "$OUTDIR/test_cbz_decode"
 
 PNG_PATH="$WORKDIR/sample.png"
