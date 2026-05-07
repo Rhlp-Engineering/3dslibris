@@ -561,6 +561,20 @@ static bool HasActiveStackMonoStyle(const parsedata_t *p) {
 // Forward declaration — defined below after ClearPendingBlockSpacing.
 static void ClearPendingBlockSpacing(parsedata_t *p);
 
+
+static void AppendScreenBreakIfNeeded(parsedata_t *p) {
+  if (!p)
+    return;
+
+  if (p->buflen <= 0)
+    return;
+
+  if (p->buf[p->buflen - 1] == TEXT_SCREEN_BREAK)
+    return;
+
+  AppendParsedByte(p, TEXT_SCREEN_BREAK);
+}
+
 static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
   if (!p || !p->book || !p->ts)
     return;
@@ -592,6 +606,7 @@ static void AdvanceParsedPageOnOverflow(parsedata_t *p, int lineheight) {
     RestoreParsedInlineLinkMarker(p);
     p->screen = 0;
   } else {
+    AppendScreenBreakIfNeeded(p);
     p->screen = 1;
   }
 
@@ -620,6 +635,9 @@ static void linefeed_r(parsedata_t *p, const char *tag, const char *reason,
 
 // Forward declaration — AdvanceParsedScreen is defined later in this file.
 static void AdvanceParsedScreen(parsedata_t *p);
+
+// Forward declaration — AppendScreenBreakIfNeeded is defined later in this file.
+static void AppendScreenBreakIfNeeded(parsedata_t *p);
 
 // Returns true only when the current screen has no drawable content since
 // the last screen/page advance.  This is the correct way to determine that
@@ -1423,18 +1441,6 @@ static void ApplyClearBreak(parsedata_t *p) {
   linefeed(p);
 }
 
-static int CountTrailingLinefeeds(const parsedata_t *p) {
-  if (!p || p->buflen <= 0)
-    return 0;
-  int count = 0;
-  for (int i = p->buflen - 1; i >= 0; --i) {
-    if (p->buf[i] != '\n')
-      break;
-    ++count;
-  }
-  return count;
-}
-
 static void RestoreParsedInlineLinkMarker(parsedata_t *p) {
   book_xml_inline_state::RestoreParsedInlineLinkMarker(p);
 }
@@ -1442,10 +1448,11 @@ static void RestoreParsedInlineLinkMarker(parsedata_t *p) {
 static void AdvanceParsedScreen(parsedata_t *p) {
   if (!p || !p->ts || !p->book)
     return;
+
   ClearPendingBlockSpacing(p);
-  p->current_screen_has_drawable_content = false;
 
   Text *ts = p->ts;
+
   if (p->screen == 1) {
     Page *page = p->book->AppendPage();
     page->SetBuffer(p->buf, p->buflen);
@@ -1454,9 +1461,14 @@ static void AdvanceParsedScreen(parsedata_t *p) {
     RestoreParsedInlineLinkMarker(p);
     p->screen = 0;
   } else {
+    // Important: parser state alone is not enough. The page renderer must also
+    // see a marker in the buffer so it switches from the first reading screen
+    // to the second one at the same point.
+    AppendScreenBreakIfNeeded(p);
     p->screen = 1;
   }
 
+  p->current_screen_has_drawable_content = false;
   p->pen.x = ts->margin.left;
   p->pen.y = ts->margin.top + ts->GetHeight();
   p->linebegan = false;
@@ -1500,6 +1512,25 @@ static void FlushInlineTailBeforeElementStart(parsedata_t *p, Text *ts,
   // Whitespace-only indentation/newlines between block elements must not be
   // emitted as real flowed text. If emitted, it can consume pending block
   // breaks before the next real block content arrives.
+  if (el && IsBlockLevelElement(el) && !p->inline_text_tail.empty() &&
+      !HasVisibleTextContentUtf8(p->inline_text_tail.c_str(),
+                                 (int)p->inline_text_tail.size())) {
+    p->inline_text_tail.clear();
+    ApplyDeferredStyleSync(p, ts);
+    return;
+  }
+
+  FlushInlineTailAndDeferredStyle(p, ts);
+}
+
+static void FlushInlineTailBeforeElementEnd(parsedata_t *p, Text *ts,
+                                            const char *el) {
+  if (!p)
+    return;
+
+  // Whitespace-only indentation/newlines before closing block elements must not
+  // be emitted as real flowed text. Otherwise XHTML pretty-printing between
+  // </p>, </dd>, </dl>, etc. can affect line state and consume pending breaks.
   if (el && IsBlockLevelElement(el) && !p->inline_text_tail.empty() &&
       !HasVisibleTextContentUtf8(p->inline_text_tail.c_str(),
                                  (int)p->inline_text_tail.size())) {
@@ -2043,12 +2074,65 @@ static void ConfigureBlockTextAlign(
 static void EnsureBlockBoundaryBeforeBlockStart(parsedata_t *p,
                                                 const char *tag,
                                                 const char *reason) {
-  if (!p || !p->ts)
-    return;
-  if (!p->linebegan)
+  if (!p || !p->ts || !p->book)
     return;
 
-  linefeed_r(p, tag, reason, 0);
+  if (IsCurrentReadingScreenVisuallyEmpty(p)) {
+    p->pending_block_break = false;
+    return;
+  }
+
+  const int line_step = p->ts->GetHeight() + p->ts->linespacing;
+
+  auto advance_or_linefeed = [&]() {
+    if (line_step <= 0) {
+      linefeed_r(p, tag, reason, 0);
+      return;
+    }
+
+    const text_render_layout_utils::ReadingScreenMetrics metrics =
+        text_render_layout_utils::ResolveReadingScreenMetricsForReadingScreen(
+            p->book->GetOrientation() != 0,
+            p->screen,
+            p->ts->margin.bottom,
+            MIN(p->ts->margin.bottom, 16));
+
+    const int next_y = p->pen.y + line_step;
+    const bool next_line_fits =
+        text_render_layout_utils::CurrentLineFitsScreen(
+            next_y,
+            p->ts->GetHeight(),
+            p->ts->linespacing,
+            metrics.max_height,
+            metrics.bottom_margin);
+
+    if (next_line_fits) {
+      linefeed_r(p, tag, reason, 0);
+    } else {
+      AdvanceParsedScreen(p);
+    }
+  };
+
+  // Si hay un salto de bloque pendiente, hay que materializarlo sí o sí.
+  if (p->pending_block_break) {
+    advance_or_linefeed();
+    p->pending_block_break = false;
+    return;
+  }
+
+  const bool buffer_already_broken =
+      p->buflen > 0 && p->buf[p->buflen - 1] == '\n';
+
+  const bool needs_boundary =
+      p->linebegan ||
+      (p->buflen > 0 &&
+       !buffer_already_broken &&
+       !IsCurrentReadingScreenVisuallyEmpty(p));
+
+  if (!needs_boundary)
+    return;
+
+  advance_or_linefeed();
 }
 
 static void HandleHeadingStart(parsedata_t *p, Text *ts, const char **attr,
@@ -2353,6 +2437,7 @@ void start(void *data, const char *el, const char **attr) {
     parse_push(p, TAG_OL);
     book_xml_list_utils::ConfigureElementListSemantics(p, attr);
   } else if (!strcmp(el, "p")) {
+    EnsureBlockBoundaryBeforeBlockStart(p, "p", "paragraph-block-boundary");
     parse_push(p, TAG_P);
     p->in_paragraph = true;
     p->paragraph_has_content = false;
@@ -3054,7 +3139,7 @@ void end(void *data, const char *el) {
   parsedata_t *p = (parsedata_t *)data;
   ElementPerfScope elem_perf(p);
   Text *ts = p->ts;
-  FlushInlineTailAndDeferredStyle(p, ts);
+  FlushInlineTailBeforeElementEnd(p, ts, el);
 
   if (XmlNameEquals(el, "binary")) {
     if (p->collecting_fb2_binary && !p->fb2_binary_too_large && p->book &&
