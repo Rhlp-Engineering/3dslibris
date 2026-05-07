@@ -170,7 +170,9 @@ void TestEmitStartsLtrLineAtLeftMargin() {
   ExpectEq("pen starts from left margin", p.pen.x, 7);
 }
 
-void TestEmitMovesFreshLineFromBaseToEffectiveLeftMargin() {
+void TestEmitClampsMarginAtBaseMarginLeft() {
+  // margin_left < base_margin_left: pen.x is clamped to base_margin_left,
+  // so text never renders left of the global margin.
   parsedata_t p{};
   parse_init(&p);
   p.pen.x = 8;
@@ -191,10 +193,10 @@ void TestEmitMovesFreshLineFromBaseToEffectiveLeftMargin() {
       &p, text, run, has_rtl, std::vector<text_bidi_utils::BidiRun>(), metrics,
       NULL, NULL);
 
-  ExpectEq("buflen", p.buflen, 5);
-  ExpectEq("line start token", (int)p.buf[0], TEXT_LINE_START_X);
-  ExpectEq("line start x", (int)p.buf[1], 3);
-  ExpectEq("effective negative margin applied", p.pen.x, 6);
+  // pen.x stays at base_margin_left (8); no TEXT_LINE_START_X emitted.
+  ExpectEq("buflen", p.buflen, 3);
+  ExpectEq("first char", (int)p.buf[0], 'a');
+  ExpectEq("pen clamped to base margin", p.pen.x, 11);
 }
 
 void TestEmitRepeatsLeftMarginTokenAfterWrap() {
@@ -707,7 +709,7 @@ int main() {
   TestEmitFlowedRtlAddsParagraphAndWidthTokens();
   TestEmitKeepsClosingPunctuationOnCurrentLine();
   TestEmitStartsLtrLineAtLeftMargin();
-  TestEmitMovesFreshLineFromBaseToEffectiveLeftMargin();
+  TestEmitClampsMarginAtBaseMarginLeft();
   TestEmitRepeatsLeftMarginTokenAfterWrap();
   TestTransformedTextIsMeasuredBeforeFlowing();
   // Punctuation glue tests.

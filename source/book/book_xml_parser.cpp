@@ -2105,7 +2105,7 @@ static void HandleHeadingStart(parsedata_t *p, Text *ts, const char **attr,
       ParseElementMarginTopWithClass(attr, elem_css);
   ApplyElementBlockMargins(p, ts, attr, elem_css);
   const int line_h = ts->GetHeight() + ts->linespacing;
-  const int default_lf = 1;
+  const int default_lf = 2;
   const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
       default_lf, mtr, line_h);
   if (heading_level == 1)
@@ -2118,6 +2118,8 @@ static void HandleHeadingStart(parsedata_t *p, Text *ts, const char **attr,
     LogResolvedBlockMargin(p, tag_name, "top", p->last_h_style,
                            p->last_h_class, mtr, line_h, default_lf, lf_count);
   QueueBlockSpacingFromMarginResult(p, tag_name, "heading-top", mtr, line_h, default_lf);
+  if (p->pending_block_spacing_lf < 1)
+    p->pending_block_spacing_lf = 1;
 }
 
 void start(void *data, const char *el, const char **attr) {
@@ -2259,13 +2261,15 @@ void start(void *data, const char *el, const char **attr) {
           ParseElementMarginTopWithClass(attr, elem_css);
       ApplyElementBlockMargins(p, ts, attr, elem_css);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int default_lf = !blankline(p) ? 1 : 0;
+      const int default_lf = !blankline(p) ? 2 : 0;
       const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
           default_lf, mtr, line_h);
       LogResolvedBlockMargin(p, "h4", "top", p->last_h_style,
                              p->last_h_class, mtr, line_h, default_lf,
                              lf_count);
       QueueBlockSpacingFromMarginResult(p, "h4", "heading-top", mtr, line_h, default_lf);
+      if (p->pending_block_spacing_lf < 1)
+        p->pending_block_spacing_lf = 1;
     }
   } else if (!strcmp(el, "h5")) {
     parse_push(p, TAG_H5);
@@ -2283,13 +2287,15 @@ void start(void *data, const char *el, const char **attr) {
           ParseElementMarginTopWithClass(attr, elem_css);
       ApplyElementBlockMargins(p, ts, attr, elem_css);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int default_lf = !blankline(p) ? 1 : 0;
+      const int default_lf = !blankline(p) ? 2 : 0;
       const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
           default_lf, mtr, line_h);
       LogResolvedBlockMargin(p, "h5", "top", p->last_h_style,
                              p->last_h_class, mtr, line_h, default_lf,
                              lf_count);
       QueueBlockSpacingFromMarginResult(p, "h5", "heading-top", mtr, line_h, default_lf);
+      if (p->pending_block_spacing_lf < 1)
+        p->pending_block_spacing_lf = 1;
     }
   } else if (!strcmp(el, "h6")) {
     parse_push(p, TAG_H6);
@@ -2307,13 +2313,15 @@ void start(void *data, const char *el, const char **attr) {
           ParseElementMarginTopWithClass(attr, elem_css);
       ApplyElementBlockMargins(p, ts, attr, elem_css);
       const int line_h = ts->GetHeight() + ts->linespacing;
-      const int default_lf = !blankline(p) ? 1 : 0;
+      const int default_lf = !blankline(p) ? 2 : 0;
       const int lf_count = book_xml_parser_style_utils::ResolveBlockTopLinefeeds(
           default_lf, mtr, line_h);
       LogResolvedBlockMargin(p, "h6", "top", p->last_h_style,
                              p->last_h_class, mtr, line_h, default_lf,
                              lf_count);
       QueueBlockSpacingFromMarginResult(p, "h6", "heading-top", mtr, line_h, default_lf);
+      if (p->pending_block_spacing_lf < 1)
+        p->pending_block_spacing_lf = 1;
     }
   } else if (!strcmp(el, "head"))
     parse_push(p, TAG_HEAD);
@@ -3173,6 +3181,8 @@ void end(void *data, const char *el) {
       // mandatory break but suppresses optional spacing — the block still ends on
       // its own visual line.
       QueueBlockSpacingFromMarginResult(p, "p", "paragraph-bottom", mbr, line_h, default_lf);
+      if (p->pending_block_spacing_lf < 1)
+        p->pending_block_spacing_lf = 1;
     }
     RestoreActiveBlockTextAlignMarker(p);
     p->in_paragraph = false;
