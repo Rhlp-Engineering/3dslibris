@@ -136,12 +136,81 @@ void TestBookParserDispatchEpubMissingFile() {
   delete book;
 }
 
+void TestBookParserDispatchEpubIndexMetadata() {
+  const char *fixture = TEST_FIXTURES_DIR "/books/basic.epub";
+  if (!HasFixture(fixture)) {
+    fprintf(stderr,
+            "SKIP TestBookParserDispatchEpubIndexMetadata: fixture not found: %s\n",
+            fixture);
+    return;
+  }
+
+  Book *book = MakeBook(TEST_FIXTURES_DIR "/books", "basic.epub");
+  uint8_t err = book_parser::Index(book);
+  ExpectFalse("dispatch epub index: no error", err != 0);
+  const char *title = book->GetTitle();
+  ExpectTrue("dispatch epub index: title set", title && title[0] != '\0');
+  ExpectTrue("dispatch epub index: title matches",
+             title && std::strcmp(title, "Basic EPUB Fixture") == 0);
+  const std::string &author = book->GetAuthor();
+  ExpectTrue("dispatch epub index: author set", !author.empty());
+  ExpectTrue("dispatch epub index: author matches",
+             author == "3dslibris Test");
+  book->Close();
+  g_pass++;
+  delete book;
+}
+
+void TestBookParserDispatchEpubIndexThenOpen() {
+  const char *fixture = TEST_FIXTURES_DIR "/books/basic.epub";
+  if (!HasFixture(fixture)) {
+    fprintf(stderr,
+            "SKIP TestBookParserDispatchEpubIndexThenOpen: fixture not found: %s\n",
+            fixture);
+    return;
+  }
+
+  Book *book = MakeBook(TEST_FIXTURES_DIR "/books", "basic.epub");
+  uint8_t index_err = book_parser::Index(book);
+  const char *title_after_index = book->GetTitle();
+  const std::string author_after_index = book->GetAuthor();
+  uint8_t open_err = book_parser::Open(book);
+  const char *title_after_open = book->GetTitle();
+  const std::string author_after_open = book->GetAuthor();
+  ExpectFalse("dispatch epub index-then-open: index no error", index_err != 0);
+  ExpectTrue("dispatch epub index-then-open: title after index",
+             title_after_index && std::strcmp(title_after_index, "Basic EPUB Fixture") == 0);
+  ExpectTrue("dispatch epub index-then-open: author after index",
+             author_after_index == "3dslibris Test");
+  ExpectFalse("dispatch epub index-then-open: open no error", open_err != 0);
+  ExpectGt("dispatch epub index-then-open: pages > 0", (int)book->GetPageCount(), 0);
+  ExpectTrue("dispatch epub index-then-open: title after open",
+             title_after_open && std::strcmp(title_after_open, "Basic EPUB Fixture") == 0);
+  ExpectTrue("dispatch epub index-then-open: author after open",
+             author_after_open == "3dslibris Test");
+  book->Close();
+  g_pass++;
+  delete book;
+}
+
+void TestBookParserDispatchEpubIndexMissingFile() {
+  Book *book = MakeBook("/tmp", "nonexistent_3dslibris_dispatch.epub");
+  uint8_t err = book_parser::Index(book);
+  ExpectTrue("dispatch epub index missing: returns error", err != 0);
+  book->Close();
+  g_pass++;
+  delete book;
+}
+
 } // namespace
 
 int main() {
   TestBookParserDispatchEpubOpen();
   TestBookParserDispatchEpubReopen();
   TestBookParserDispatchEpubMissingFile();
+  TestBookParserDispatchEpubIndexMetadata();
+  TestBookParserDispatchEpubIndexThenOpen();
+  TestBookParserDispatchEpubIndexMissingFile();
 
   fprintf(stderr, "Results: %d/%d passed, %d failed\n", g_pass, g_pass + g_fail,
           g_fail);
