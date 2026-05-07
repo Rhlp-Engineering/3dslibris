@@ -2,7 +2,8 @@
 
 #include <string>
 
-class App;
+#include "library/browser_draw_context.h"
+
 class Book;
 
 struct BrowserGridMarqueeState {
@@ -30,6 +31,7 @@ namespace browser_grid_view {
 
 static const int kGridCols = 2;
 static const int kGridRows = 2;
+static const int kPageCapacity = kGridCols * kGridRows;
 static const int kCoverW = 85;
 static const int kCoverH = 115;
 static const int kCellW = 115;
@@ -40,7 +42,7 @@ static const int kGridX0 = 5;
 static const int kGridY0 = 3;
 
 int HitTestBookIndex(int x, int y, int page_start, int book_count);
-void DrawPage(App &app, BrowserGridMarqueeState &marquee, int page_start);
-void TickMarquee(App &app, BrowserGridMarqueeState &marquee);
+void DrawPage(const BrowserDrawContext &ctx, BrowserGridMarqueeState &marquee, int page_start);
+void TickMarquee(Text *ts, BrowserGridMarqueeState &marquee);
 
 } // namespace browser_grid_view

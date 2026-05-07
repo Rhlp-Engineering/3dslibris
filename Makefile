@@ -3,7 +3,7 @@
 #---------------------------------------------------------------------------------
 
 TOPDIR ?= $(CURDIR)
-TEST_HOST_GOAL := $(filter test-host,$(MAKECMDGOALS))
+TEST_HOST_GOAL := $(filter test-host coverage-host,$(MAKECMDGOALS))
 
 ifeq ($(TEST_HOST_GOAL),)
 ifeq ($(strip $(DEVKITARM)),)
@@ -256,7 +256,7 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx debug-cia cia stage-romfs mupdf-minimal test-host
+.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx debug-cia cia stage-romfs mupdf-minimal test-host coverage-host
 
 #---------------------------------------------------------------------------------
 all: stage-romfs mupdf-minimal $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
@@ -476,3 +476,7 @@ endif
 test-host:
 	@echo "Running host tests..."
 	@cd tests && ./run_all_tests.sh
+
+coverage-host:
+	@echo "Running host coverage..."
+	@cd tests && ./coverage_host.sh

@@ -27,7 +27,6 @@
 
 #include "book/page.h"
 
-#include "app/app.h"
 #include "book/book.h"
 #include "book/inline_image_layout.h"
 #include "book/page_alignment_utils.h"
@@ -250,10 +249,13 @@ void Page::Draw(Text *ts) {
     }
     return false;
   };
-  ts->margin.bottom =
-      text_render_layout_utils::ResolveReadingScreenMetrics(
-          true, first_is_left, leftBottomMargin, rightBottomMargin)
-          .bottom_margin;
+  // Keep ts->margin.bottom at the unguarded render margin (leftBottomMargin or
+  // rightBottomMargin). The +8px footer guard from ResolveReadingScreenMetrics
+  // is used only as the overflow threshold in WouldOverflowReadingScreen calls,
+  // NOT as the pixel clip boundary. If we set ts->margin.bottom to the guarded
+  // value the renderer clips descenders too early (at 400-44=356 instead of
+  // the correct 400-36=364).
+  ts->margin.bottom = first_is_left ? leftBottomMargin : rightBottomMargin;
   // Clear both page buffers through Text API so dirty flags stay coherent.
   ts->SetScreen(ts->screenleft);
   if (book) {
@@ -343,7 +345,7 @@ void Page::Draw(Text *ts) {
       // ts->linebegan was left true by the previous page's draw loop.
       ts->linebegan = false;
 #ifdef DSLIBRIS_DEBUG
-      DBG_LOGF_CAT(ts->app, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+      DBG_LOGF_CAT(ts->GetReporter(), DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
                    "RTL token px=%u i=%u linebegan=%d rtl=%d",
                    (unsigned)rtl_line_px, (unsigned)i,
                    ts->linebegan ? 1 : 0, rtl_paragraph ? 1 : 0);
@@ -372,13 +374,21 @@ void Page::Draw(Text *ts) {
               on_first_screen, first_is_left, leftBottomMargin,
               rightBottomMargin);
       int maxHeight = metrics.max_height;
+      // currentBottomMargin includes the 8px footer guard: used only for the
+      // overflow threshold check, NOT written back to ts->margin.bottom so the
+      // renderer's pixel clip remains at the unguarded boundary.
       int currentBottomMargin = metrics.bottom_margin;
-      ts->margin.bottom = currentBottomMargin;
-      if (text_render_layout_utils::WouldOverflowReadingScreen(
+      if (!text_render_layout_utils::HasRoomForFollowingLine(
               ts->GetPenY(), ts->GetHeight(), ts->linespacing, maxHeight,
               currentBottomMargin)) {
         // Move to second page
-        if (ts->GetScreen() == first_screen) {
+        const int next_y =
+            ts->GetPenY() + ts->GetHeight() + ts->linespacing;
+        if (text_render_layout_utils::CurrentLineFitsScreen(
+                next_y, ts->GetHeight(), ts->linespacing, maxHeight,
+                currentBottomMargin) && ts->linebegan) {
+          ts->PrintNewLine();
+        } else if (ts->GetScreen() == first_screen) {
 #ifdef OFFSCREEN
           ts->SetScreen(second_screen);
           ts->CopyScreen(ts->offscreen, ts->screen);
@@ -634,7 +644,7 @@ void Page::Draw(Text *ts) {
             ts->margin.left, right_edge, line_width);
 #ifdef DSLIBRIS_DEBUG
         DBG_LOGF_CAT(
-            ts->app, DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
+            ts->GetReporter(), DBG_LEVEL_DEBUG, DBG_CAT_LAYOUT,
             "RTL line anchor width=%d right=%d start_x=%d clip=[%d,%d) y=%d side=%s",
             line_width, right_edge, rtl_x, (int)ts->margin.left, right_edge,
             (int)ts->GetPenY(), on_first_screen ? "first" : "second");

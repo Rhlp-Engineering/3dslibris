@@ -26,6 +26,7 @@
 #include <3ds.h>
 
 #include "book/book.h"
+#include "book/book_renderer.h"
 #include "menus/bookmark_menu.h"
 #include "ui/button.h"
 #include "menus/chapter_menu.h"
@@ -53,8 +54,7 @@ namespace
 {
   static const u64 kBrowserReturnWarmupCooldownMs = 1200;
 } // end anonymous namespace
-#include "shared/color_utils.h"
-#include "ui/theme_colors.h"
+#include "ui/gradient_utils.h"
 
 // Singleton instance management for App class, allowing global access to the app instance from other modules.
 App *App::s_instance_ = nullptr;
@@ -193,7 +193,8 @@ App::App()
 
   // Initialize UI components.
   ts = std::unique_ptr<Text>(new Text());
-  ts->app = this;
+  ts->SetReporter(this);
+  ts->SetFontDir(fontdir);
 
   fontmenu = std::unique_ptr<FontMenu>(new FontMenu(this));
   bookmarkmenu = std::unique_ptr<BookmarkMenu>(new BookmarkMenu(this));
@@ -799,7 +800,7 @@ void App::PrepareForShutdown()
   if (opening_book)
   {
     opening_book->RequestAbortOpen();
-    opening_book->CancelFixedLayoutDeferredWork();
+    book_renderer::CancelFixedLayoutDeferredWork(opening_book);
     opening_book->CancelAsyncReflowOpen();
   }
 
@@ -953,85 +954,14 @@ touchPosition App::TouchRead()
   return mapped;
 }
 
-static void DrawGradientToScreen(Text *ts, int colorMode, u16 *target_screen, int logical_h)
-{
-  if (!ts || !target_screen)
-    return;
-  const int w = ts->display.width;
-  const int stride = ts->display.height;
-  if (w <= 0 || stride <= 0 || logical_h <= 0)
-    return;
-
-  static std::vector<u16> gradient;
-  static int cachedW = 0;
-  static int cachedH = 0;
-  static int cachedColorMode = -1;
-
-  const ThemePalette &palette = GetThemePalette(colorMode);
-
-  if (gradient.empty() || cachedW != w || cachedH != logical_h || cachedColorMode != colorMode)
-  {
-    gradient.resize((size_t)w * (size_t)logical_h);
-    cachedW = w;
-    cachedH = logical_h;
-    cachedColorMode = colorMode;
-    static const u8 kBayer4x4[4][4] = {
-        {0, 8, 2, 10},
-        {12, 4, 14, 6},
-        {3, 11, 1, 9},
-        {15, 7, 13, 5},
-    };
-
-    for (int y = 0; y < logical_h; y++)
-    {
-      const float tY = (logical_h > 1) ? ((float)y / (float)(logical_h - 1)) : 0.0f;
-      for (int x = 0; x < w; x++)
-      {
-        const float dx =
-            (w > 1)
-                ? (((float)x - (float)(w - 1) * 0.5f) / ((float)(w - 1) * 0.5f))
-                : 0.0f;
-        const float edge = fabsf(dx);
-
-        float r = palette.bgTopR + (palette.bgBotR - palette.bgTopR) * tY;
-        float g = palette.bgTopG + (palette.bgBotG - palette.bgTopG) * tY;
-        float b = palette.bgTopB + (palette.bgBotB - palette.bgTopB) * tY;
-
-        const float vignette = 1.0f - 0.12f * powf(edge, 1.8f);
-
-        const float bayer = (((float)kBayer4x4[y & 3][x & 3] + 0.5f) / 16.0f) -
-                            0.5f;
-
-        const u32 h0 = (u32)x * 73856093u;
-        const u32 h1 = (u32)y * 19349663u;
-        const u32 h2 = (h0 ^ h1 ^ 0x9E3779B9u);
-        const float noise = ((((h2 >> 8) & 0xFF) / 255.0f) - 0.5f) * 0.6f;
-
-        r = r * vignette + bayer * 3.8f + noise;
-        g = g * vignette + bayer * 1.9f + noise * 0.6f;
-        b = b * vignette + bayer * 3.8f + noise;
-
-        gradient[(size_t)y * (size_t)w + (size_t)x] = RGB565FromU8(r, g, b);
-      }
-    }
-  }
-
-  for (int y = 0; y < logical_h; y++)
-  {
-    u16 *dst = target_screen + (size_t)y * (size_t)stride;
-    const u16 *src = gradient.data() + (size_t)y * (size_t)w;
-    memcpy(dst, src, (size_t)w * sizeof(u16));
-  }
-}
-
 void App::DrawBottomGradientBackground()
 {
-  DrawGradientToScreen(ts.get(), colorMode, ts->screenright, 320);
+  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenright, 320);
 }
 
 void App::DrawTopGradientBackground()
 {
-  DrawGradientToScreen(ts.get(), colorMode, ts->screenleft, 400);
+  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenleft, 400);
 }
 
 // Show the font selection menu, initializing it with the specified font mode (regular, bold, italic, etc.).
@@ -1069,7 +999,7 @@ void App::ShowLibraryView()
     bookcurrent_->FlushPendingCacheSaves();
     // Cancel any in-progress PDF/CBZ strip render so the worker thread is
     // idle before browser warmup jobs can start touching MuPDF lock state.
-    bookcurrent_->CancelFixedLayoutDeferredWork();
+    book_renderer::CancelFixedLayoutDeferredWork(bookcurrent_);
   }
 
   ResetBrowserMarquee();

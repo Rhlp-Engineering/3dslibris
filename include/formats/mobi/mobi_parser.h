@@ -5,6 +5,8 @@
 #include "formats/mobi/mobi_toc_finalize.h"
 #include "formats/mobi/mobi_toc_prepare.h"
 
+#include <string>
+
 namespace mobi_parser {
 
 typedef std::string (*ExtractMarkupToTextFn)(
@@ -31,5 +33,7 @@ struct Hooks {
 };
 
 u8 ParseFile(Book *book, const char *path, const Hooks &hooks);
+u8 Parse(Book *book, const char *path);
+int ExtractCover(Book *book, const std::string &path);
 
 } // namespace mobi_parser

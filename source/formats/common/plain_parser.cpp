@@ -3,10 +3,7 @@
 #include "book/heading_layout.h"
 #include "book/page.h"
 #include "formats/common/book_error.h"
-#include "formats/common/page_text_extract_utils.h"
 #include "formats/common/plain_text_stream.h"
-#include "formats/rtf/rtf_loader.h"
-#include "formats/txt/txt_loader.h"
 #include "shared/text_render_layout_utils.h"
 #include "parse.h"
 
@@ -616,66 +613,6 @@ u8 ParseBuffer(Book *book, const std::string &text_utf8,
                                                 state.completed);
 #endif
   return 0;
-}
-
-u8 ParseTxtFile(Book *book, const char *path) {
-  std::string text;
-  if (!txt_loader::ReadAndNormalize(path, &text))
-    return BOOK_ERR_CORRUPT;
-  return ParseBuffer(book, text);
-}
-
-u8 ParseRtfFile(Book *book, const char *path) {
-  std::string text;
-  if (!rtf_loader::ReadAndDecode(path, &text))
-    return BOOK_ERR_CORRUPT;
-  return ParseBuffer(book, text);
-}
-
-void BuildFb2FallbackChapters(Book *book) {
-  if (!book)
-    return;
-  if (!book->GetChapters().empty())
-    return;
-  if (book->GetPageCount() == 0)
-    return;
-
-  std::vector<std::string> lines;
-  std::vector<u16> line_pages;
-  for (u16 page = 0; page < book->GetPageCount(); page++) {
-    const std::vector<std::string> page_lines =
-        page_text_extract_utils::ExtractTextLinesFromPage(book->GetPage(page));
-    for (size_t i = 0; i < page_lines.size(); i++) {
-      lines.push_back(page_lines[i]);
-      line_pages.push_back(page);
-    }
-  }
-
-  if (lines.empty())
-    return;
-
-  bool prev_blank = true;
-  bool prev_candidate = false;
-  for (size_t i = 0; i < lines.size(); i++) {
-    bool curr_blank = IsBlankLine(lines[i]);
-    bool next_blank = (i + 1 >= lines.size()) || IsBlankLine(lines[i + 1]);
-
-    bool curr_strong = false;
-    bool curr_candidate = LooksLikePlainChapterHeading(lines[i], &curr_strong);
-    bool next_strong = false;
-    bool next_candidate =
-        (i + 1 < lines.size()) &&
-        LooksLikePlainChapterHeading(lines[i + 1], &next_strong);
-
-    if (curr_candidate && ShouldAcceptHeuristicHeading(
-                              lines[i], prev_blank, next_blank, prev_candidate,
-                              next_candidate, curr_strong)) {
-      AddChapterAtPageIfUnique(book, line_pages[i], lines[i], 0);
-    }
-
-    prev_blank = curr_blank;
-    prev_candidate = curr_candidate;
-  }
 }
 
 } // namespace plain_parser

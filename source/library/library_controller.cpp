@@ -13,6 +13,7 @@ void DrawOpeningSplashWithProgress(unsigned done, unsigned total,
 
 #include "app/app.h"
 #include "book/book.h"
+#include "ui/gradient_utils.h"
 #include "book/book_context.h"
 #include "shared/debug_log.h"
 #include "shared/path_utils.h"
@@ -54,14 +55,15 @@ static std::string HexBytesForLog(const char *s, size_t max_bytes = 32) {
 }
 #endif
 
-static void LogFilenameStage(App *app, const char *stage, const char *value) {
+static void LogFilenameStage(IStatusReporter *reporter, const char *stage,
+                             const char *value) {
 #if !UTF8_FILENAME_DIAG
-  (void)app;
+  (void)reporter;
   (void)stage;
   (void)value;
   return;
 #else
-  if (!app || !stage || !value)
+  if (!reporter || !stage || !value)
     return;
   char msg[512];
   std::string bytes = HexBytesForLog(value);
@@ -69,7 +71,7 @@ static void LogFilenameStage(App *app, const char *stage, const char *value) {
            "FindBooks %-20s len=%u valid=%d bytes=[%s] text=\"%s\"", stage,
            (unsigned)strlen(value), LooksLikeValidUtf8(value) ? 1 : 0,
            bytes.c_str(), value);
-  DBG_LOG(app, msg);
+  DBG_LOG(reporter, msg);
 #endif
 }
 
@@ -88,31 +90,37 @@ static bool Utf16NameToUtf8(const u16 *name, std::string *out) {
                                      out);
 }
 
-static bool HasBookWithFileName(const App *app, const char *filename) {
-  if (!app || !filename || !*filename)
+static bool HasBookWithFileName(const std::vector<Book *> &books,
+                                const char *filename) {
+  if (!filename || !*filename)
     return false;
-  for (size_t i = 0; i < app->books.size(); i++) {
-    if (!app->books[i] || !app->books[i]->GetFileName())
+  for (size_t i = 0; i < books.size(); i++) {
+    if (!books[i] || !books[i]->GetFileName())
       continue;
-    if (strcasecmp(app->books[i]->GetFileName(), filename) == 0)
+    if (strcasecmp(books[i]->GetFileName(), filename) == 0)
       return true;
   }
   return false;
 }
 
 static void DrawBottomGradientFromApp(void *user_data) {
-  App *app = static_cast<App *>(user_data);
-  if (app)
-    app->DrawBottomGradientBackground();
+  const LibraryGradientContext *ctx =
+      static_cast<const LibraryGradientContext *>(user_data);
+  if (ctx && ctx->ts)
+    gradient_utils::DrawToScreen(ctx->ts, *ctx->color_mode,
+                                 ctx->ts->screenright, 320);
 }
 
 static void DrawTopGradientFromApp(void *user_data) {
-  App *app = static_cast<App *>(user_data);
-  if (app)
-    app->DrawTopGradientBackground();
+  const LibraryGradientContext *ctx =
+      static_cast<const LibraryGradientContext *>(user_data);
+  if (ctx && ctx->ts)
+    gradient_utils::DrawToScreen(ctx->ts, *ctx->color_mode,
+                                 ctx->ts->screenleft, 400);
 }
 
-static void AppendBookFromFilename(App *app, const std::string &source_dir,
+static void AppendBookFromFilename(App *app, LibraryGradientContext *gradient_ctx,
+                                   const std::string &source_dir,
                                    const char *filename) {
   if (!app || !app_flow_utils::ShouldIndexBookFilename(filename))
     return;
@@ -122,7 +130,7 @@ static void AppendBookFromFilename(App *app, const std::string &source_dir,
 
   std::string raw_name(filename);
   std::string io_name = NormalizeFsFilenameForIo(filename);
-  if (HasBookWithFileName(app, io_name.c_str()))
+  if (HasBookWithFileName(app->books, io_name.c_str()))
     return;
   LogFilenameStage(app, "d_name", raw_name.c_str());
   if (io_name != raw_name)
@@ -135,9 +143,9 @@ static void AppendBookFromFilename(App *app, const std::string &source_dir,
   ctx.orientation = &app->orientation;
   ctx.status_reporter = app;
   ctx.draw_background = &DrawBottomGradientFromApp;
-  ctx.draw_background_user_data = app;
+  ctx.draw_background_user_data = gradient_ctx;
   ctx.draw_top_background = &DrawTopGradientFromApp;
-  ctx.draw_top_background_user_data = app;
+  ctx.draw_top_background_user_data = gradient_ctx;
   ctx.on_spine_progress = &DrawOpeningSplashWithProgress;
   ctx.on_spine_progress_user_data = app;
   Book *book = new Book(ctx);
@@ -155,6 +163,9 @@ static void AppendBookFromFilename(App *app, const std::string &source_dir,
 LibraryController::LibraryController(App &app) : app_(app) {}
 
 int LibraryController::FindBooks() {
+  gradient_ctx_.ts = app_.ts.get();
+  gradient_ctx_.color_mode = &app_.colorMode;
+
   auto scan_with_native_fs = [&](const std::string &dir) -> int {
     FS_Archive sdmc_archive;
     Result rc = FSUSER_OpenArchive(&sdmc_archive, ARCHIVE_SDMC,
@@ -186,7 +197,7 @@ int LibraryController::FindBooks() {
           continue;
         if (filename.empty())
           continue;
-        AppendBookFromFilename(&app_, dir, filename.c_str());
+        AppendBookFromFilename(&app_, &gradient_ctx_, dir, filename.c_str());
       }
     }
 
@@ -201,7 +212,7 @@ int LibraryController::FindBooks() {
       return 1;
     struct dirent *ent;
     while ((ent = readdir(dp)))
-      AppendBookFromFilename(&app_, dir, ent->d_name);
+      AppendBookFromFilename(&app_, &gradient_ctx_, dir, ent->d_name);
     closedir(dp);
     return 0;
   };

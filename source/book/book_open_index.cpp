@@ -6,16 +6,7 @@
 
 #include <sys/stat.h>
 
-#include "formats/cbz/cbz.h"
-#include "formats/common/book_error.h"
 #include "formats/common/book_meta_cache.h"
-#include "formats/epub/epub.h"
-#include "formats/pdf/pdf.h"
-
-u8 Book::Open() {
-  PrepareForOpen();
-  return OpenPrepared();
-}
 
 // Tries to populate title/author/coverImagePath from the disk cache without
 // opening the source file. Returns true on cache hit.
@@ -51,54 +42,3 @@ bool Book::TryLoadMetadataFromCache() {
   return true;
 }
 
-u8 Book::Index() {
-  if (metadataIndexTried)
-    return metadataIndexed ? 0 : 1;
-
-  // Fast path: disk cache hit.
-  if (TryLoadMetadataFromCache())
-    return 0;
-
-  // Cache miss: parse the source file.
-  std::string path;
-  path.append(GetFolderName());
-  path.append("/");
-  path.append(GetFileName());
-
-  struct stat st;
-  long long fsize = 0, fmtime = 0;
-  if (stat(path.c_str(), &st) == 0) {
-    fsize  = (long long)st.st_size;
-    fmtime = (long long)st.st_mtime;
-  }
-
-  metadataIndexTried = true;
-  int err = 1;
-  if (format == FORMAT_EPUB) {
-    err = epub(this, path, true);
-  } else if (format == FORMAT_PDF) {
-    err = IndexPdfMetadata(this, path.c_str());
-  } else if (format == FORMAT_CBZ) {
-    err = IndexCbzMetadata(this, path.c_str());
-  } else {
-    err = 0;
-  }
-
-  if (err == BOOK_ERR_CANCELLED) {
-    metadataIndexTried = false;
-    metadataIndexed    = false;
-    return err;
-  }
-
-  if (!err) {
-    metadataIndexed = true;
-    book_meta_cache::MetaEntry entry;
-    entry.title            = title;
-    entry.author           = author;
-    entry.cover_image_path = coverImagePath;
-    book_meta_cache::Save(
-        book_meta_cache::BuildPath(path, fsize, fmtime), entry);
-  }
-
-  return err;
-}

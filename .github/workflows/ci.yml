@@ -48,6 +48,24 @@ jobs:
           set -euo pipefail
           make test-host
 
+  coverage-host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Run host coverage
+        run: |
+          set -euo pipefail
+          make coverage-host
+
+      - name: Upload coverage summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3dslibris-host-coverage
+          path: |
+            build/coverage-host/report/llvm-cov-report.txt
+            build/coverage-host/report/llvm-cov-summary.json
+
   build-3dsx:
     runs-on: ubuntu-latest
     steps:
@@ -125,4 +143,3 @@ jobs:
             3dslibris.cia
             3dslibris.3dsx
             3dslibris-debug.3dsx
-

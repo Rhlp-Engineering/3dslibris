@@ -3,7 +3,7 @@
 #include <3ds.h>
 
 #include "shared/debug_log.h"
-#include "formats/epub/epub.h"
+#include "book/book_parser.h"
 #include "reader/reflow_open_gate_utils.h"
 #include "shared/debug_runtime_mode.h"
 #include "shared/open_cancel_poll.h"
@@ -84,7 +84,7 @@ void ReflowWorkerThreadFunc(void *arg) {
                (unsigned long long)queue_ms,
                book->GetFileName() ? book->GetFileName() : "");
     }
-    w->job_result = book->OpenPrepared();
+    w->job_result = book_parser::OpenPrepared(book);
     w->finished_at_ms = osGetTime();
     if (book->GetStatusReporter()) {
       const u64 worker_ms =
@@ -114,28 +114,6 @@ void Book::PrepareForOpen() {
   tocResolved = false;
   ClearTocConfidence();
   ClearChapterAnchors();
-}
-
-u8 Book::OpenPrepared() {
-  std::string path;
-  path.append(GetFolderName());
-  path.append("/");
-  path.append(GetFileName());
-
-  char logmsg[256];
-  snprintf(logmsg, sizeof(logmsg), "Opening: %s", path.c_str());
-  DBG_LOG(GetStatusReporter(), logmsg);
-
-  u8 err = 1;
-  if (format == FORMAT_EPUB) {
-    err = epub(this, path, false);
-  } else {
-    err = Parse(true);
-  }
-  if (!err)
-    if (position > (int)pages.size())
-      position = pages.size() - 1;
-  return err;
 }
 
 bool Book::SupportsAsyncReflowOpen() const {

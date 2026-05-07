@@ -5,6 +5,7 @@
 #include <cstring>
 #include <string>
 
+#include "book/epub_css_class_map.h"
 #include "shared/string_utils.h"
 
 namespace book_xml_list_utils {
@@ -196,8 +197,13 @@ void ConfigureElementListSemantics(parsedata_t *p, const char **attr) {
     return;
 
   const u8 current = (u8)(p->stacksize - 1);
+  const char *tag = (p->stack[current] == TAG_OL) ? "ol"
+                  : (p->stack[current] == TAG_UL) ? "ul" : nullptr;
   p->list_marker_hidden_stack[current] =
-      ParseListMarkerHiddenAttr(attr) || ParseListMarkerHiddenCssClass(p, attr);
+      ParseListMarkerHiddenAttr(attr) ||
+      ParseListMarkerHiddenCssClass(p, attr) ||
+      (tag && epub_css_class_map::LookupHideListMarkersForTag(
+                  tag, p->css_class_map));
 
   if (p->stack[current] != TAG_OL)
     return;
