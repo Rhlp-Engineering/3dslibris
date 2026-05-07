@@ -80,6 +80,9 @@ MarginTopResult LookupMarginRightForClassAttr(const std::string &class_attr,
 bool LookupHideListMarkersForClassAttr(const std::string &class_attr,
                                        const CssClassMap &class_map);
 
+// Returns true if an element-type selector for tag specifies list-style: none.
+bool LookupHideListMarkersForTag(const char *tag, const CssClassMap &class_map);
+
 bool LookupTextAlignForClassAttr(const std::string &class_attr,
                                  const CssClassMap &class_map,
                                  TextAlign *out);

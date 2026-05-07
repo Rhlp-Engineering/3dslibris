@@ -639,6 +639,25 @@ void TestElementSelectorCascadesOverTag() {
                  (int)book_xml_css_style_utils::TextAlign::Center);
 }
 
+void TestLookupHideListMarkersForTag() {
+  const char *css =
+      "ol { list-style-type: none; }\n"
+      "ul { list-style: none; margin: 0; }\n"
+      "li { color: red; }\n"; // no list-style-type:none on li
+
+  CssClassMap map;
+  epub_css_class_map::ParseCssIntoClassMap(css, std::strlen(css), &map);
+
+  test::ExpectTrue("ol element rule hides markers",
+                   epub_css_class_map::LookupHideListMarkersForTag("ol", map));
+  test::ExpectTrue("ul element rule hides markers",
+                   epub_css_class_map::LookupHideListMarkersForTag("ul", map));
+  test::ExpectFalse("li without list-style-type:none does not hide",
+                    epub_css_class_map::LookupHideListMarkersForTag("li", map));
+  test::ExpectFalse("p not in map returns false",
+                    epub_css_class_map::LookupHideListMarkersForTag("p", map));
+}
+
 } // namespace
 
 int main() {
@@ -664,5 +683,6 @@ int main() {
   TestParseCssIntoClassMapHandlesElementSelectors();
   TestLookupAllForTagAndMergeClassRulesToStyle();
   TestElementSelectorCascadesOverTag();
+  TestLookupHideListMarkersForTag();
   return 0;
 }
