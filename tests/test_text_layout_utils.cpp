@@ -89,8 +89,8 @@ void TestFindPreformattedBreaks() {
   ExpectTrue("shape preformatted ascii",
              text_layout_utils::ShapeTextRunUtf8(">>> abcdef", 10, NULL,
                                                  MeasureMono, NULL, &run));
-  ExpectEq("preformatted wraps at width without waiting for whitespace",
-           text_layout_utils::FindPreformattedLineBreak(run, 0, 5), (size_t)5);
+  ExpectEq("preformatted prefers whitespace before splitting a word",
+           text_layout_utils::FindPreformattedLineBreak(run, 0, 5), (size_t)4);
 
   run.clear();
   ExpectTrue("shape preformatted keeps later segment",
@@ -98,6 +98,13 @@ void TestFindPreformattedBreaks() {
                                                  MeasureMono, NULL, &run));
   ExpectEq("preformatted second break starts from current point",
            text_layout_utils::FindPreformattedLineBreak(run, 4, 3), (size_t)7);
+
+  run.clear();
+  ExpectTrue("shape preformatted long token",
+             text_layout_utils::ShapeTextRunUtf8("abcdefgh", 8, NULL,
+                                                 MeasureMono, NULL, &run));
+  ExpectEq("preformatted still splits long token when no break exists",
+           text_layout_utils::FindPreformattedLineBreak(run, 0, 5), (size_t)5);
 }
 
 void TestMeasureCombinedBreaks() {
@@ -116,8 +123,8 @@ void TestMeasureCombinedBreaks() {
                                                  MeasureMono, NULL, &run));
   text_layout_utils::LineBreakMeasureResult pre =
       text_layout_utils::FindPreformattedLineBreakAndMeasure(run, 0, 5);
-  ExpectEq("combined preformatted end", pre.end_index, (size_t)5);
-  ExpectEq("combined preformatted width", pre.width, 5);
+  ExpectEq("combined preformatted end", pre.end_index, (size_t)4);
+  ExpectEq("combined preformatted width", pre.width, 4);
 }
 
 void TestKeepsOpeningPunctuationWithFollowingWord() {

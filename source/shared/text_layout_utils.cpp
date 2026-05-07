@@ -109,7 +109,13 @@ static LineBreakMeasureResult FindLineBreakImpl(
     }
 
     width += glyph.advance;
-    if (!preformatted) {
+    if (preformatted) {
+      if (glyph.text.allow_break_after) {
+        last_break = i + 1;
+        width_at_last_break = width;
+        have_break = true;
+      }
+    } else {
       if (glyph.text.must_break_after) {
         last_break = i + 1;
         width_at_last_break = width;
