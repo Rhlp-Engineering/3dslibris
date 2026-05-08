@@ -108,6 +108,9 @@ void TestOld3dsWarmupQueueLimit() {
 }
 
 void TestOld3dsCoverMemoryGuard() {
+  ExpectTrue("selected old3ds cover allowed below former conservative threshold",
+             browser_warmup_utils::HasCoverExtractionHeadroom(
+                 false, true, 20u * 1024u * 1024u));
   ExpectTrue("selected old3ds cover allowed above selected threshold",
              browser_warmup_utils::HasCoverExtractionHeadroom(
                  false, true,
