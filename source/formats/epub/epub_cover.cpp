@@ -8,6 +8,7 @@
 
 #include "book/book.h"
 #include "shared/debug_log.h"
+#include "book/cover_layout_constants.h"
 #include "formats/common/book_error.h"
 #include "formats/common/epub_image_utils.h"
 #include "formats/epub/epub.h"
@@ -30,9 +31,6 @@ extern "C" {
 }
 
 namespace {
-
-static const int kCoverThumbMaxW = 85;
-static const int kCoverThumbMaxH = 115;
 
 static bool LocateZipEntrySafe(unzFile uf, const std::string &entry_path) {
   if (!uf || entry_path.empty())
@@ -192,8 +190,9 @@ static bool DecodePngCoverThumbnail(const std::vector<u8> &decodebuf,
   int thumb_h = 0;
   float scale = 1.0f;
   if (!epub_cover_decode_utils::ComputeCoverThumbSize(
-          (int)img_w, (int)img_h, kCoverThumbMaxW, kCoverThumbMaxH, &thumb_w,
-          &thumb_h, &scale)) {
+          (int)img_w, (int)img_h, cover_layout::kBrowserCoverThumbWidth,
+          cover_layout::kBrowserCoverThumbHeight, &thumb_w, &thumb_h,
+          &scale)) {
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
     return false;
   }
@@ -277,8 +276,9 @@ static bool DecodeImageCoverThumbnailWithMuPdf(const std::vector<u8> &decodebuf,
     int thumb_h = 0;
     float scale = 1.0f;
     if (!epub_cover_decode_utils::ComputeCoverThumbSize(
-            image->w, image->h, kCoverThumbMaxW, kCoverThumbMaxH, &thumb_w,
-            &thumb_h, &scale)) {
+            image->w, image->h, cover_layout::kBrowserCoverThumbWidth,
+            cover_layout::kBrowserCoverThumbHeight, &thumb_w, &thumb_h,
+            &scale)) {
       fz_throw(ctx, FZ_ERROR_FORMAT, "invalid cover thumbnail size");
     }
 
@@ -517,8 +517,8 @@ int Extract(Book *book, const std::string &epubpath) {
   int finalH = 0;
   float scale = 1.0f;
   if (!epub_cover_decode_utils::ComputeCoverThumbSize(
-          imgW, imgH, kCoverThumbMaxW, kCoverThumbMaxH, &finalW, &finalH,
-          &scale)) {
+          imgW, imgH, cover_layout::kBrowserCoverThumbWidth,
+          cover_layout::kBrowserCoverThumbHeight, &finalW, &finalH, &scale)) {
     stbi_image_free(pixels);
     return 7;
   }

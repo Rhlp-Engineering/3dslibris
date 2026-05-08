@@ -32,6 +32,7 @@
 #include "book/book_parser.h"
 #include "ui/browser_nav.h"
 #include "formats/common/book_error.h"
+#include "book/cover_layout_constants.h"
 #include "ui/button.h"
 #include "menus/chapter_menu.h"
 #include "shared/debug_log.h"
@@ -80,8 +81,6 @@ static const size_t kCoverCacheMaxBytes = 16 * 1024 * 1024;
 // Max extraction attempts per session before a book is skipped.
 // Two retries absorb transient SD-card read failures without retrying forever.
 static const uint8_t kCoverMaxAttempts = 3;
-static const int kCoverThumbMaxW = 85;
-static const int kCoverThumbMaxH = 115;
 static const int kBrowserFooterY = 296;
 
 static BrowserViewMode CurrentBrowserViewMode(const App &app) {
@@ -390,7 +389,8 @@ static bool TryLoadCoverCache(Book *book, const std::string &book_path) {
 
   u16 w = (u16)header[4] | ((u16)header[5] << 8);
   u16 h = (u16)header[6] | ((u16)header[7] << 8);
-  if (w == 0 || h == 0 || w > kCoverThumbMaxW || h > kCoverThumbMaxH) {
+  if (w == 0 || h == 0 || w > cover_layout::kBrowserCoverThumbWidth ||
+      h > cover_layout::kBrowserCoverThumbHeight) {
     fclose(fp);
 #if defined(DSLIBRIS_DEBUG) && BROWSER_COVER_TRACE
     if (book->GetStatusReporter()) {
@@ -449,7 +449,8 @@ static bool SaveCoverCache(Book *book, const std::string &book_path) {
       book->coverHeight <= 0) {
     return false;
   }
-  if (book->coverWidth > kCoverThumbMaxW || book->coverHeight > kCoverThumbMaxH)
+  if (book->coverWidth > cover_layout::kBrowserCoverThumbWidth ||
+      book->coverHeight > cover_layout::kBrowserCoverThumbHeight)
     return false;
 
   EnsureCoverCacheDirs();
