@@ -315,5 +315,45 @@ int main() {
     ExpectEq("band after advance goes to left screen", plan.next_text_screen, 0);
   }
 
+  {
+    InlineImageLayoutRequest req = BaseRequest();
+    req.current_screen = 1;
+    req.screen_height = 320;
+    req.next_screen_height = 400;
+    req.margin_bottom = 20;
+    req.next_margin_bottom = 36;
+    req.pen_x = 12;
+    req.pen_y = 54;
+    req.line_began = false;
+    req.image_context = INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION;
+    InlineImageLayoutPlan plan =
+        PlanInlineImageLayout(req, Metadata(1143, 627));
+    ExpectMode("Feature Engineering figure fits on right screen", plan,
+               INLINE_IMAGE_LAYOUT_BAND);
+    ExpectFalse("right-screen figure does not pre-advance", plan.advance_before);
+    ExpectEq("right-screen figure keeps text on right", plan.next_text_screen, 1);
+  }
+
+  {
+    InlineImageLayoutRequest req = BaseRequest();
+    req.current_screen = 1;
+    req.screen_height = 320;
+    req.next_screen_height = 400;
+    req.margin_bottom = 20;
+    req.next_margin_bottom = 36;
+    req.pen_x = 12;
+    req.pen_y = 286;
+    req.line_began = false;
+    req.image_context = INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION;
+    InlineImageLayoutPlan plan =
+        PlanInlineImageLayout(req, Metadata(1092, 492));
+    ExpectMode("late right-screen figure stays band", plan,
+               INLINE_IMAGE_LAYOUT_BAND);
+    ExpectTrue("late right-screen figure advances with caption",
+               plan.advance_before);
+    ExpectEq("late right-screen figure crosses page", plan.page_breaks, 1);
+    ExpectEq("late right-screen figure lands on left", plan.next_text_screen, 0);
+  }
+
   return 0;
 }

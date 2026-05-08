@@ -289,6 +289,29 @@ static bool ContainsAsciiNoCase(const std::string &haystack,
   return haystack_lc.find(needle_lc) != std::string::npos;
 }
 
+static bool ClassListContains(const char *class_attr, const char *needle) {
+  if (!class_attr || !needle || !needle[0])
+    return false;
+
+  const std::string classes = ToLowerAsciiLocal(class_attr);
+  const std::string target = ToLowerAsciiLocal(needle);
+  size_t pos = 0;
+  while (pos < classes.size()) {
+    while (pos < classes.size() &&
+           (classes[pos] == ' ' || classes[pos] == '\t' ||
+            classes[pos] == '\r' || classes[pos] == '\n'))
+      pos++;
+    const size_t start = pos;
+    while (pos < classes.size() &&
+           classes[pos] != ' ' && classes[pos] != '\t' &&
+           classes[pos] != '\r' && classes[pos] != '\n')
+      pos++;
+    if (pos > start && classes.substr(start, pos - start) == target)
+      return true;
+  }
+  return false;
+}
+
 static bool AttrNameEquals(const char *name, const char *needle) {
   if (!name || !needle)
     return false;
@@ -1505,6 +1528,14 @@ static bool BehavesAsBlock(const char *el,
   return IsBlockLevelElement(el) || elem_css.is_display_block;
 }
 
+static bool IsFigureContainerElement(const char *el, const char *class_attr) {
+  if (!el)
+    return false;
+  if (!strcmp(el, "figure"))
+    return true;
+  return !strcmp(el, "div") && ClassListContains(class_attr, "figure");
+}
+
 static void FlushInlineTailBeforeElementStart(parsedata_t *p, Text *ts,
                                               const char *el) {
   if (!p)
@@ -2291,7 +2322,8 @@ void start(void *data, const char *el, const char **attr) {
         book_xml_css_style_utils::ClearMode::None) {
       ApplyClearBreak(p);
     }
-    if ((book_xml_css_style_utils::HasPageBreakInsideAvoid(el_style_raw) ||
+    if (!IsFigureContainerElement(el, el_class_raw) &&
+        (book_xml_css_style_utils::HasPageBreakInsideAvoid(el_style_raw) ||
          elem_css.page_break_inside_avoid) &&
         p->buflen > 0 && !blankline(p)) {
       ForcePageBreak(p);
@@ -2742,9 +2774,16 @@ void start(void *data, const char *el, const char **attr) {
       InlineImageLayoutPlan image_plan{};
       const bool leading_paragraph_image =
           p->in_paragraph && !p->paragraph_has_content;
+
+      const bool figure_with_caption =
+          parse_in(p, TAG_FIGURE);
+
       const InlineImageContext image_context =
-          leading_paragraph_image ? INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH
-                                  : INLINE_IMAGE_CONTEXT_DEFAULT;
+          figure_with_caption
+              ? INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION
+              : (leading_paragraph_image
+                    ? INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH
+                    : INLINE_IMAGE_CONTEXT_DEFAULT);
       p->book->PlanInlineImageLayout(ts, image_id, p->screen, p->pen.x,
                                      p->pen.y, p->linebegan,
                                      image_context, &image_plan);
@@ -2777,8 +2816,13 @@ void start(void *data, const char *el, const char **attr) {
 
       // The token stays format-agnostic; parser and renderer now derive the
       // concrete inline/band/page behavior from the same layout planner.
-      if (leading_paragraph_image)
+      if (figure_with_caption) {
+        AppendParsedByte(p, TEXT_IMAGE_FIGURE_WITH_CAPTION);
+      } else if (leading_paragraph_image) {
         AppendParsedByte(p, TEXT_IMAGE_LEADING_PARAGRAPH);
+      } else {
+        AppendParsedByte(p, TEXT_IMAGE_CONTEXT_DEFAULT);
+      }
       if (author_max_w > 0) {
         AppendParsedByte(p, TEXT_IMAGE_AUTHOR_WIDTH);
         AppendParsedByte(p, (u32)author_max_w);
@@ -2826,14 +2870,10 @@ void start(void *data, const char *el, const char **attr) {
       default:
         if (p->in_paragraph)
           p->paragraph_has_content = true;
-        if (p->screen == 1) {
-          AdvanceParsedScreen(p);
-        } else {
-          p->screen = 1;
-          p->pen.x = ts->margin.left;
-          p->pen.y = ts->margin.top + ts->GetHeight();
-          p->linebegan = false;
-        }
+
+        // PAGE images consume the current reading screen. Advance through the common
+        // screen transition path so parser state and render buffer stay synchronized.
+        AdvanceParsedScreen(p);
         break;
       }
     } else {
@@ -3453,22 +3493,9 @@ void end(void *data, const char *el) {
   int maxHeight = metrics.max_height;
   int bottomMargin = metrics.bottom_margin;
   if (!text_render_layout_utils::CurrentLineFitsScreen(
-          p->pen.y, ts->GetHeight(), ts->linespacing, maxHeight,
-          bottomMargin)) {
-    if (p->screen == 1) {
-      // End of right screen; end of page.
-      // Copy in buffered char data into a new page.
-      Page *page = p->book->AppendPage();
-      page->SetBuffer(p->buf, p->buflen);
-      parse_reset_page_buffer(p);
-      book_xml_parser_style_utils::RestoreParsedStyleMarkers(p);
-      p->screen = 0;
-    } else
-      // End of left screen; same page, next screen.
-      p->screen = 1;
-    p->pen.x = ts->margin.left;
-    p->pen.y = ts->margin.top + ts->GetHeight();
-    p->linebegan = false;
+        p->pen.y, ts->GetHeight(), ts->linespacing, maxHeight,
+        bottomMargin)) {
+    AdvanceParsedScreen(p);
   }
 }
 

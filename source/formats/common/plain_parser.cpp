@@ -166,6 +166,19 @@ static void FinalizePlainPage(parsedata_t *p) {
   }
 }
 
+static void PlainAppendScreenBreakIfNeeded(parsedata_t *p) {
+  if (!p)
+    return;
+
+  if (p->buflen <= 0)
+    return;
+
+  if (p->buf[p->buflen - 1] == TEXT_SCREEN_BREAK)
+    return;
+
+  parse_append_page_byte(p, TEXT_SCREEN_BREAK);
+}
+
 static void PlainAdvanceScreen(parsedata_t *p) {
   if (!p || !p->ts || !p->book)
     return;
@@ -181,6 +194,7 @@ static void PlainAdvanceScreen(parsedata_t *p) {
       parse_append_page_byte(p, TEXT_BOLD_ON);
     p->screen = 0;
   } else {
+    PlainAppendScreenBreakIfNeeded(p);
     p->screen = 1;
   }
 
@@ -301,14 +315,7 @@ static void AppendInlineImageToPlainParsedData(parsedata_t *p, u16 image_id,
     break;
   case INLINE_IMAGE_LAYOUT_PAGE:
   default:
-    if (p->screen == 1) {
       PlainAdvanceScreen(p);
-    } else {
-      p->screen = 1;
-      p->pen.x = ts->margin.left;
-      p->pen.y = ts->margin.top + ts->GetHeight();
-      p->linebegan = false;
-    }
     break;
   }
 }

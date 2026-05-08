@@ -37,7 +37,10 @@ InlineImagePagePlacement ResolveInlineImagePagePlacement(
   int scale_x = (out.avail_width * 1024) / src_width;
   int scale_y = (out.avail_height * 1024) / src_height;
   int scale = std::min(scale_x, scale_y);
-  scale = std::max(1, std::min(scale, 1024));
+
+  // PAGE images/covers should fill the available page box.
+  // Unlike inline/band images, page placement is allowed to upscale.
+  scale = std::max(1, scale);
 
   out.draw_width = std::max(1, (src_width * scale + 512) / 1024);
   out.draw_height = std::max(1, (src_height * scale + 512) / 1024);

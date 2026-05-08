@@ -35,7 +35,7 @@ static void FitWithinBoxNoUpscale(int src_w, int src_h, int max_w, int max_h,
     int scale_x = (max_w * 1024) / draw_w;
     int scale_y = (max_h * 1024) / draw_h;
     int scale = std::min(scale_x, scale_y);
-    scale = std::max(1, std::min(scale, 1024));
+    scale = std::max(1, scale);
     draw_w = std::max(1, (draw_w * scale + 512) / 1024);
     draw_h = std::max(1, (draw_h * scale + 512) / 1024);
   }
@@ -172,12 +172,17 @@ InlineImageLayoutPlan PlanInlineImageLayout(const InlineImageLayoutRequest &req,
       next_limit_y - fresh_baseline - req.linespacing - min_follow_text_height;
   const int full_width_band_height =
       std::max(1, DivRoundUp(eff_meta.height * text_width, eff_meta.width));
+  const int min_figure_band_image_height = std::max(2 * line_height, 24);
+
   const bool current_figure_band_candidate =
-      figure_with_caption && caption_band_max_height >= (5 * line_height);
+      figure_with_caption &&
+      caption_band_max_height >= min_figure_band_image_height;
+
   const bool figure_band_candidate =
       current_figure_band_candidate ||
-      (figure_with_caption && next_caption_band_max_height >=
-                                  (5 * line_height));
+      (figure_with_caption &&
+      next_caption_band_max_height >= min_figure_band_image_height);
+
   const bool leading_caption_band_candidate =
       !figure_with_caption && caption_friendly_start &&
       caption_band_max_height >= (5 * line_height);
@@ -268,11 +273,31 @@ InlineImageLayoutPlan PlanInlineImageLayout(const InlineImageLayoutRequest &req,
     int baseline = req.pen_y;
     if (plan.line_break_before)
       baseline += line_height + req.linespacing;
+
     if (baseline + band_height + req.linespacing > limit_y) {
+      // On the right/second screen, do not push a figure+caption to the next
+      // spread's left screen just to preserve a larger image. Try shrinking the
+      // figure band to the current screen's available figure box first.
+      if (figure_with_caption && req.current_screen == 1 &&
+          caption_band_max_height > 0) {
+        FitWithinBoxNoUpscale(eff_meta.width, eff_meta.height,
+                              text_width, caption_band_max_height,
+                              &band_width, &band_height);
+
+        plan.draw_width = band_width;
+        plan.draw_height = band_height;
+        plan.vertical_space_after_draw = band_height + req.linespacing;
+
+        if (baseline + band_height + req.linespacing <= limit_y) {
+          return plan;
+        }
+      }
+
       int page_breaks = 0;
       int next_height = NextScreenHeight(req, &page_breaks);
-      int next_limit_y = next_height - req.margin_bottom;
+      int next_limit_y = next_height - next_margin_bottom;
       int fresh_baseline = req.margin_top + line_height;
+
       if (fresh_baseline + band_height + req.linespacing <= next_limit_y) {
         plan.advance_before = true;
         plan.page_breaks = page_breaks;
@@ -285,51 +310,35 @@ InlineImageLayoutPlan PlanInlineImageLayout(const InlineImageLayoutRequest &req,
       return plan;
     }
 
-    if (req.current_screen == 1 && figure_with_caption) {
-      const int remaining_after_band = limit_y - (baseline + band_height);
-      if (remaining_after_band < min_caption_text_height) {
-        int page_breaks = 0;
-        int next_height = NextScreenHeight(req, &page_breaks);
-        int next_limit_y = next_height - req.margin_bottom;
-        int fresh_baseline = req.margin_top + line_height;
-        if (fresh_baseline + band_height + req.linespacing +
-                min_caption_text_height <=
-            next_limit_y) {
-          plan.advance_before = true;
-          plan.page_breaks = page_breaks;
-          plan.next_text_screen = 0;
-          plan.line_break_before = false;
-          return plan;
-        }
-      }
-    }
-
     // Avoid leaving medium block-like images orphaned with their paragraph text
     // pushed to the next screen when the block itself could move forward.
+    // Important: only do this from screen 0. From screen 1 it would push the
+    // image to the next spread's left screen.
     if (req.current_screen == 0 &&
         (leading_paragraph_image || figure_with_caption ||
-         flow_text_band_candidate) &&
+        flow_text_band_candidate) &&
         !wide_band_candidate && !IsAtScreenStart(req)) {
       int remaining_after_band = limit_y - (baseline + band_height);
       const int min_remaining_after_band =
           figure_with_caption ? min_caption_text_height : min_follow_text_height;
+
       if (remaining_after_band < min_remaining_after_band) {
         int page_breaks = 0;
         int next_height = NextScreenHeight(req, &page_breaks);
-        int next_limit_y = next_height - req.margin_bottom;
+        int next_limit_y = next_height - next_margin_bottom;
         int fresh_baseline = req.margin_top + line_height;
+
         if (fresh_baseline + band_height + req.linespacing +
                 min_remaining_after_band <=
             next_limit_y) {
           plan.advance_before = true;
           plan.page_breaks = page_breaks;
-          plan.next_text_screen = (req.current_screen == 1) ? 0 : 1;
+          plan.next_text_screen = 1;
           plan.line_break_before = false;
           return plan;
         }
       }
     }
-
     return plan;
   }
 
