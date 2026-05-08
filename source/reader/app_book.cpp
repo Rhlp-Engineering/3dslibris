@@ -440,13 +440,17 @@ namespace
     const int focus_index = book->GetFocusedInlineLinkIndex();
     if (focus_index < 0 || focus_index >= (int)links->size())
       return false;
+    const u16 href_id = (*links)[(size_t)focus_index].href_id;
     const std::string *href =
-        book->GetInlineLinkHref((*links)[(size_t)focus_index].href_id);
+        book->GetInlineLinkHref(href_id);
     if (!href || href->empty())
       return false;
     u16 target_page = 0;
-    if (!book->FindChapterAnchorPage(*href, &target_page) &&
-        !book->FindChapterDocStartPage(*href, &target_page))
+    bool found_anchor = book->FindChapterAnchorPage(*href, &target_page);
+    bool found_doc = false;
+    if (!found_anchor)
+      found_doc = book->FindChapterDocStartPage(*href, &target_page);
+    if (!found_anchor && !found_doc)
       return false;
     book->ClearFocusedInlineLink();
     return SetBookPage(book, ts, target_page);

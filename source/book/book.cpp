@@ -205,6 +205,11 @@ const std::string *Book::GetInlineLinkHref(u16 id) const
   return &inline_link_hrefs[index];
 }
 
+u32 Book::GetInlineLinkHrefCount() const
+{
+  return (u32)inline_link_hrefs.size();
+}
+
 void Book::ClearInlineLinks()
 {
   inline_link_hrefs.clear();
@@ -228,6 +233,15 @@ void Book::AddChapterAnchor(const std::string &docpath,
   {
     chapter_anchor_pages[key] = GetPageCount();
   }
+}
+
+void Book::SetChapterAnchorPage(const std::string &href, u16 page)
+{
+  std::string key = href_normalization::NormalizeAnchorHrefKey(href);
+  if (key.empty())
+    return;
+  if (chapter_anchor_pages.find(key) == chapter_anchor_pages.end())
+    chapter_anchor_pages[key] = page;
 }
 
 /*
@@ -431,6 +445,12 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
 size_t Book::GetChapterAnchorCount() const
 {
   return chapter_anchor_pages.size();
+}
+
+const std::unordered_map<std::string, u16> &
+Book::GetChapterAnchorPages() const
+{
+  return chapter_anchor_pages;
 }
 
 void Book::ClearChapterAnchors() { chapter_anchor_pages.clear(); }

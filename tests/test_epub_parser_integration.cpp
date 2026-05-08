@@ -1,8 +1,10 @@
 #include "book/book.h"
 #include "book/book_context.h"
+#include "book/page.h"
 #include "formats/epub/epub_parser.h"
 #include "formats/epub/epub_page_cache.h"
 #include "formats/common/page_cache_utils.h"
+#include "shared/text_token_constants.h"
 #include "shared/app_flow_utils.h"
 #include "ui/text.h"
 
@@ -363,12 +365,18 @@ void TestEpubPageCacheRoundtrip() {
   }
   epub_page_cache::SetCacheDirForTest(cache_dir);
 
-  // Build a Book with 2 pages, 1 chapter, and a title.
+  // Build a Book with 2 pages, 1 chapter, a title, and an inline link href.
   Book *book = MakeEpubBook("/tmp", "3dslibris_cache_roundtrip_book.epub");
   book->SetTitle("Cache Roundtrip Title");
   book->AppendPage();   // page 0 (empty buffer)
-  book->AppendPage();   // page 1 (empty buffer)
+  Page *linked_page = book->AppendPage();
+  const u16 href_id = book->RegisterInlineLinkHref("OEBPS/ch1.xhtml#section");
+  const uint32_t linked_buffer[] = {TEXT_LINK_START, href_id, 'G',
+                                    'o', TEXT_LINK_END};
+  linked_page->SetBuffer(linked_buffer,
+                         (int)(sizeof(linked_buffer) / sizeof(linked_buffer[0])));
   book->AddChapter(0, "Cache Chapter One", 0);
+  book->SetChapterAnchorPage("OEBPS/ch1.xhtml#section", 1);
 
   InvokeSave(book, kCacheBookPath);
 
@@ -387,6 +395,19 @@ void TestEpubPageCacheRoundtrip() {
   if (!book2->GetChapters().empty())
     ExpectTrue("cache roundtrip: chapter title survives",
                book2->GetChapters()[0].title == "Cache Chapter One");
+  ExpectTrue("cache roundtrip: inline href count survives",
+             book2->GetInlineLinkHrefCount() == 1);
+  const std::string *href = book2->GetInlineLinkHref(1);
+  ExpectTrue("cache roundtrip: inline href survives",
+             href && *href == "OEBPS/ch1.xhtml#section");
+  Page *loaded_linked_page = book2->GetPage(1);
+  ExpectTrue("cache roundtrip: link token page survives",
+             loaded_linked_page && loaded_linked_page->GetInlineLinkCount() == 1);
+  u16 anchor_page = 0;
+  ExpectTrue("cache roundtrip: inline anchor target survives",
+             book2->FindChapterAnchorPage("OEBPS/ch1.xhtml#section",
+                                          &anchor_page) &&
+                 anchor_page == 1);
 
   book->Close();
   book2->Close();
