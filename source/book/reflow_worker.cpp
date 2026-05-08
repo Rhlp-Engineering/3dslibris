@@ -75,22 +75,21 @@ void ReflowWorkerThreadFunc(void *arg) {
 
     w->started_at_ms = osGetTime();
     if (book->GetStatusReporter()) {
-      const u64 queue_ms = (w->submitted_at_ms && w->started_at_ms >= w->submitted_at_ms)
-                               ? (w->started_at_ms - w->submitted_at_ms)
-                               : 0;
+      const u64 queue_ms =
+          (w->submitted_at_ms && w->started_at_ms >= w->submitted_at_ms)
+              ? (w->started_at_ms - w->submitted_at_ms)
+              : 0;
       DBG_LOGF(book->GetStatusReporter(),
                "REFLOW[w]: open begin session=%u queue_ms=%llu book=%s",
-               (unsigned)w->session_id,
-               (unsigned long long)queue_ms,
+               (unsigned)w->session_id, (unsigned long long)queue_ms,
                book->GetFileName() ? book->GetFileName() : "");
     }
     w->job_result = book_parser::OpenPrepared(book);
     w->finished_at_ms = osGetTime();
     if (book->GetStatusReporter()) {
-      const u64 worker_ms =
-          (w->finished_at_ms >= w->started_at_ms)
-              ? (w->finished_at_ms - w->started_at_ms)
-              : 0;
+      const u64 worker_ms = (w->finished_at_ms >= w->started_at_ms)
+                                ? (w->finished_at_ms - w->started_at_ms)
+                                : 0;
       DBG_LOGF(book->GetStatusReporter(),
                "REFLOW[w]: open finish session=%u rc=%u worker_ms=%llu book=%s",
                (unsigned)w->session_id, (unsigned)w->job_result,
@@ -133,7 +132,8 @@ bool Book::StartAsyncReflowOpen(unsigned int session_id) {
   if (!reflow_worker_state || !reflow_worker_state->is_new_3ds)
     return false;
 
-  if (!reflow_worker_state->worker && !reflow_worker_state->worker_init_attempted) {
+  if (!reflow_worker_state->worker &&
+      !reflow_worker_state->worker_init_attempted) {
     reflow_worker_state->worker_init_attempted = true;
     ReflowWorkerState::Worker *w = new ReflowWorkerState::Worker();
     w->owner = this;
@@ -146,16 +146,16 @@ bool Book::StartAsyncReflowOpen(unsigned int session_id) {
     // Debug builds push parser, XML, and TOC work through this worker.
     // Small stacks here can corrupt unrelated libctru globals and then crash
     // the next main-thread HID poll instead of failing at the real site.
-    w->thread_handle = threadCreate(ReflowWorkerThreadFunc, w,
-                                    kReflowWorkerStackBytes, prio + 1, 1,
-                                    false);
+    w->thread_handle = threadCreate(
+        ReflowWorkerThreadFunc, w, kReflowWorkerStackBytes, prio + 1, 1, false);
     if (!w->thread_handle) {
       delete w;
       reflow_worker_state->worker = NULL;
       return false;
     }
     if (GetStatusReporter())
-      DBG_LOG(GetStatusReporter(), "REFLOW[w]: worker thread started on core 1");
+      DBG_LOG(GetStatusReporter(),
+              "REFLOW[w]: worker thread started on core 1");
   }
   if (!reflow_worker_state->worker)
     return false;

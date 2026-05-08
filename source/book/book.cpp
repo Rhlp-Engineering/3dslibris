@@ -33,35 +33,31 @@
 #include <string.h>
 #include <sys/param.h>
 
-namespace
-{
-  static bool HasExtCaseInsensitive(const std::string &name, const char *ext)
-  {
-    if (!ext)
+namespace {
+static bool HasExtCaseInsensitive(const std::string &name, const char *ext) {
+  if (!ext)
+    return false;
+  const size_t name_len = name.size();
+  const size_t ext_len = strlen(ext);
+  if (name_len < ext_len)
+    return false;
+  const size_t start = name_len - ext_len;
+  for (size_t i = 0; i < ext_len; i++) {
+    unsigned char a = (unsigned char)name[start + i];
+    unsigned char b = (unsigned char)ext[i];
+    if (a >= 'A' && a <= 'Z')
+      a = (unsigned char)(a - 'A' + 'a');
+    if (b >= 'A' && b <= 'Z')
+      b = (unsigned char)(b - 'A' + 'a');
+    if (a != b)
       return false;
-    const size_t name_len = name.size();
-    const size_t ext_len = strlen(ext);
-    if (name_len < ext_len)
-      return false;
-    const size_t start = name_len - ext_len;
-    for (size_t i = 0; i < ext_len; i++)
-    {
-      unsigned char a = (unsigned char)name[start + i];
-      unsigned char b = (unsigned char)ext[i];
-      if (a >= 'A' && a <= 'Z')
-        a = (unsigned char)(a - 'A' + 'a');
-      if (b >= 'A' && b <= 'Z')
-        b = (unsigned char)(b - 'A' + 'a');
-      if (a != b)
-        return false;
-    }
-    return true;
   }
+  return true;
+}
 
 } // namespace
 
-Book::Book(const BookContext &c) : ctx(c)
-{
+Book::Book(const BookContext &c) : ctx(c) {
   // State / Formats
   mupdf_state = NULL;
   cbz_state = NULL;
@@ -103,84 +99,95 @@ Book::Book(const BookContext &c) : ctx(c)
   ClearTocConfidence();
 }
 
-// Destructor for the Book class, responsible for cleaning up resources and closing the book if it's still open. Also logs the book closure if a status reporter is available.
-Book::~Book()
-{
+// Destructor for the Book class, responsible for cleaning up resources and
+// closing the book if it's still open. Also logs the book closure if a status
+// reporter is available.
+Book::~Book() {
 #ifdef DSLIBRIS_DEBUG
-  if (GetStatusReporter())
-  {
-    DBG_LOGF(GetStatusReporter(), "BOOK ~Book: path=%s/%s",
-             foldername.c_str(), filename.c_str());
+  if (GetStatusReporter()) {
+    DBG_LOGF(GetStatusReporter(), "BOOK ~Book: path=%s/%s", foldername.c_str(),
+             filename.c_str());
   }
 #endif
   Close();
-  if (coverPixels)
-  {
+  if (coverPixels) {
     delete[] coverPixels;
     coverPixels = nullptr;
   }
 }
 
-IStatusReporter *Book::GetStatusReporter() { return ctx.status_reporter; }
+IStatusReporter *Book::GetStatusReporter() {
+  return ctx.status_reporter;
+}
 
-Text *Book::GetText() { return ctx.text; }
+Text *Book::GetText() {
+  return ctx.text;
+}
 
-Prefs *Book::GetPrefs() { return ctx.prefs; }
+Prefs *Book::GetPrefs() {
+  return ctx.prefs;
+}
 
-int Book::GetParagraphSpacing()
-{
+int Book::GetParagraphSpacing() {
   return ctx.paragraph_spacing ? *ctx.paragraph_spacing : 0;
 }
 
-int Book::GetParagraphIndent()
-{
+int Book::GetParagraphIndent() {
   return ctx.paragraph_indent ? *ctx.paragraph_indent : 0;
 }
 
-int Book::GetOrientation() { return ctx.orientation ? *ctx.orientation : 0; }
+int Book::GetOrientation() {
+  return ctx.orientation ? *ctx.orientation : 0;
+}
 
-void Book::DrawBottomGradientBackground()
-{
+void Book::DrawBottomGradientBackground() {
   if (ctx.draw_background)
     ctx.draw_background(ctx.draw_background_user_data);
 }
 
-void Book::DrawTopGradientBackground()
-{
+void Book::DrawTopGradientBackground() {
   if (ctx.draw_top_background)
     ctx.draw_top_background(ctx.draw_top_background_user_data);
 }
 
-void Book::NotifySpineProgress(unsigned done, unsigned total)
-{
+void Book::NotifySpineProgress(unsigned done, unsigned total) {
   if (ctx.on_spine_progress)
     ctx.on_spine_progress(done, total, ctx.on_spine_progress_user_data);
 }
 
-void Book::SetFolderName(const char *name) { foldername = name; }
+void Book::SetFolderName(const char *name) {
+  foldername = name;
+}
 
-void Book::SetFileName(const char *name)
-{
+void Book::SetFileName(const char *name) {
   filename = name;
   ClearBrowserDisplayNameCache();
 }
 
-void Book::SetTitle(const char *name)
-{
+void Book::SetTitle(const char *name) {
   title = name;
   ClearBrowserDisplayNameCache();
 }
 
-void Book::SetAuthor(const std::string &name) { author = name; }
+void Book::SetAuthor(const std::string &name) {
+  author = name;
+}
 
-void Book::SetFolderName(const std::string &name) { foldername = name; }
+void Book::SetFolderName(const std::string &name) {
+  foldername = name;
+}
 
-std::list<u16> &Book::GetBookmarks() { return bookmarks; }
+std::list<u16> &Book::GetBookmarks() {
+  return bookmarks;
+}
 
-const std::list<u16> &Book::GetBookmarks() const { return bookmarks; }
-const std::vector<ChapterEntry> &Book::GetChapters() const { return chapters; }
-u16 Book::RegisterInlineLinkHref(const std::string &href)
-{
+const std::list<u16> &Book::GetBookmarks() const {
+  return bookmarks;
+}
+const std::vector<ChapterEntry> &Book::GetChapters() const {
+  return chapters;
+}
+u16 Book::RegisterInlineLinkHref(const std::string &href) {
   if (href.empty())
     return 0;
   std::unordered_map<std::string, u16>::const_iterator hit =
@@ -195,8 +202,7 @@ u16 Book::RegisterInlineLinkHref(const std::string &href)
   return id;
 }
 
-const std::string *Book::GetInlineLinkHref(u16 id) const
-{
+const std::string *Book::GetInlineLinkHref(u16 id) const {
   if (id == 0)
     return NULL;
   const size_t index = (size_t)(id - 1u);
@@ -205,21 +211,18 @@ const std::string *Book::GetInlineLinkHref(u16 id) const
   return &inline_link_hrefs[index];
 }
 
-u32 Book::GetInlineLinkHrefCount() const
-{
+u32 Book::GetInlineLinkHrefCount() const {
   return (u32)inline_link_hrefs.size();
 }
 
-void Book::ClearInlineLinks()
-{
+void Book::ClearInlineLinks() {
   inline_link_hrefs.clear();
   inline_link_href_index.clear();
   focused_inline_link_index = -1;
 }
 
 void Book::AddChapterAnchor(const std::string &docpath,
-                            const std::string &anchor_id)
-{
+                            const std::string &anchor_id) {
   if (docpath.empty() || anchor_id.empty())
     return;
   if (chapter_anchor_pages.size() >= 8192)
@@ -229,14 +232,12 @@ void Book::AddChapterAnchor(const std::string &docpath,
   if (key.empty())
     return;
 
-  if (chapter_anchor_pages.find(key) == chapter_anchor_pages.end())
-  {
+  if (chapter_anchor_pages.find(key) == chapter_anchor_pages.end()) {
     chapter_anchor_pages[key] = GetPageCount();
   }
 }
 
-void Book::SetChapterAnchorPage(const std::string &href, u16 page)
-{
+void Book::SetChapterAnchorPage(const std::string &href, u16 page) {
   std::string key = href_normalization::NormalizeAnchorHrefKey(href);
   if (key.empty())
     return;
@@ -266,8 +267,7 @@ void Book::SetChapterAnchorPage(const std::string &href, u16 page)
  * Ambiguous results (multiple distinct pages for the same tier) are skipped in
  * favour of the next tier to avoid silently jumping to the wrong page.
  */
-bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
-{
+bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const {
   if (!page_out)
     return false;
   std::string key = href_normalization::NormalizeAnchorHrefKey(href);
@@ -275,18 +275,15 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
     return false;
 
   auto hit = chapter_anchor_pages.find(key);
-  if (hit != chapter_anchor_pages.end())
-  {
+  if (hit != chapter_anchor_pages.end()) {
     *page_out = hit->second;
     return true;
   }
 
   // Fallback only for malformed files with inconsistent anchor case.
   std::string key_lc = href_normalization::ToLowerAsciiLocal(key);
-  for (const auto &kv : chapter_anchor_pages)
-  {
-    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc)
-    {
+  for (const auto &kv : chapter_anchor_pages) {
+    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc) {
       *page_out = kv.second;
       return true;
     }
@@ -295,11 +292,13 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
   // Robust fallback for malformed EPUBs where TOC path and parsed doc path
   // differ but anchor IDs are still consistent.
   size_t hash = key.find('#');
-  if (hash != std::string::npos && hash + 1 < key.size())
-  {
-    std::string key_path_lc = href_normalization::ToLowerAsciiLocal(key.substr(0, hash));
-    std::string key_base_lc = href_normalization::ToLowerAsciiLocal(href_normalization::BasenamePathLocal(key_path_lc));
-    std::string key_anchor_lc = href_normalization::ToLowerAsciiLocal(key.substr(hash + 1));
+  if (hash != std::string::npos && hash + 1 < key.size()) {
+    std::string key_path_lc =
+        href_normalization::ToLowerAsciiLocal(key.substr(0, hash));
+    std::string key_base_lc = href_normalization::ToLowerAsciiLocal(
+        href_normalization::BasenamePathLocal(key_path_lc));
+    std::string key_anchor_lc =
+        href_normalization::ToLowerAsciiLocal(key.substr(hash + 1));
     u16 target_doc_page = 0;
     bool has_target_doc =
         FindChapterDocStartPage(key_path_lc, &target_doc_page);
@@ -316,100 +315,81 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
     bool fuzzy_doc_found = false;
     u16 fuzzy_doc_page = 0;
     bool fuzzy_doc_ambiguous = false;
-    const std::string key_token = href_normalization::AnchorTokenKey(key_anchor_lc);
-    const std::string key_digits = href_normalization::AnchorDigits(key_anchor_lc);
+    const std::string key_token =
+        href_normalization::AnchorTokenKey(key_anchor_lc);
+    const std::string key_digits =
+        href_normalization::AnchorDigits(key_anchor_lc);
 
-    for (const auto &kv : chapter_anchor_pages)
-    {
+    for (const auto &kv : chapter_anchor_pages) {
       size_t kv_hash = kv.first.find('#');
       if (kv_hash == std::string::npos || kv_hash + 1 >= kv.first.size())
         continue;
-      std::string kv_path_lc = href_normalization::ToLowerAsciiLocal(kv.first.substr(0, kv_hash));
-      std::string kv_base_lc = href_normalization::ToLowerAsciiLocal(href_normalization::BasenamePathLocal(kv_path_lc));
+      std::string kv_path_lc =
+          href_normalization::ToLowerAsciiLocal(kv.first.substr(0, kv_hash));
+      std::string kv_base_lc = href_normalization::ToLowerAsciiLocal(
+          href_normalization::BasenamePathLocal(kv_path_lc));
       std::string kv_anchor_lc =
           href_normalization::ToLowerAsciiLocal(kv.first.substr(kv_hash + 1));
       bool exact_anchor = (kv_anchor_lc == key_anchor_lc);
 
-      if (exact_anchor)
-      {
-        if (!anchor_found)
-        {
+      if (exact_anchor) {
+        if (!anchor_found) {
           anchor_found = true;
           anchor_page = kv.second;
-        }
-        else if (anchor_page != kv.second)
-        {
+        } else if (anchor_page != kv.second) {
           anchor_ambiguous = true;
         }
 
-        if (has_target_doc)
-        {
+        if (has_target_doc) {
           u16 candidate_doc_page = 0;
           if (FindChapterDocStartPage(kv.first, &candidate_doc_page) &&
-              candidate_doc_page == target_doc_page)
-          {
-            if (!path_anchor_found)
-            {
+              candidate_doc_page == target_doc_page) {
+            if (!path_anchor_found) {
               path_anchor_found = true;
               path_anchor_page = kv.second;
-            }
-            else if (path_anchor_page != kv.second)
-            {
+            } else if (path_anchor_page != kv.second) {
               path_anchor_ambiguous = true;
             }
           }
         }
 
-        if (!key_base_lc.empty() && kv_base_lc == key_base_lc)
-        {
-          if (!base_anchor_found)
-          {
+        if (!key_base_lc.empty() && kv_base_lc == key_base_lc) {
+          if (!base_anchor_found) {
             base_anchor_found = true;
             base_anchor_page = kv.second;
-          }
-          else if (base_anchor_page != kv.second)
-          {
+          } else if (base_anchor_page != kv.second) {
             base_anchor_ambiguous = true;
           }
         }
       }
 
-      if (has_target_doc && !path_anchor_found && !key_token.empty())
-      {
+      if (has_target_doc && !path_anchor_found && !key_token.empty()) {
         u16 candidate_doc_page = 0;
         if (FindChapterDocStartPage(kv.first, &candidate_doc_page) &&
-            candidate_doc_page == target_doc_page)
-        {
-          std::string cand_token = href_normalization::AnchorTokenKey(kv_anchor_lc);
-          std::string cand_digits = href_normalization::AnchorDigits(kv_anchor_lc);
+            candidate_doc_page == target_doc_page) {
+          std::string cand_token =
+              href_normalization::AnchorTokenKey(kv_anchor_lc);
+          std::string cand_digits =
+              href_normalization::AnchorDigits(kv_anchor_lc);
           bool fuzzy_match = false;
-          if (!cand_token.empty() && cand_token == key_token)
-          {
+          if (!cand_token.empty() && cand_token == key_token) {
             fuzzy_match = true;
-          }
-          else if (!key_digits.empty() && !cand_digits.empty() &&
-                   cand_digits == key_digits)
-          {
+          } else if (!key_digits.empty() && !cand_digits.empty() &&
+                     cand_digits == key_digits) {
             fuzzy_match = true;
-          }
-          else if (!key_digits.empty() && !cand_token.empty() &&
-                   cand_token.size() > key_digits.size() &&
-                   cand_token.size() <= key_digits.size() + 4 &&
-                   cand_token.compare(cand_token.size() - key_digits.size(),
-                                      key_digits.size(), key_digits) == 0)
-          {
+          } else if (!key_digits.empty() && !cand_token.empty() &&
+                     cand_token.size() > key_digits.size() &&
+                     cand_token.size() <= key_digits.size() + 4 &&
+                     cand_token.compare(cand_token.size() - key_digits.size(),
+                                        key_digits.size(), key_digits) == 0) {
             fuzzy_match = true;
           }
 
-          if (fuzzy_match)
-          {
-            if (!fuzzy_doc_found)
-            {
+          if (fuzzy_match) {
+            if (!fuzzy_doc_found) {
               fuzzy_doc_found = true;
               fuzzy_doc_page = kv.second;
-            }
-            else if (fuzzy_doc_page != kv.second)
-            {
+            } else if (fuzzy_doc_page != kv.second) {
               fuzzy_doc_ambiguous = true;
             }
           }
@@ -417,23 +397,19 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
       }
     }
 
-    if (path_anchor_found && !path_anchor_ambiguous)
-    {
+    if (path_anchor_found && !path_anchor_ambiguous) {
       *page_out = path_anchor_page;
       return true;
     }
-    if (fuzzy_doc_found && !fuzzy_doc_ambiguous)
-    {
+    if (fuzzy_doc_found && !fuzzy_doc_ambiguous) {
       *page_out = fuzzy_doc_page;
       return true;
     }
-    if (base_anchor_found && !base_anchor_ambiguous)
-    {
+    if (base_anchor_found && !base_anchor_ambiguous) {
       *page_out = base_anchor_page;
       return true;
     }
-    if (anchor_found && !anchor_ambiguous)
-    {
+    if (anchor_found && !anchor_ambiguous) {
       *page_out = anchor_page;
       return true;
     }
@@ -442,24 +418,24 @@ bool Book::FindChapterAnchorPage(const std::string &href, u16 *page_out) const
   return false;
 }
 
-size_t Book::GetChapterAnchorCount() const
-{
+size_t Book::GetChapterAnchorCount() const {
   return chapter_anchor_pages.size();
 }
 
 const std::unordered_map<std::string, u16> &
-Book::GetChapterAnchorPages() const
-{
+Book::GetChapterAnchorPages() const {
   return chapter_anchor_pages;
 }
 
-void Book::ClearChapterAnchors() { chapter_anchor_pages.clear(); }
+void Book::ClearChapterAnchors() {
+  chapter_anchor_pages.clear();
+}
 
-void Book::SetChapterDocStartPage(const std::string &docpath, u16 page)
-{
+void Book::SetChapterDocStartPage(const std::string &docpath, u16 page) {
   if (docpath.empty())
     return;
-  std::string key = href_normalization::NormalizeDocStartPathKey(docpath, false);
+  std::string key =
+      href_normalization::NormalizeDocStartPathKey(docpath, false);
   if (key.empty())
     return;
   if (chapter_doc_start_pages.find(key) == chapter_doc_start_pages.end())
@@ -467,8 +443,7 @@ void Book::SetChapterDocStartPage(const std::string &docpath, u16 page)
 }
 
 bool Book::FindChapterDocStartPage(const std::string &href,
-                                   u16 *page_out) const
-{
+                                   u16 *page_out) const {
   if (!page_out)
     return false;
   std::string key = href_normalization::NormalizeDocStartPathKey(href, true);
@@ -476,17 +451,14 @@ bool Book::FindChapterDocStartPage(const std::string &href,
     return false;
 
   auto hit = chapter_doc_start_pages.find(key);
-  if (hit != chapter_doc_start_pages.end())
-  {
+  if (hit != chapter_doc_start_pages.end()) {
     *page_out = hit->second;
     return true;
   }
 
   std::string key_lc = href_normalization::ToLowerAsciiLocal(key);
-  for (const auto &kv : chapter_doc_start_pages)
-  {
-    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc)
-    {
+  for (const auto &kv : chapter_doc_start_pages) {
+    if (href_normalization::ToLowerAsciiLocal(kv.first) == key_lc) {
       *page_out = kv.second;
       return true;
     }
@@ -496,15 +468,15 @@ bool Book::FindChapterDocStartPage(const std::string &href,
 }
 
 const std::unordered_map<std::string, u16> &
-Book::GetChapterDocStartPages() const
-{
+Book::GetChapterDocStartPages() const {
   return chapter_doc_start_pages;
 }
 
-void Book::ClearChapterDocStartPages() { chapter_doc_start_pages.clear(); }
+void Book::ClearChapterDocStartPages() {
+  chapter_doc_start_pages.clear();
+}
 
-void Book::AddChapter(u16 page, const std::string &title, u8 level)
-{
+void Book::AddChapter(u16 page, const std::string &title, u8 level) {
   ChapterEntry entry;
   entry.page = page;
   entry.level = level;
@@ -512,20 +484,26 @@ void Book::AddChapter(u16 page, const std::string &title, u8 level)
   chapters.push_back(entry);
 }
 
-void Book::ClearChapters() { chapters.clear(); }
+void Book::ClearChapters() {
+  chapters.clear();
+}
 
-bool Book::IsPdf() const { return format == FORMAT_PDF; }
+bool Book::IsPdf() const {
+  return format == FORMAT_PDF;
+}
 
-bool Book::IsCbz() const { return format == FORMAT_CBZ; }
+bool Book::IsCbz() const {
+  return format == FORMAT_CBZ;
+}
 
-bool Book::IsFixedLayout() const { return IsPdf() || IsCbz(); }
+bool Book::IsFixedLayout() const {
+  return IsPdf() || IsCbz();
+}
 
-const char *Book::GetFixedLayoutLabel() const
-{
+const char *Book::GetFixedLayoutLabel() const {
   if (IsCbz())
     return "CBZ";
-  if (IsPdf() && mupdf_state)
-  {
+  if (IsPdf() && mupdf_state) {
     return app_flow_utils::GetMuPdfDocumentLabel(mupdf_state->document_kind);
   }
   if (IsPdf())
@@ -533,25 +511,35 @@ const char *Book::GetFixedLayoutLabel() const
   return "BOOK";
 }
 
-bool Book::UsesTextLayoutSettings() const { return !IsFixedLayout(); }
+bool Book::UsesTextLayoutSettings() const {
+  return !IsFixedLayout();
+}
 
-int Book::GetFocusedInlineLinkIndex() const { return focused_inline_link_index; }
+int Book::GetFocusedInlineLinkIndex() const {
+  return focused_inline_link_index;
+}
 
-void Book::SetFocusedInlineLinkIndex(int index)
-{
+void Book::SetFocusedInlineLinkIndex(int index) {
   focused_inline_link_index = index;
 }
 
-void Book::ClearFocusedInlineLink() { focused_inline_link_index = -1; }
+void Book::ClearFocusedInlineLink() {
+  focused_inline_link_index = -1;
+}
 
-bool Book::SupportsBookmarks() const { return !IsFixedLayout(); }
+bool Book::SupportsBookmarks() const {
+  return !IsFixedLayout();
+}
 
-Page *Book::GetPage() { return pages[position]; }
+Page *Book::GetPage() {
+  return pages[position];
+}
 
-Page *Book::GetPage(int index) { return pages[index]; }
+Page *Book::GetPage(int index) {
+  return pages[index];
+}
 
-u16 Book::GetPageCount()
-{
+u16 Book::GetPageCount() {
   if (IsPdf() && mupdf_state)
     return mupdf_state->page_count;
   if (IsCbz() && cbz_state)
@@ -559,35 +547,45 @@ u16 Book::GetPageCount()
   return pages.size();
 }
 
-const char *Book::GetTitle() { return title.c_str(); }
+const char *Book::GetTitle() {
+  return title.c_str();
+}
 
-const char *Book::GetFileName() { return filename.c_str(); }
+const char *Book::GetFileName() {
+  return filename.c_str();
+}
 
-const char *Book::GetFolderName() { return foldername.c_str(); }
+const char *Book::GetFolderName() {
+  return foldername.c_str();
+}
 
-int Book::GetPosition() { return position; }
+int Book::GetPosition() {
+  return position;
+}
 
-void Book::SetPage(u16 index) { position = index; }
+void Book::SetPage(u16 index) {
+  position = index;
+}
 
-void Book::SetPosition(int pos) { position = pos; }
+void Book::SetPosition(int pos) {
+  position = pos;
+}
 
-Page *Book::AppendPage()
-{
+Page *Book::AppendPage() {
   Page *page = new Page(this);
   pages.push_back(page);
   return page;
 }
 
-void Book::ReservePageCapacity(size_t incoming_pages)
-{
-  const size_t required_capacity = page_buffer_utils::RequiredPageVectorCapacity(
-      pages.size(), pages.capacity(), incoming_pages);
+void Book::ReservePageCapacity(size_t incoming_pages) {
+  const size_t required_capacity =
+      page_buffer_utils::RequiredPageVectorCapacity(
+          pages.size(), pages.capacity(), incoming_pages);
   if (required_capacity > pages.capacity())
     pages.reserve(required_capacity);
 }
 
-void Book::FlushPendingCacheSaves()
-{
+void Book::FlushPendingCacheSaves() {
   IStatusReporter *r = GetStatusReporter();
   const bool flush_epub =
       reflow_cache_save_utils::ShouldFlushDeferredCacheSaveOnClose(
@@ -597,22 +595,21 @@ void Book::FlushPendingCacheSaves()
       reflow_cache_save_utils::ShouldFlushDeferredCacheSaveOnClose(
           mobi_page_cache_save_pending, IsAsyncReflowOpenPending(),
           (unsigned int)GetPageCount());
-  if (flush_epub)
-  {
-    DBG_LOGF(r, "BOOK flush-cache: save-epub begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+  if (flush_epub) {
+    DBG_LOGF(r, "BOOK flush-cache: save-epub begin pages=%d book=%s",
+             (int)pages.size(), filename.c_str());
     epub_page_cache::SavePending(this, true);
     DBG_LOGF(r, "BOOK flush-cache: save-epub done book=%s", filename.c_str());
   }
-  if (flush_mobi)
-  {
-    DBG_LOGF(r, "BOOK flush-cache: save-mobi begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+  if (flush_mobi) {
+    DBG_LOGF(r, "BOOK flush-cache: save-mobi begin pages=%d book=%s",
+             (int)pages.size(), filename.c_str());
     mobi_page_cache::SavePending(this);
     DBG_LOGF(r, "BOOK flush-cache: save-mobi done book=%s", filename.c_str());
   }
 }
 
-void Book::Close()
-{
+void Book::Close() {
   IStatusReporter *r = GetStatusReporter();
   DBG_LOGF(r, "BOOK close: begin book=%s", filename.c_str());
   const bool flush_pending_epub_cache =
@@ -625,36 +622,40 @@ void Book::Close()
           (unsigned int)GetPageCount());
   DBG_LOGF(r, "BOOK close: cancel-async-reflow book=%s", filename.c_str());
   CancelAsyncReflowOpen();
-  if (flush_pending_epub_cache)
-  {
-    DBG_LOGF(r, "BOOK close: save-epub-cache begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+  if (flush_pending_epub_cache) {
+    DBG_LOGF(r, "BOOK close: save-epub-cache begin pages=%d book=%s",
+             (int)pages.size(), filename.c_str());
     epub_page_cache::SavePending(this, true);
     DBG_LOGF(r, "BOOK close: save-epub-cache done book=%s", filename.c_str());
   }
-  if (flush_pending_mobi_cache)
-  {
-    DBG_LOGF(r, "BOOK close: save-mobi-cache begin pages=%d book=%s", (int)pages.size(), filename.c_str());
+  if (flush_pending_mobi_cache) {
+    DBG_LOGF(r, "BOOK close: save-mobi-cache begin pages=%d book=%s",
+             (int)pages.size(), filename.c_str());
     mobi_page_cache::SavePending(this);
     DBG_LOGF(r, "BOOK close: save-mobi-cache done book=%s", filename.c_str());
   }
   epub_page_cache_save_pending = false;
   mobi_page_cache_save_pending = false;
-  DBG_LOGF(r, "BOOK close: clear-pages count=%d book=%s", (int)pages.size(), filename.c_str());
+  DBG_LOGF(r, "BOOK close: clear-pages count=%d book=%s", (int)pages.size(),
+           filename.c_str());
   std::vector<Page *>::iterator it = pages.begin();
-  while (it != pages.end())
-  {
+  while (it != pages.end()) {
     delete *it;
     *it = nullptr;
     ++it;
   }
-  { std::vector<Page *>().swap(pages); }
+  {
+    std::vector<Page *>().swap(pages);
+  }
   DBG_LOGF(r, "BOOK close: reset-reflow book=%s", filename.c_str());
   ResetReflowWorkerState();
   DBG_LOGF(r, "BOOK close: reset-cbz book=%s", filename.c_str());
   ResetCbzState();
   DBG_LOGF(r, "BOOK close: reset-mupdf book=%s", filename.c_str());
   ResetMuPdfState();
-  { std::vector<ChapterEntry>().swap(chapters); }
+  {
+    std::vector<ChapterEntry>().swap(chapters);
+  }
   ClearChapterAnchors();
   ClearChapterDocStartPages();
   ClearInlineLinks();
@@ -665,8 +666,7 @@ void Book::Close()
   DBG_LOGF(r, "BOOK close: done book=%s", filename.c_str());
 }
 
-void Book::ResetCbzFailureState()
-{
+void Book::ResetCbzFailureState() {
   if (!IsCbz() || !cbz_state)
     return;
   cbz_state->failed_page = -1;
@@ -674,38 +674,39 @@ void Book::ResetCbzFailureState()
   cbz_state->last_error.clear();
 }
 
-bool Book::IsMobiFile() const { return HasExtCaseInsensitive(filename, ".mobi"); }
+bool Book::IsMobiFile() const {
+  return HasExtCaseInsensitive(filename, ".mobi");
+}
 
-bool Book::GetMobiLineWrapFix() const { return mobi_line_wrap_fix; }
+bool Book::GetMobiLineWrapFix() const {
+  return mobi_line_wrap_fix;
+}
 
-void Book::SetMobiLineWrapFix(bool enabled) { mobi_line_wrap_fix = enabled; }
+void Book::SetMobiLineWrapFix(bool enabled) {
+  mobi_line_wrap_fix = enabled;
+}
 
-void Book::MarkMobiRenderSettingsApplied(bool enabled)
-{
+void Book::MarkMobiRenderSettingsApplied(bool enabled) {
   parsed_with_mobi_line_wrap_fix = enabled;
 }
 
-bool Book::NeedsMobiRenderRefresh() const
-{
+bool Book::NeedsMobiRenderRefresh() const {
   return IsMobiFile() && parsed_with_mobi_line_wrap_fix != mobi_line_wrap_fix;
 }
 
-bool Book::HasPendingEpubPageCacheSave() const
-{
+bool Book::HasPendingEpubPageCacheSave() const {
   return epub_page_cache_save_pending;
 }
 
-void Book::SetPendingEpubPageCacheSave(bool pending)
-{
+void Book::SetPendingEpubPageCacheSave(bool pending) {
   epub_page_cache_save_pending = pending;
 }
 
 void Book::SetPendingEpubPageCacheSaveWithParams(
     int pixel_size, int line_spacing, int paragraph_spacing,
-    int paragraph_indent, int orientation,
-    int margin_left, int margin_right, int margin_top, int margin_bottom,
-    const char *regular_font, bool respect_publisher_font_size)
-{
+    int paragraph_indent, int orientation, int margin_left, int margin_right,
+    int margin_top, int margin_bottom, const char *regular_font,
+    bool respect_publisher_font_size) {
   epub_page_cache_save_pending = true;
   epub_cache_save_params.pixel_size = pixel_size;
   epub_cache_save_params.line_spacing = line_spacing;
@@ -717,30 +718,27 @@ void Book::SetPendingEpubPageCacheSaveWithParams(
   epub_cache_save_params.margin_top = margin_top;
   epub_cache_save_params.margin_bottom = margin_bottom;
   epub_cache_save_params.regular_font = regular_font ? regular_font : "";
-  epub_cache_save_params.respect_publisher_font_size = respect_publisher_font_size;
+  epub_cache_save_params.respect_publisher_font_size =
+      respect_publisher_font_size;
 }
 
-const Book::EpubCacheSaveParams &Book::GetEpubCacheSaveParams() const
-{
+const Book::EpubCacheSaveParams &Book::GetEpubCacheSaveParams() const {
   return epub_cache_save_params;
 }
 
-bool Book::HasPendingMobiPageCacheSave() const
-{
+bool Book::HasPendingMobiPageCacheSave() const {
   return mobi_page_cache_save_pending;
 }
 
-void Book::SetPendingMobiPageCacheSave(bool pending)
-{
+void Book::SetPendingMobiPageCacheSave(bool pending) {
   mobi_page_cache_save_pending = pending;
 }
 
 void Book::SetPendingMobiPageCacheSaveWithParams(
     int pixel_size, int line_spacing, int paragraph_spacing,
-    int paragraph_indent, int orientation,
-    int margin_left, int margin_right, int margin_top, int margin_bottom,
-    const char *regular_font, bool line_wrap_fix_enabled)
-{
+    int paragraph_indent, int orientation, int margin_left, int margin_right,
+    int margin_top, int margin_bottom, const char *regular_font,
+    bool line_wrap_fix_enabled) {
   mobi_page_cache_save_pending = true;
   mobi_cache_save_params.pixel_size = pixel_size;
   mobi_cache_save_params.line_spacing = line_spacing;
@@ -755,27 +753,34 @@ void Book::SetPendingMobiPageCacheSaveWithParams(
   mobi_cache_save_params.line_wrap_fix_enabled = line_wrap_fix_enabled;
 }
 
-const Book::MobiCacheSaveParams &Book::GetMobiCacheSaveParams() const
-{
+const Book::MobiCacheSaveParams &Book::GetMobiCacheSaveParams() const {
   return mobi_cache_save_params;
 }
 
-unsigned int Book::GetLayoutRevision() const { return layout_revision; }
+unsigned int Book::GetLayoutRevision() const {
+  return layout_revision;
+}
 
-void Book::SetLayoutRevision(unsigned int revision)
-{
+void Book::SetLayoutRevision(unsigned int revision) {
   layout_revision = revision;
 }
 
-unsigned int Book::GetOpenSessionId() const { return open_session_id_; }
+unsigned int Book::GetOpenSessionId() const {
+  return open_session_id_;
+}
 
-void Book::SetOpenSessionId(unsigned int session_id)
-{
+void Book::SetOpenSessionId(unsigned int session_id) {
   open_session_id_ = session_id;
 }
 
-bool Book::IsOpenAbortRequested() const { return open_abort_requested_; }
+bool Book::IsOpenAbortRequested() const {
+  return open_abort_requested_;
+}
 
-void Book::RequestAbortOpen() { open_abort_requested_ = true; }
+void Book::RequestAbortOpen() {
+  open_abort_requested_ = true;
+}
 
-void Book::ClearOpenAbortRequest() { open_abort_requested_ = false; }
+void Book::ClearOpenAbortRequest() {
+  open_abort_requested_ = false;
+}

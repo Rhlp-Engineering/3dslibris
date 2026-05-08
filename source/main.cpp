@@ -33,12 +33,10 @@
 #include "shared/path_utils.h"
 #include "app/version.h"
 
-namespace
-{
+namespace {
 
 #ifdef DSLIBRIS_DEBUG
-void ShutdownTrace(const char *fmt, ...)
-{
+void ShutdownTrace(const char *fmt, ...) {
   if (!fmt)
     return;
 
@@ -50,8 +48,7 @@ void ShutdownTrace(const char *fmt, ...)
   time_t rawtime;
   time(&rawtime);
   struct tm *info = localtime(&rawtime);
-  if (!info)
-  {
+  if (!info) {
     fclose(log);
     return;
   }
@@ -66,41 +63,39 @@ void ShutdownTrace(const char *fmt, ...)
   fclose(log);
 }
 #else
-void ShutdownTrace(const char *fmt, ...)
-{
+void ShutdownTrace(const char *fmt, ...) {
   (void)fmt;
 }
 #endif
 
 } // namespace
 
-static void PresentCurrentFrameToBothBuffers(Text *presenter)
-{
+static void PresentCurrentFrameToBothBuffers(Text *presenter) {
   // Re-blit before each swap so both physical backbuffers receive the same
   // software-rendered frame. Swapping twice without re-blitting would simply
   // alternate between a fresh fatal screen and a stale previous frame.
-  for (int i = 0; i < 2; i++)
-  {
+  for (int i = 0; i < 2; i++) {
     if (presenter)
       presenter->BlitToFramebuffer(); // Blit to backbuffer before each swap.
-    gfxFlushBuffers();                // Ensure the backbuffer is updated before swapping.
-    gfxSwapBuffers();                 // Swap front and back buffers to present the frame.
-    gspWaitForVBlank();               // Wait for vertical blank to avoid tearing and sync with display refresh.
+    gfxFlushBuffers();  // Ensure the backbuffer is updated before swapping.
+    gfxSwapBuffers();   // Swap front and back buffers to present the frame.
+    gspWaitForVBlank(); // Wait for vertical blank to avoid tearing and sync
+                        // with display refresh.
   }
 }
 
 //! \param vblanks blanking intervals to wait, -1 for forever, default = -1
-int halt(Text *presenter, int vblanks)
-{
+int halt(Text *presenter, int vblanks) {
   // Present the current frame to both buffers so we don't alternate between a
   // stale previous frame and the latest fatal/console screen.
   PresentCurrentFrameToBothBuffers(presenter);
 
   int timer = vblanks;
-  while (aptMainLoop())
-  {
-    hidScanInput();            // Updates the state of the input, must be called before reading keys.
-    u32 kDown = hidKeysDown(); // Gets the keys that were just pressed in this frame (edge-triggered).
+  while (aptMainLoop()) {
+    hidScanInput(); // Updates the state of the input, must be called before
+                    // reading keys.
+    u32 kDown = hidKeysDown(); // Gets the keys that were just pressed in this
+                               // frame (edge-triggered).
     if (kDown & KEY_START)
       break;
     if (timer == 0)
@@ -108,7 +103,8 @@ int halt(Text *presenter, int vblanks)
     else if (timer > 0)
       timer--;
 
-    // In case of a long wait, keep the frame updated to show any status messages.
+    // In case of a long wait, keep the frame updated to show any status
+    // messages.
     gfxFlushBuffers();
     gfxSwapBuffers();
     gspWaitForVBlank();
@@ -116,16 +112,15 @@ int halt(Text *presenter, int vblanks)
   return 1;
 }
 
-// Overload for convenience when no presenter is available (e.g. early init failure).
+// Overload for convenience when no presenter is available (e.g. early init
+// failure).
 //! \param vblanks blanking intervals to wait, -1 for forever, default = -1
-int halt(Text *presenter, const char *msg, int vblanks)
-{
+int halt(Text *presenter, const char *msg, int vblanks) {
   printf("%s\n", msg);
   return halt(presenter, vblanks);
 }
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
   // Initialize 3DS services
   gfxInitDefault();
   // Use console on bottom screen for init messages.
@@ -134,10 +129,10 @@ int main(int argc, char **argv)
 
   bool is_new_3ds = false;
   APT_CheckNew3DS(&is_new_3ds);
-  if (is_new_3ds)
-  {
+  if (is_new_3ds) {
     osSetSpeedupEnable(true);
-    // APT_SetAppCpuTimeLimit(30); // Optional: increase CPU time limit for more demanding tasks. Disabled to test.
+    // APT_SetAppCpuTimeLimit(30); // Optional: increase CPU time limit for more
+    // demanding tasks. Disabled to test.
   }
 
   printf("================================\n");
@@ -150,7 +145,10 @@ int main(int argc, char **argv)
   gfxSwapBuffers();
   gspWaitForVBlank();
 
-  bool romfs_ready = (romfsInit() == 0); // RomFS is optional; if it fails, built-in assets won't be available but the app can still run with SD card assets.
+  bool romfs_ready =
+      (romfsInit() ==
+       0); // RomFS is optional; if it fails, built-in assets won't be available
+           // but the app can still run with SD card assets.
   if (!romfs_ready)
     printf("[WARN] romfsInit failed; built-in CIA assets are unavailable.\n");
 
@@ -166,7 +164,8 @@ int main(int argc, char **argv)
 
   // Run the app, which takes over the main loop until exit.
   App *app = new App();
-  App::SetInstance(app); // Set the global instance pointer for access in other modules.
+  App::SetInstance(
+      app); // Set the global instance pointer for access in other modules.
   int result = app->Run();
 
   DBG_LOGF(app, "SHUTDOWN begin env=%s result=%d",
@@ -181,20 +180,17 @@ int main(int argc, char **argv)
   app = nullptr;
   ShutdownTrace("SHUTDOWN App destructor done");
 
-  if (romfs_ready)
-  {
+  if (romfs_ready) {
     ShutdownTrace("SHUTDOWN romfsExit begin");
     romfsExit();
     ShutdownTrace("SHUTDOWN romfsExit done");
   }
 
   // If Run() returned early (error), wait for user
-  if (result != 0)
-  {
+  if (result != 0) {
     printf("\nPress START to exit.\n");
     PresentCurrentFrameToBothBuffers(NULL);
-    while (aptMainLoop())
-    {
+    while (aptMainLoop()) {
       hidScanInput();
       if (hidKeysDown() & KEY_START)
         break;
@@ -205,7 +201,8 @@ int main(int argc, char **argv)
   }
 
   ShutdownTrace("SHUTDOWN gfxExit begin");
-  gfxExit(); // Cleanly exit the graphics system and return to the 3DS home menu.
+  gfxExit(); // Cleanly exit the graphics system and return to the 3DS home
+             // menu.
   ShutdownTrace("SHUTDOWN gfxExit done");
   ShutdownTrace("SHUTDOWN returning normally");
   return 0;

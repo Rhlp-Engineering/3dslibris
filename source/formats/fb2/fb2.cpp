@@ -177,7 +177,9 @@ static bool binary_done_check(void *userData) {
   return s->done || s->too_large;
 }
 
-static bool noop_done_check(void *) { return false; }
+static bool noop_done_check(void *) {
+  return false;
+}
 
 static int DecodeAndScaleToCover(Book *book, const u8 *data, int size) {
   if (!book || !data || size <= 0)
@@ -193,10 +195,9 @@ static int DecodeAndScaleToCover(Book *book, const u8 *data, int size) {
     return 12;
   }
 
-  const aspect_fit_utils::Placement placement =
-      aspect_fit_utils::FitInsideBox(
-          0, 0, cover_layout::kBrowserCoverThumbWidth,
-          cover_layout::kBrowserCoverThumbHeight, imgW, imgH, false);
+  const aspect_fit_utils::Placement placement = aspect_fit_utils::FitInsideBox(
+      0, 0, cover_layout::kBrowserCoverThumbWidth,
+      cover_layout::kBrowserCoverThumbHeight, imgW, imgH, false);
   int finalW = placement.width;
   int finalH = placement.height;
   const float scale =

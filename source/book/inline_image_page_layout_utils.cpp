@@ -38,10 +38,9 @@ InlineImagePagePlacement ResolveInlineImagePagePlacement(
 
   // PAGE images/covers should fill the available page box.
   // Unlike inline/band images, page placement is allowed to upscale.
-  const aspect_fit_utils::Placement placement =
-      aspect_fit_utils::FitInsideBox(left, top, out.avail_width,
-                                     out.avail_height, src_width, src_height,
-                                     true);
+  const aspect_fit_utils::Placement placement = aspect_fit_utils::FitInsideBox(
+      left, top, out.avail_width, out.avail_height, src_width, src_height,
+      true);
   out.draw_width = placement.width;
   out.draw_height = placement.height;
   out.start_x = placement.x;

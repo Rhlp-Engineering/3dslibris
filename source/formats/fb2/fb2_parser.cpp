@@ -47,10 +47,9 @@ static void BuildFb2FallbackChapters(Book *book) {
         (i + 1 < lines.size()) &&
         plain_parser::LooksLikePlainChapterHeading(lines[i + 1], &next_strong);
 
-    if (curr_candidate &&
-        plain_parser::ShouldAcceptHeuristicHeading(lines[i], prev_blank,
-                                                   next_blank, prev_candidate,
-                                                   next_candidate, curr_strong))
+    if (curr_candidate && plain_parser::ShouldAcceptHeuristicHeading(
+                              lines[i], prev_blank, next_blank, prev_candidate,
+                              next_candidate, curr_strong))
       plain_parser::AddChapterAtPageIfUnique(book, line_pages[i], lines[i], 0);
 
     prev_blank = curr_blank;
@@ -64,9 +63,9 @@ namespace fb2_parser {
 
 uint8_t Parse(Book *book, const char *path, bool fulltext,
               const BookParseDeps &deps) {
-  return xml_book_parser::ParseXmlBookFile(book, path, fulltext, deps,
-                                           BuildFb2FallbackChapters,
-                                           plain_parser::SetNonEpubTocConfidence);
+  return xml_book_parser::ParseXmlBookFile(
+      book, path, fulltext, deps, BuildFb2FallbackChapters,
+      plain_parser::SetNonEpubTocConfidence);
 }
 
 int ExtractCover(Book *book, const std::string &path) {

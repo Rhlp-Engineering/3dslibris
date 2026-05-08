@@ -20,10 +20,9 @@ static bool AssignCoverFromRgb565(Book *book, const uint16_t *src, int src_w,
   if (!book || !src || src_w <= 0 || src_h <= 0)
     return false;
 
-  const aspect_fit_utils::Placement placement =
-      aspect_fit_utils::FitInsideBox(
-          0, 0, cover_layout::kBrowserCoverThumbWidth,
-          cover_layout::kBrowserCoverThumbHeight, src_w, src_h, false);
+  const aspect_fit_utils::Placement placement = aspect_fit_utils::FitInsideBox(
+      0, 0, cover_layout::kBrowserCoverThumbWidth,
+      cover_layout::kBrowserCoverThumbHeight, src_w, src_h, false);
   const int dst_w = placement.width;
   const int dst_h = placement.height;
   const float scale =
@@ -65,8 +64,7 @@ int pdf_extract_cover(Book *book, const std::string &pdfpath) {
     return 1;
 
   InitMuPdfLocks();
-  fz_context *ctx = fz_new_context(NULL, &g_mupdf_locks_ctx,
-                                   FZ_STORE_DEFAULT);
+  fz_context *ctx = fz_new_context(NULL, &g_mupdf_locks_ctx, FZ_STORE_DEFAULT);
   fz_document *doc = NULL;
   int rc = 0;
 
@@ -121,8 +119,8 @@ int pdf_extract_cover(Book *book, const std::string &pdfpath) {
                (float)cover_layout::kBrowserCoverThumbHeight / page_height);
   const float render_scale = std::max(0.25f, fit_scale * 2.0f);
   RenderedMuPdfBitmap rendered;
-  if (!RenderMuPdfBitmap(ctx, doc, 0, render_scale, &rendered, NULL, NULL,
-                         NULL, NULL, NULL) ||
+  if (!RenderMuPdfBitmap(ctx, doc, 0, render_scale, &rendered, NULL, NULL, NULL,
+                         NULL, NULL) ||
       rendered.width <= 0 || rendered.height <= 0 || rendered.pixels.empty()) {
     fz_drop_document(ctx, doc);
     fz_drop_context(ctx);
