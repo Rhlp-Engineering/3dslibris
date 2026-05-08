@@ -1,5 +1,6 @@
 #include "formats/cbz/cbz_parser.h"
-#include "formats/cbz/cbz.h"
+
+#include "formats/cbz/cbz_document.h"
 
 namespace cbz_parser {
 
