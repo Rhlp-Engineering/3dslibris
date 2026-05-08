@@ -6,6 +6,8 @@
 
 namespace utf8_utils {
 
+void AppendUtf8Codepoint(std::string *out, uint32_t cp);
+
 bool IsValidUtf8(const std::string &s);
 bool IsValidUtf8(const char *s);
 

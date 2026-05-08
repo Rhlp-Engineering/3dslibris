@@ -162,10 +162,8 @@ XmlParseResult ParseXmlZipEntryTransformed(unzFile uf,
   if (!parser)
     return BuildParseError(NULL, 0);
 
-  static std::vector<char> buffer;
-  if (buffer.size() < chunk_size)
-    buffer.resize(chunk_size);
-  static std::string transformed;
+  std::vector<char> buffer(chunk_size);
+  std::string transformed;
   XmlParseResult result;
   while (true) {
     if (ShouldAbortParse(options)) {

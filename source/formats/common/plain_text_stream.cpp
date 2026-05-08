@@ -50,6 +50,8 @@ void InitState(State *state, const parsedata_t &base_parsedata,
   state->initialized = false;
   state->completed = false;
   state->text_bytes_fed = 0;
+  state->curr_scratch.clear();
+  state->next_scratch.clear();
   state->curr = {nullptr, 0, false, false};
   state->next = {nullptr, 0, false, false};
   parse_push(&state->parsedata, TAG_PRE);
@@ -90,9 +92,9 @@ bool ContinueState(State *state, const std::string &text_utf8, u32 budget_ms,
     if (heuristic_headings) {
       // Construct temporary strings only for the heuristic heading path (TXT
       // format). For MOBI, detect_heuristic_headings is false so this is skipped.
-      static std::string curr_str;
+      std::string &curr_str = state->curr_scratch;
       curr_str.assign(state->curr.data, state->curr.size);
-      static std::string next_str;
+      std::string &next_str = state->next_scratch;
       if (state->next.valid)
         next_str.assign(state->next.data, state->next.size);
       else

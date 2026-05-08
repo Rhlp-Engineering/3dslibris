@@ -4,7 +4,6 @@
 #include <vector>
 
 namespace utf8_utils {
-namespace {
 
 void AppendUtf8Codepoint(std::string *out, uint32_t cp) {
   if (!out)
@@ -25,6 +24,8 @@ void AppendUtf8Codepoint(std::string *out, uint32_t cp) {
     out->push_back((char)(0x80 | (cp & 0x3F)));
   }
 }
+
+namespace {
 
 void AppendCp1252Byte(std::string *out, unsigned char b) {
   static const uint16_t kCp1252Map[32] = {

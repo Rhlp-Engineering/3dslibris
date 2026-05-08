@@ -9,6 +9,7 @@
 #include "book/page.h"
 #include "formats/mobi/mobi_heading_markers.h"
 #include "shared/text_token_constants.h"
+#include "shared/utf8_utils.h"
 
 namespace page_text_extract_utils {
 
@@ -94,30 +95,7 @@ std::vector<std::string> ExtractTextLinesFromPage(Page *page) {
       i++;
       continue;
     }
-    if (c < 0x80) {
-      line.push_back((char)c);
-    } else {
-      char utf8_buf[4];
-      int utf8_len = 0;
-      if (c < 0x800) {
-        utf8_buf[0] = (char)(0xC0 | (c >> 6));
-        utf8_buf[1] = (char)(0x80 | (c & 0x3F));
-        utf8_len = 2;
-      } else if (c < 0x10000) {
-        utf8_buf[0] = (char)(0xE0 | (c >> 12));
-        utf8_buf[1] = (char)(0x80 | ((c >> 6) & 0x3F));
-        utf8_buf[2] = (char)(0x80 | (c & 0x3F));
-        utf8_len = 3;
-      } else {
-        utf8_buf[0] = (char)(0xF0 | (c >> 18));
-        utf8_buf[1] = (char)(0x80 | ((c >> 12) & 0x3F));
-        utf8_buf[2] = (char)(0x80 | ((c >> 6) & 0x3F));
-        utf8_buf[3] = (char)(0x80 | (c & 0x3F));
-        utf8_len = 4;
-      }
-      for (int j = 0; j < utf8_len; j++)
-        line.push_back(utf8_buf[j]);
-    }
+    utf8_utils::AppendUtf8Codepoint(&line, c);
     i++;
   }
 

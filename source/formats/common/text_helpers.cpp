@@ -12,23 +12,7 @@ bool LooksLikeValidUtf8Bytes(const std::string &s) {
 }
 
 void AppendUtf8Codepoint(std::string *out, uint32_t cp) {
-  if (!out)
-    return;
-  if (cp <= 0x7F) {
-    out->push_back((char)cp);
-  } else if (cp <= 0x7FF) {
-    out->push_back((char)(0xC0 | (cp >> 6)));
-    out->push_back((char)(0x80 | (cp & 0x3F)));
-  } else if (cp <= 0xFFFF) {
-    out->push_back((char)(0xE0 | (cp >> 12)));
-    out->push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-    out->push_back((char)(0x80 | (cp & 0x3F)));
-  } else {
-    out->push_back((char)(0xF0 | (cp >> 18)));
-    out->push_back((char)(0x80 | ((cp >> 12) & 0x3F)));
-    out->push_back((char)(0x80 | ((cp >> 6) & 0x3F)));
-    out->push_back((char)(0x80 | (cp & 0x3F)));
-  }
+  utf8_utils::AppendUtf8Codepoint(out, cp);
 }
 
 void AppendCp1252Byte(std::string *out, unsigned char b) {

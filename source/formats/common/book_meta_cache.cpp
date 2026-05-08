@@ -1,9 +1,11 @@
 #include "formats/common/book_meta_cache.h"
 
+#include "formats/common/binary_io_utils.h"
 #include "shared/path_utils.h"
 #include "shared/string_utils.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
 
@@ -18,32 +20,6 @@ struct Header {
   uint32_t magic;
   uint16_t version;
 };
-
-// Write a length-prefixed string (4-byte LE length + raw bytes).
-static bool WriteStr(FILE *fp, const std::string &s) {
-  uint32_t len = (uint32_t)s.size();
-  if (fwrite(&len, sizeof(len), 1, fp) != 1)
-    return false;
-  if (len > 0 && fwrite(s.data(), 1, len, fp) != len)
-    return false;
-  return true;
-}
-
-// Read a length-prefixed string. Returns false on I/O error or if the
-// stored length exceeds max_len (guards against corrupt files).
-static bool ReadStr(FILE *fp, std::string *out, uint32_t max_len) {
-  uint32_t len = 0;
-  if (fread(&len, sizeof(len), 1, fp) != 1)
-    return false;
-  if (len > max_len)
-    return false;
-  if (len == 0) {
-    out->clear();
-    return true;
-  }
-  out->resize(len);
-  return fread(&(*out)[0], 1, len, fp) == len;
-}
 
 } // namespace
 
@@ -73,10 +49,11 @@ bool Save(const std::string &cache_path, const MetaEntry &entry) {
   hdr.magic   = kMagic;
   hdr.version = kVersion;
 
-  bool ok = fwrite(&hdr, sizeof(hdr), 1, fp) == 1;
-  ok = ok && WriteStr(fp, entry.title);
-  ok = ok && WriteStr(fp, entry.author);
-  ok = ok && WriteStr(fp, entry.cover_image_path);
+  bool ok = binary_io_utils::WriteRaw(fp, &hdr, sizeof(hdr));
+  ok = ok && binary_io_utils::WriteString32(fp, entry.title, UINT32_MAX);
+  ok = ok && binary_io_utils::WriteString32(fp, entry.author, UINT32_MAX);
+  ok = ok && binary_io_utils::WriteString32(fp, entry.cover_image_path,
+                                            UINT32_MAX);
   fclose(fp);
   return ok;
 }
@@ -90,8 +67,8 @@ bool Load(const std::string &cache_path, MetaEntry *out) {
     return false;
 
   Header hdr;
-  if (fread(&hdr, sizeof(hdr), 1, fp) != 1 || hdr.magic != kMagic ||
-      hdr.version != kVersion) {
+  if (!binary_io_utils::ReadRaw(fp, &hdr, sizeof(hdr)) ||
+      hdr.magic != kMagic || hdr.version != kVersion) {
     fclose(fp);
     return false;
   }
@@ -99,9 +76,10 @@ bool Load(const std::string &cache_path, MetaEntry *out) {
   // 4096 bytes is a generous upper bound for title/author; cover path
   // inside an EPUB zip is typically much shorter.
   const uint32_t kMaxStrLen = 4096;
-  bool ok = ReadStr(fp, &out->title, kMaxStrLen) &&
-            ReadStr(fp, &out->author, kMaxStrLen) &&
-            ReadStr(fp, &out->cover_image_path, kMaxStrLen);
+  bool ok = binary_io_utils::ReadString32(fp, kMaxStrLen, &out->title) &&
+            binary_io_utils::ReadString32(fp, kMaxStrLen, &out->author) &&
+            binary_io_utils::ReadString32(fp, kMaxStrLen,
+                                          &out->cover_image_path);
   fclose(fp);
   if (!ok) {
     out->title.clear();

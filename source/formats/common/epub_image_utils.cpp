@@ -1,12 +1,12 @@
 #include "formats/common/epub_image_utils.h"
 
+#include "formats/common/zip_read_utils.h"
 #include "shared/base64_utils.h"
 #include "shared/path_utils.h"
 #include "shared/string_utils.h"
 #include "minizip/unzip.h"
 
 #include <algorithm>
-#include <limits.h>
 
 namespace epub_image_utils {
 
@@ -53,44 +53,7 @@ bool DecodeDataUriImage(const std::string &href,
 
 bool ReadZipEntryBinary(unzFile uf, const std::string &path,
                         std::vector<unsigned char> *out, size_t max_bytes) {
-  if (!out || !uf || path.empty() || max_bytes == 0)
-    return false;
-  out->clear();
-
-  if (unzLocateFile(uf, path.c_str(), 2) != UNZ_OK)
-    return false;
-
-  unz_file_info fi;
-  if (unzGetCurrentFileInfo(uf, &fi, NULL, 0, NULL, 0, NULL, 0) == UNZ_OK) {
-    if (fi.uncompressed_size == 0 || fi.uncompressed_size > max_bytes ||
-        fi.uncompressed_size > (uLong)INT_MAX) {
-      return false;
-    }
-    out->reserve((size_t)fi.uncompressed_size);
-  }
-
-  if (unzOpenCurrentFile(uf) != UNZ_OK)
-    return false;
-
-  unsigned char buf[8 * 1024];
-  int n = 0;
-  size_t total = 0;
-  while ((n = unzReadCurrentFile(uf, buf, sizeof(buf))) > 0) {
-    if (total + (size_t)n > max_bytes) {
-      unzCloseCurrentFile(uf);
-      out->clear();
-      return false;
-    }
-    out->insert(out->end(), buf, buf + n);
-    total += (size_t)n;
-  }
-
-  unzCloseCurrentFile(uf);
-  if (n < 0 || out->empty()) {
-    out->clear();
-    return false;
-  }
-  return true;
+  return zip_read_utils::ReadEntryBinary(uf, path, out, max_bytes, NULL);
 }
 
 bool ResolveSvgWrapperImage(unzFile uf, const std::string &svg_path,

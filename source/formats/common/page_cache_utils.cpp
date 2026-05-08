@@ -1,5 +1,6 @@
 #include "formats/common/page_cache_utils.h"
 
+#include "formats/common/binary_io_utils.h"
 #include "shared/string_utils.h"
 
 #include <algorithm>
@@ -64,21 +65,17 @@ std::string ClampString(const std::string &value, size_t max_bytes) {
 }
 
 bool WriteRawString(FILE *fp, const std::string &value) {
-  if (!fp)
-    return false;
-  if (value.empty())
-    return true;
-  return fwrite(value.data(), 1, value.size(), fp) == value.size();
+  return binary_io_utils::WriteRaw(fp, value.data(), value.size());
 }
 
 bool ReadRawString(FILE *fp, size_t length, std::string *out) {
-  if (!fp || !out)
+  if (!out)
     return false;
   out->clear();
   if (length == 0)
     return true;
   out->resize(length);
-  return fread(&(*out)[0], 1, length, fp) == length;
+  return binary_io_utils::ReadRaw(fp, &(*out)[0], length);
 }
 
 bool WriteLengthPrefixedString16(FILE *fp, const std::string &value,
@@ -94,7 +91,7 @@ bool WriteLengthPrefixedString16(FILE *fp, const std::string &value,
   if (written_length)
     *written_length = length;
 
-  if (fwrite(&length, 1, sizeof(length), fp) != sizeof(length))
+  if (!binary_io_utils::WriteRaw(fp, &length, sizeof(length)))
     return false;
   return WriteRawString(fp, bounded);
 }
@@ -105,7 +102,7 @@ bool ReadLengthPrefixedString16(FILE *fp, uint16_t max_bytes, bool allow_empty,
     return false;
 
   uint16_t length = 0;
-  if (fread(&length, 1, sizeof(length), fp) != sizeof(length) ||
+  if (!binary_io_utils::ReadRaw(fp, &length, sizeof(length)) ||
       length > max_bytes || (!allow_empty && length == 0)) {
     return false;
   }

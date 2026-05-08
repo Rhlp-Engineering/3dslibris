@@ -1,5 +1,6 @@
 #include "formats/cbz/cbz_archive.h"
 
+#include "formats/common/zip_read_utils.h"
 #include "formats/common/xml_parse_utils.h"
 #include "minizip/unzip.h"
 #include "shared/string_utils.h"
@@ -120,55 +121,12 @@ void ForEachZipEntry(unzFile uf, Callback callback) {
 
 bool ReadCurrentZipEntry(unzFile uf, unsigned long uncompressed_size,
                          std::vector<unsigned char> *out, size_t max_bytes) {
-  if (!uf || !out)
-    return false;
-
-  out->clear();
-
-  if (uncompressed_size == 0 || uncompressed_size > max_bytes ||
-      uncompressed_size > (unsigned long)INT_MAX) {
-    SetLastCbzArchiveError("zip entry rejected by size limits");
+  const char *error_message = NULL;
+  if (!zip_read_utils::ReadCurrentEntryBinary(
+          uf, uncompressed_size, out, max_bytes, &error_message)) {
+    SetLastCbzArchiveError(error_message);
     return false;
   }
-
-  ScopedCurrentZipEntry current(uf);
-  if (!current.Open()) {
-    SetLastCbzArchiveError("zip entry open failed");
-    return false;
-  }
-
-  out->reserve((size_t)uncompressed_size);
-
-  unsigned char buf[8 * 1024];
-  size_t total = 0;
-
-  while (true) {
-    const int n = unzReadCurrentFile(uf, buf, sizeof(buf));
-
-    if (n < 0) {
-      out->clear();
-      SetLastCbzArchiveError("zip entry read failed");
-      return false;
-    }
-
-    if (n == 0)
-      break;
-
-    if ((size_t)n > max_bytes - total) {
-      out->clear();
-      SetLastCbzArchiveError("zip entry exceeded size limit while reading");
-      return false;
-    }
-
-    out->insert(out->end(), buf, buf + n);
-    total += (size_t)n;
-  }
-
-  if (out->empty()) {
-    SetLastCbzArchiveError("zip entry was empty");
-    return false;
-  }
-
   return true;
 }
 

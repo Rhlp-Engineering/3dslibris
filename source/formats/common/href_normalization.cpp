@@ -7,10 +7,24 @@
 
 #include "formats/common/href_normalization.h"
 
-namespace href_normalization {
+#include "shared/string_utils.h"
 
-std::string BasenamePathLocal(const std::string &path)
-{
+namespace href_normalization {
+namespace {
+
+int HexDigit(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return 10 + c - 'a';
+  if (c >= 'A' && c <= 'F')
+    return 10 + c - 'A';
+  return -1;
+}
+
+} // namespace
+
+std::string BasenamePathLocal(const std::string &path) {
   size_t slash = path.find_last_of('/');
   if (slash == std::string::npos)
     return path;
@@ -19,12 +33,10 @@ std::string BasenamePathLocal(const std::string &path)
   return path.substr(slash + 1);
 }
 
-std::string AnchorTokenKey(const std::string &s)
-{
+std::string AnchorTokenKey(const std::string &s) {
   std::string out;
   out.reserve(s.size());
-  for (size_t i = 0; i < s.size(); i++)
-  {
+  for (size_t i = 0; i < s.size(); i++) {
     unsigned char c = (unsigned char)s[i];
     if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'))
       out.push_back((char)c);
@@ -32,12 +44,10 @@ std::string AnchorTokenKey(const std::string &s)
   return out;
 }
 
-std::string AnchorDigits(const std::string &s)
-{
+std::string AnchorDigits(const std::string &s) {
   std::string out;
   out.reserve(s.size());
-  for (size_t i = 0; i < s.size(); i++)
-  {
+  for (size_t i = 0; i < s.size(); i++) {
     unsigned char c = (unsigned char)s[i];
     if (c >= '0' && c <= '9')
       out.push_back((char)c);
@@ -45,8 +55,7 @@ std::string AnchorDigits(const std::string &s)
   return out;
 }
 
-std::string NormalizePathForAnchor(const std::string &path)
-{
+std::string NormalizePathForAnchor(const std::string &path) {
   std::string in = path;
   std::replace(in.begin(), in.end(), '\\', '/');
   while (!in.empty() && in[0] == '/')
@@ -54,30 +63,22 @@ std::string NormalizePathForAnchor(const std::string &path)
 
   std::vector<std::string> parts;
   std::string cur;
-  for (size_t i = 0; i <= in.size(); i++)
-  {
-    if (i == in.size() || in[i] == '/')
-    {
-      if (cur == "..")
-      {
+  for (size_t i = 0; i <= in.size(); i++) {
+    if (i == in.size() || in[i] == '/') {
+      if (cur == "..") {
         if (!parts.empty())
           parts.pop_back();
-      }
-      else if (!cur.empty() && cur != ".")
-      {
+      } else if (!cur.empty() && cur != ".") {
         parts.push_back(cur);
       }
       cur.clear();
-    }
-    else
-    {
+    } else {
       cur.push_back(in[i]);
     }
   }
 
   std::string out;
-  for (size_t i = 0; i < parts.size(); i++)
-  {
+  for (size_t i = 0; i < parts.size(); i++) {
     if (i)
       out.push_back('/');
     out += parts[i];
@@ -85,18 +86,15 @@ std::string NormalizePathForAnchor(const std::string &path)
   return out;
 }
 
-std::string UrlDecodeComponent(const std::string &input)
-{
+std::string UrlDecodeComponent(const std::string &input) {
   std::string out;
   out.reserve(input.size());
-  for (size_t i = 0; i < input.size(); i++)
-  {
-    if (input[i] == '%' && i + 2 < input.size())
-    {
-      int value = 0;
-      if (sscanf(input.substr(i + 1, 2).c_str(), "%x", &value) == 1)
-      {
-        out.push_back((char)value);
+  for (size_t i = 0; i < input.size(); i++) {
+    if (input[i] == '%' && i + 2 < input.size()) {
+      const int hi = HexDigit(input[i + 1]);
+      const int lo = HexDigit(input[i + 2]);
+      if (hi >= 0 && lo >= 0) {
+        out.push_back((char)((hi << 4) | lo));
         i += 2;
         continue;
       }
@@ -106,18 +104,12 @@ std::string UrlDecodeComponent(const std::string &input)
   return out;
 }
 
-std::string ToLowerAsciiLocal(const std::string &s)
-{
-  std::string out = s;
-  std::transform(out.begin(), out.end(), out.begin(),
-                 [](unsigned char c)
-                 { return (char)tolower(c); });
-  return out;
+std::string ToLowerAsciiLocal(const std::string &s) {
+  return ToLowerAscii(s);
 }
 
 std::string BuildAnchorKey(const std::string &docpath,
-                           const std::string &anchor_raw)
-{
+                           const std::string &anchor_raw) {
   if (docpath.empty() || anchor_raw.empty())
     return "";
 
@@ -138,8 +130,7 @@ std::string BuildAnchorKey(const std::string &docpath,
   return key;
 }
 
-std::string NormalizeAnchorHrefKey(const std::string &href)
-{
+std::string NormalizeAnchorHrefKey(const std::string &href) {
   if (href.empty())
     return "";
   std::string decoded = UrlDecodeComponent(href);
@@ -155,14 +146,12 @@ std::string NormalizeAnchorHrefKey(const std::string &href)
 }
 
 std::string NormalizeDocStartPathKey(const std::string &raw_path,
-                                     bool strip_fragment_and_query)
-{
+                                     bool strip_fragment_and_query) {
   if (raw_path.empty())
     return "";
 
   std::string decoded = UrlDecodeComponent(raw_path);
-  if (strip_fragment_and_query)
-  {
+  if (strip_fragment_and_query) {
     size_t hash = decoded.find('#');
     if (hash != std::string::npos)
       decoded = decoded.substr(0, hash);

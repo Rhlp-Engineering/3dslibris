@@ -38,6 +38,8 @@ struct State {
   bool initialized;
   bool completed;
   size_t text_bytes_fed;
+  std::string curr_scratch;
+  std::string next_scratch;
 };
 
 struct ContinueCallbacks {
@@ -64,4 +66,3 @@ bool ContinueState(State *state, const std::string &text_utf8, u32 budget_ms,
                    const ContinueCallbacks &callbacks);
 
 } // namespace plain_text_stream
-
