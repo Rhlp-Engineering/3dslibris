@@ -37,11 +37,35 @@ inline int ComputeJpegL2SubsampleFactor(int img_w, int img_h, int target_w,
     return 0;
   int l2factor = 0;
   while ((img_w >> (l2factor + 1)) >= target_w + 2 &&
-         (img_h >> (l2factor + 1)) >= target_h + 2 &&
-         l2factor < 6) {
+         (img_h >> (l2factor + 1)) >= target_h + 2 && l2factor < 6) {
     l2factor++;
   }
   return l2factor;
+}
+
+inline bool ComputeInlineImageDecodeTargetSize(int img_w, int img_h, int draw_w,
+                                               int draw_h, int *target_w,
+                                               int *target_h) {
+  if (!target_w || !target_h || img_w <= 0 || img_h <= 0 || draw_w <= 0 ||
+      draw_h <= 0) {
+    return false;
+  }
+
+  int out_w = img_w;
+  int out_h = img_h;
+  if (out_w > draw_w || out_h > draw_h) {
+    const float scale_x = (float)draw_w / (float)out_w;
+    const float scale_y = (float)draw_h / (float)out_h;
+    const float scale = std::min(scale_x, scale_y);
+    if (scale <= 0.0f)
+      return false;
+    out_w = std::max(1, (int)(out_w * scale + 0.5f));
+    out_h = std::max(1, (int)(out_h * scale + 0.5f));
+  }
+
+  *target_w = out_w;
+  *target_h = out_h;
+  return true;
 }
 
 inline bool EstimateDecodedRgbBytes(int img_w, int img_h, int components,

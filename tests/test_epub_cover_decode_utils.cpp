@@ -51,26 +51,38 @@ int main() {
            epub_cover_decode_utils::ComputeJpegL2SubsampleFactor(
                1600, 2400, thumb_w, thumb_h),
            4);
-  ExpectEq("medium jpeg uses 1/4 decode",
+  ExpectEq(
+      "medium jpeg uses 1/4 decode",
+      epub_cover_decode_utils::ComputeJpegL2SubsampleFactor(512, 768, 76, 115),
+      2);
+  ExpectEq(
+      "small jpeg stays full resolution",
+      epub_cover_decode_utils::ComputeJpegL2SubsampleFactor(100, 135, 76, 103),
+      0);
+
+  int target_w = 0;
+  int target_h = 0;
+  ExpectTrue("large inline image decode target",
+             epub_cover_decode_utils::ComputeInlineImageDecodeTargetSize(
+                 1203, 1800, 240, 360, &target_w, &target_h));
+  ExpectEq("large inline target width", target_w, 240);
+  ExpectEq("large inline target height", target_h, 359);
+  ExpectEq("large inline jpeg uses subsampling",
            epub_cover_decode_utils::ComputeJpegL2SubsampleFactor(
-               512, 768, 76, 115),
+               1203, 1800, target_w, target_h),
            2);
-  ExpectEq("small jpeg stays full resolution",
-           epub_cover_decode_utils::ComputeJpegL2SubsampleFactor(
-               100, 135, 76, 103),
-           0);
 
   size_t decoded_bytes = 0;
   ExpectTrue("estimate rgb bytes for 4k square",
-             epub_cover_decode_utils::EstimateDecodedRgbBytes(
-                 4096, 4096, 3, &decoded_bytes));
+             epub_cover_decode_utils::EstimateDecodedRgbBytes(4096, 4096, 3,
+                                                              &decoded_bytes));
   ExpectSizeEq("4k square rgb bytes", decoded_bytes, 4096u * 4096u * 3u);
 
   ExpectFalse("reject invalid component count",
-              epub_cover_decode_utils::EstimateDecodedRgbBytes(
-                  320, 240, 0, &decoded_bytes));
+              epub_cover_decode_utils::EstimateDecodedRgbBytes(320, 240, 0,
+                                                               &decoded_bytes));
   ExpectFalse("reject non-positive width",
-              epub_cover_decode_utils::EstimateDecodedRgbBytes(
-                  0, 240, 3, &decoded_bytes));
+              epub_cover_decode_utils::EstimateDecodedRgbBytes(0, 240, 3,
+                                                               &decoded_bytes));
   return 0;
 }
