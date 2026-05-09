@@ -109,6 +109,35 @@ void TestEpubOpen() {
   delete book;
 }
 
+void TestRealEpubOpenFromEnv() {
+  const char *real_epub = getenv("REAL_EPUB_PATH");
+  if (!real_epub || real_epub[0] == '\0') {
+    fprintf(stderr, "SKIP TestRealEpubOpenFromEnv: REAL_EPUB_PATH not set\n");
+    return;
+  }
+
+  FILE *fp = fopen(real_epub, "r");
+  if (!fp)
+    Fail("real epub open: fixture exists", "REAL_EPUB_PATH cannot be opened");
+  fclose(fp);
+
+  std::string path(real_epub);
+  size_t slash = path.find_last_of('/');
+  std::string folder = slash == std::string::npos ? "." : path.substr(0, slash);
+  std::string filename =
+      slash == std::string::npos ? path : path.substr(slash + 1);
+
+  Book *book = MakeEpubBook(folder.c_str(), filename.c_str());
+  uint8_t err = EpubOpen(book);
+  ExpectFalse("real epub open: no error", err != 0);
+  ExpectGt("real epub open: pages > 0", (int)book->GetPageCount(), 0);
+  ExpectTrue("real epub open: stops before unsafe 3DS page volume",
+             book->GetPageCount() <= 5500);
+
+  book->Close();
+  delete book;
+}
+
 void TestEpubReopen() {
   const char *fixture = TEST_FIXTURES_DIR "/books/basic.epub";
   FILE *fp = fopen(fixture, "r");
@@ -549,6 +578,7 @@ void TestEpubPageCacheHeaderValidation() {
 
 int main() {
   TestEpubOpen();
+  TestRealEpubOpenFromEnv();
   TestEpubReopen();
   TestEpubInvalidFile();
   TestEpubIndexMetadata();

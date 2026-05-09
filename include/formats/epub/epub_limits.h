@@ -22,6 +22,8 @@ static const int kCoverMaxDimension = 4096;
 
 static const bool kEnableRealTocResolve = true;
 
-static const uint16_t kMaxPagesInMemory = 25000;
+// Flowed EPUB pages are retained as resident Page buffers while reading.
+// Keep this below the 3DS crash zone for very large anthologies.
+static const uint16_t kMaxPagesInMemory = 5200;
 
 } // namespace epub_limits
