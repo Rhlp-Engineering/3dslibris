@@ -53,10 +53,23 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Run host coverage
+      - name: Install LLVM/Clang
         run: |
           set -euo pipefail
-          make coverage-host
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Run host coverage
+        env:
+          CC: clang
+          CXX: clang++
+          HOST_CC: clang
+          HOST_CXX: clang++
+          LLVM_PROFDATA: llvm-profdata
+          LLVM_COV: llvm-cov
+        run: |
+          set -euo pipefail
+          make coverage-host CC=clang CXX=clang++ HOST_CC=clang HOST_CXX=clang++
 
       - name: Upload coverage summary
         uses: actions/upload-artifact@v4
