@@ -9,8 +9,10 @@ static const uint64_t kBrowserWarmupIdleDelayMs = 250;
 static const uint64_t kBrowserHeavyWarmupIdleDelayMs = 1200;
 static const uint64_t kNew3dsHeavyWarmupIdleDelayMs = 600;
 static const uint64_t kBrowserInputReleaseMaxWaitMs = 1500;
-static const uint64_t kOld3dsSelectedCoverMinFreeBytes = 12u * 1024u * 1024u;
-static const uint64_t kOld3dsWarmCoverMinFreeBytes = 16u * 1024u * 1024u;
+// CIA builds have ~9 MB free vs ~24 MB for 3dsx; cover extraction needs ~3-4 MB.
+// 6 MB / 8 MB gives enough headroom for both environments.
+static const uint64_t kOld3dsSelectedCoverMinFreeBytes = 6u * 1024u * 1024u;
+static const uint64_t kOld3dsWarmCoverMinFreeBytes = 8u * 1024u * 1024u;
 static const uint64_t kOld3dsSelectedCoverRetryDelayMs = 2000;
 static const uint64_t kOld3dsWarmCoverRetryDelayMs = 8000;
 static const size_t kOld3dsWarmupQueueLimit = 1;
