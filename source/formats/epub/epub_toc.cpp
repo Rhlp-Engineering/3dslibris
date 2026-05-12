@@ -93,22 +93,42 @@ void ResolveEpubTocFromPackageData(
       std::string key = NormalizePath(toc_entries[i].href);
       if (key.empty())
         continue;
-      auto hit = page_start_by_href.find(key);
-      if (hit == page_start_by_href.end()) {
-        auto hash_pos = key.find('#');
-        if (hash_pos != std::string::npos) {
-          std::string key_no_frag = key.substr(0, hash_pos);
-          hit = page_start_by_href.find(key_no_frag);
+
+      u16 page = 0;
+      bool resolved_page = false;
+
+      // For fragment hrefs, try the anchor map first so each section of a
+      // multi-chapter document maps to its own page instead of the doc start.
+      const bool has_fragment =
+          toc_entries[i].href.find('#') != std::string::npos;
+      if (has_fragment) {
+        u16 anchor_page = 0;
+        if (book->FindChapterAnchorPage(toc_entries[i].href, &anchor_page)) {
+          page = anchor_page;
+          resolved_page = true;
         }
       }
-      if (hit == page_start_by_href.end())
+
+      if (!resolved_page) {
+        auto hit = page_start_by_href.find(key);
+        if (hit == page_start_by_href.end()) {
+          auto hash_pos = key.find('#');
+          if (hash_pos != std::string::npos) {
+            std::string key_no_frag = key.substr(0, hash_pos);
+            hit = page_start_by_href.find(key_no_frag);
+          }
+        }
+        if (hit == page_start_by_href.end())
+          continue;
+        page = hit->second;
+      }
+
+      if (used_pages[page])
         continue;
-      if (used_pages[hit->second])
-        continue;
-      used_pages[hit->second] = true;
+      used_pages[page] = true;
 
       ChapterEntry entry;
-      entry.page = hit->second;
+      entry.page = page;
       entry.title = Trim(toc_entries[i].title);
       entry.level = toc_entries[i].level;
       if (entry.title.empty()) {
