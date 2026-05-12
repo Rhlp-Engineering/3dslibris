@@ -842,15 +842,7 @@ void LibraryController::ProcessJobs(u32 budget_ms) {
           if (book == app_.GetSelectedBook())
             ResetBrowserMarquee();
         }
-        const bool cover_followup_pending =
-            app_.GetMode() == AppMode::Browser &&
-            ShouldCurrentBrowserLoadCovers(app_) &&
-            SupportsBrowserCoverWarmup(app_, book->format,
-                                       book->GetFileName()) &&
-            !book->coverPixels &&
-            book->coverAttempts < kCoverMaxAttempts;
-        if (!cover_followup_pending)
-          app_.SetBrowserDirty(true);
+        app_.SetBrowserDirty(true);
       }
     } else if (job.type == APP_JOB_EXTRACT_COVER) {
       if (!book->coverPixels && book->coverAttempts < kCoverMaxAttempts) {
