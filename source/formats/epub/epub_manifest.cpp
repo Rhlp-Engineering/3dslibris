@@ -77,7 +77,11 @@ using epub_package_toc_utils::ReadZipEntryText;
 
 namespace {
 
-std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
+// Returns hrefs of all CSS stylesheets linked in xhtml_text.
+// Skips <link> tags whose type= is present but not "text/css"
+// (e.g. Adobe page-template.xpgt uses a vendor MIME type).
+std::vector<std::string> ExtractLinkStylesheetHrefs(const std::string &xhtml_text) {
+  std::vector<std::string> result;
   const char *s = xhtml_text.c_str();
   size_t len = xhtml_text.size();
   size_t i = 0;
@@ -93,28 +97,48 @@ std::string ExtractLinkStylesheetHref(const std::string &xhtml_text) {
     std::string tag_lc = ToLowerAscii(tag);
     if (tag_lc.find("rel=\"stylesheet\"") != std::string::npos ||
         tag_lc.find("rel='stylesheet'") != std::string::npos) {
-      size_t href_pos = tag_lc.find("href=");
-      if (href_pos != std::string::npos) {
-        href_pos += 5;
-        char q = tag[href_pos];
-        if (q == '"' || q == '\'') {
-          size_t val_start = href_pos + 1;
-          size_t val_end = tag.find(q, val_start);
-          if (val_end != std::string::npos)
-            return tag.substr(val_start, val_end - val_start);
+      bool is_css = true;
+      size_t type_pos = tag_lc.find("type=");
+      if (type_pos != std::string::npos) {
+        type_pos += 5;
+        if (type_pos < tag_lc.size()) {
+          char tq = tag_lc[type_pos];
+          if (tq == '"' || tq == '\'') {
+            size_t tv_start = type_pos + 1;
+            size_t tv_end = tag_lc.find(tq, tv_start);
+            if (tv_end != std::string::npos)
+              is_css = (tag_lc.substr(tv_start, tv_end - tv_start) == "text/css");
+          }
+        }
+      }
+      if (is_css) {
+        size_t href_pos = tag_lc.find("href=");
+        if (href_pos != std::string::npos) {
+          href_pos += 5;
+          char q = tag[href_pos];
+          if (q == '"' || q == '\'') {
+            size_t val_start = href_pos + 1;
+            size_t val_end = tag.find(q, val_start);
+            if (val_end != std::string::npos) {
+              std::string href = tag.substr(val_start, val_end - val_start);
+              if (!href.empty())
+                result.push_back(href);
+            }
+          }
         }
       }
     }
     i = tag_pos + 1;
   }
-  return "";
+  return result;
 }
 
-// Reads an XHTML zip entry in 4KB chunks and returns the href of the first
-// <link rel="stylesheet"> found. Stops reading at </head> or after 8KB,
-// so only the head section is decompressed rather than the full document.
-std::string ScanXhtmlHeadForCssHref(unzFile uf, const std::string &xhtml_path,
-                                     IStatusReporter *reporter) {
+// Reads an XHTML zip entry in 4KB chunks and returns all CSS stylesheet hrefs
+// found in the <head>. Stops at </head> or after 8KB so only the head section
+// is decompressed. Non-CSS stylesheet types (e.g. .xpgt) are filtered out.
+std::vector<std::string> ScanXhtmlHeadForCssHrefs(unzFile uf,
+                                                   const std::string &xhtml_path,
+                                                   IStatusReporter *reporter) {
 #if !EPUB_CSS_TRACE
   (void)reporter;
 #endif
@@ -126,30 +150,26 @@ std::string ScanXhtmlHeadForCssHref(unzFile uf, const std::string &xhtml_path,
 #if EPUB_CSS_TRACE
     DBG_LOG(reporter, "EPUB: CSS-SCAN locate fail");
 #endif
-    return "";
+    return {};
   }
 #if EPUB_CSS_TRACE
   DBG_LOG(reporter, "EPUB: CSS-SCAN locate ok");
 #endif
 
   if (unzOpenCurrentFile(uf) != UNZ_OK)
-    return "";
+    return {};
 
   static const size_t kChunkSize = 4096;
   static const size_t kMaxScanBytes = 8192;
   char chunk[kChunkSize];
   std::string buf;
   buf.reserve(kMaxScanBytes);
-  std::string href;
 
   while (buf.size() < kMaxScanBytes) {
     int n = unzReadCurrentFile(uf, chunk, (unsigned)kChunkSize);
     if (n <= 0)
       break;
     buf.append(chunk, (size_t)n);
-    href = ExtractLinkStylesheetHref(buf);
-    if (!href.empty())
-      break;
     if (buf.find("</head>") != std::string::npos ||
         buf.find("</HEAD>") != std::string::npos)
       break;
@@ -159,7 +179,7 @@ std::string ScanXhtmlHeadForCssHref(unzFile uf, const std::string &xhtml_path,
 #if EPUB_CSS_TRACE
   DBG_LOGF(reporter, "EPUB: CSS-SCAN read ok bytes=%u", (unsigned)buf.size());
 #endif
-  return href;
+  return ExtractLinkStylesheetHrefs(buf);
 }
 
 void LoadCssClassMapForDoc(const std::string &archive_path,
@@ -172,18 +192,23 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   if (archive_path.empty() || xhtml_path.empty())
     return;
 
+  std::string xhtml_folder;
+  size_t slash = xhtml_path.find_last_of('/');
+  if (slash != std::string::npos)
+    xhtml_folder = xhtml_path.substr(0, slash);
+
+  // Check the per-doc href cache. An empty vector means "already scanned, no CSS".
   if (epd) {
-    std::map<std::string, std::string>::const_iterator href_it =
-        epd->css_href_by_doc.find(xhtml_path);
+    auto href_it = epd->css_href_by_doc.find(xhtml_path);
     if (href_it != epd->css_href_by_doc.end()) {
-      if (href_it->second.empty())
-        return;
-      std::map<std::string, epub_css_class_map::CssClassMap>::const_iterator
-          css_it = epd->css_class_map_by_path.find(href_it->second);
-      if (css_it != epd->css_class_map_by_path.end()) {
-        *out = css_it->second;
-        return;
+      for (const std::string &css_path : href_it->second) {
+        auto css_it = epd->css_class_map_by_path.find(css_path);
+        if (css_it != epd->css_class_map_by_path.end()) {
+          for (const auto &kv : css_it->second)
+            (*out)[kv.first] = kv.second;
+        }
       }
+      return;
     }
   }
 
@@ -194,45 +219,50 @@ void LoadCssClassMapForDoc(const std::string &archive_path,
   if (!scan_uf)
     return;
 
-  std::string css_href = ScanXhtmlHeadForCssHref(scan_uf, xhtml_path, reporter);
-  if (css_href.empty()) {
-    if (epd)
-      epd->css_href_by_doc[xhtml_path] = "";
-    if (owns_scan_uf) unzClose(scan_uf);
-    return;
+  std::vector<std::string> css_hrefs =
+      ScanXhtmlHeadForCssHrefs(scan_uf, xhtml_path, reporter);
+
+  // Resolve relative hrefs to full archive paths and deduplicate.
+  std::vector<std::string> css_paths;
+  for (const std::string &href : css_hrefs) {
+    std::string css_path = NormalizePath(xhtml_folder + "/" + href);
+    if (!css_path.empty())
+      css_paths.push_back(css_path);
   }
 
-  std::string xhtml_folder;
-  size_t slash = xhtml_path.find_last_of('/');
-  if (slash != std::string::npos)
-    xhtml_folder = xhtml_path.substr(0, slash);
-
-  std::string css_path = NormalizePath(xhtml_folder + "/" + css_href);
-  if (epd) {
-    epd->css_href_by_doc[xhtml_path] = css_path;
-    std::map<std::string, epub_css_class_map::CssClassMap>::const_iterator
-        css_it = epd->css_class_map_by_path.find(css_path);
-    if (css_it != epd->css_class_map_by_path.end()) {
-      *out = css_it->second;
-      if (owns_scan_uf) unzClose(scan_uf);
-      return;
-    }
-  }
-
-  std::string css_text;
-  epub_zip_utils::ZipEntryIndex css_index;
-  bool ok =
-      ReadZipEntryText(scan_uf, css_path, css_text,
-                       EPUB_CSS_TRACE ? reporter : NULL, "CSS-LOAD",
-                       &css_index);
-  if (owns_scan_uf) unzClose(scan_uf);
-  if (!ok || css_text.empty())
-    return;
-
-  epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(),
-                                           out);
   if (epd)
-    epd->css_class_map_by_path[css_path] = *out;
+    epd->css_href_by_doc[xhtml_path] = css_paths;
+
+  for (const std::string &css_path : css_paths) {
+    // Use cached parse result if available.
+    if (epd) {
+      auto css_it = epd->css_class_map_by_path.find(css_path);
+      if (css_it != epd->css_class_map_by_path.end()) {
+        for (const auto &kv : css_it->second)
+          (*out)[kv.first] = kv.second;
+        continue;
+      }
+    }
+
+    std::string css_text;
+    epub_zip_utils::ZipEntryIndex css_index;
+    bool ok =
+        ReadZipEntryText(scan_uf, css_path, css_text,
+                         EPUB_CSS_TRACE ? reporter : NULL, "CSS-LOAD",
+                         &css_index);
+    if (!ok || css_text.empty())
+      continue;
+
+    epub_css_class_map::CssClassMap parsed;
+    epub_css_class_map::ParseCssIntoClassMap(css_text.c_str(), css_text.size(),
+                                             &parsed);
+    if (epd)
+      epd->css_class_map_by_path[css_path] = parsed;
+    for (const auto &kv : parsed)
+      (*out)[kv.first] = kv.second;
+  }
+
+  if (owns_scan_uf) unzClose(scan_uf);
 }
 
 void NormalizeHtmlEntityChunkForXml(const std::string &chunk, bool final,
