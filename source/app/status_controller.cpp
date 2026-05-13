@@ -20,6 +20,7 @@
 #include "app/app.h"
 #include "app/status_layout_utils.h"
 #include "book/book.h"
+#include "book/page.h"
 #include "shared/app_flow_utils.h"
 #include "shared/battery_utils.h"
 #include "settings/prefs.h"
@@ -184,11 +185,35 @@ void StatusController::UpdateStatus()
       app_.ts->PrintString(bmsg);
     }
 
-    int pX = 232;
+    // Inline-link hint: shown at the far right of the status bar when the
+    // current page has links. Shifts the progress % left to make room.
+    int right_edge = 232;
+    if (mode == AppMode::Book)
+    {
+      const char *hint = nullptr;
+      if (app_.IsInlineLinkFocusActive())
+        hint = "A:go";
+      else
+      {
+        Page *pg = current_book ? current_book->GetPage() : nullptr;
+        if (pg && pg->GetInlineLinkCount() > 0)
+          hint = "Y:lnk";
+      }
+      if (hint)
+      {
+        int hw = app_.ts->GetStringWidth(hint, TEXT_STYLE_BROWSER);
+        int hx = 232 - hw;
+        app_.ts->SetPen(hx, textY);
+        app_.ts->PrintString(hint);
+        right_edge = hx - 4;
+      }
+    }
+
+    int pX = right_edge;
     if (mode == AppMode::Opening)
     {
       int pw = app_.ts->GetStringWidth(kOpeningStatusLabel, TEXT_STYLE_BROWSER);
-      pX = 232 - pw;
+      pX = right_edge - pw;
       app_.ts->SetPen(pX, textY);
       app_.ts->PrintString(kOpeningStatusLabel);
     }
@@ -197,7 +222,7 @@ void StatusController::UpdateStatus()
       char pmsg[32];
       snprintf(pmsg, sizeof(pmsg), "%.1f%%", snapshot.percent_value);
       int pw = app_.ts->GetStringWidth(pmsg, TEXT_STYLE_BROWSER);
-      pX = 232 - pw;
+      pX = right_edge - pw;
       app_.ts->SetPen(pX, textY);
       app_.ts->PrintString(pmsg);
 
