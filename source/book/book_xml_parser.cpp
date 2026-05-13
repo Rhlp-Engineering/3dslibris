@@ -1805,12 +1805,9 @@ static bool HandleTableStart(parsedata_t *p, Text *ts, const char *el,
   if (XmlNameEquals(el, "img") || XmlNameEquals(el, "image")) {
     parse_push(p, TAG_UNKNOWN);
     SetCurrentStackHidden(p, hidden);
-    if (!hidden) {
-      AppendCapturedTableSeparator(p, ' ');
-      std::string *buffer = GetActiveCapturedTableText(p);
-      if (buffer)
-        buffer->append("[image]");
-    }
+    // Images in table cells can't be positioned in columns; suppress them
+    // entirely. BuildTableLines skips empty cells, so image-only tables
+    // produce no output. Images outside tables still render normally.
     return true;
   }
   if (!strcmp(el, "script")) {
