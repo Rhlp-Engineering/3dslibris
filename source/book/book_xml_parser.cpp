@@ -26,6 +26,7 @@
 #include "book/book_xml_table_handler.h"
 #include "book/book_xml_heading_handler.h"
 #include "book/book_xml_image_handler.h"
+#include "book/book_xml_anchor_handler.h"
 #include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
 #include "book/inline_image_layout.h"
@@ -1801,6 +1802,13 @@ static HeadingHandlerFns MakeHeadingHandlerFns() {
   return f;
 }
 
+static void AnchorLf(parsedata_t *p) { linefeed(p); }
+static AnchorHandlerFns MakeAnchorHandlerFns() {
+  AnchorHandlerFns f;
+  f.linefeed = AnchorLf;
+  return f;
+}
+
 static void ImageLf(parsedata_t *p) { linefeed(p); }
 static void ImageAdvanceScreen(parsedata_t *p) { AdvanceParsedScreen(p); }
 static void ImageAdvancePageOverflow(parsedata_t *p, int lineheight) {
@@ -2284,32 +2292,7 @@ void start(void *data, const char *el, const char **attr) {
       }
     }
   } else if (!strcmp(el, "a")) {
-    parse_push(p, TAG_ANCHOR);
-    const u8 current = (u8)(p->stacksize - 1);
-    p->link_active_stack[current] = false;
-    p->link_href_id_stack[current] = 0;
-    if (HasActiveStackHiddenStyle(p))
-      return;
-    const char *href = NULL;
-    for (int i = 0; attr && attr[i]; i += 2) {
-      if (XmlNameEquals(attr[i], "href")) {
-        href = attr[i + 1];
-        break;
-      }
-    }
-    const std::string resolved_href =
-        (href && *href)
-            ? inline_link_utils::ResolveInternalHref(p->docpath, href)
-            : std::string();
-    if (!resolved_href.empty() && p->book) {
-      const u16 href_id = p->book->RegisterInlineLinkHref(resolved_href);
-      if (href_id != 0) {
-        p->link_active_stack[current] = true;
-        p->link_href_id_stack[current] = href_id;
-        AppendParsedByte(p, TEXT_LINK_START);
-        AppendParsedByte(p, (u32)href_id);
-      }
-    }
+    HandleAnchorStart(p, attr);
   } else if (XmlNameEquals(el, "img") || XmlNameEquals(el, "image")) {
     HandleInlineImageStart(p, ts, attr, elem_css, MakeImageHandlerFns());
   } else if (XmlNameEquals(el, "binary")) {
@@ -2704,17 +2687,7 @@ void end(void *data, const char *el) {
     FlushPendingBlockSpacingBeforeContent(p, "br");
     linefeed(p);
   } else if (!strcmp(el, "a")) {
-    if (p->stacksize > 0) {
-      const u8 current = (u8)(p->stacksize - 1);
-      if (p->link_active_stack[current] && p->link_href_id_stack[current] != 0)
-        AppendParsedByte(p, TEXT_LINK_END);
-    }
-    // Many EPUB TOC/Nav documents are built as dense anchor lists with little
-    // structural markup; force line breaks there to keep the reading view sane.
-    if (DocLooksLikeTocDoc(p) && p->linebegan && p->buflen > 0 &&
-        p->buf[p->buflen - 1] != '\n') {
-      linefeed(p);
-    }
+    HandleAnchorEnd(p, MakeAnchorHandlerFns());
   } else if (!strcmp(el, "aside")) {
     FlushInlineTailAndDeferredStyle(p, ts);
     QueueBlockSpacingLines(p, 2, "aside", "aside-bottom", false);
