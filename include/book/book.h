@@ -83,7 +83,7 @@ public:
     u8 layout_mode;
     u16 width;
     u16 height;
-    std::vector<u16> pixels;
+    std::vector<u32> pixels;  // ARGB8888: (a8<<24)|(r8<<16)|(g8<<8)|b8
   };
 
 private:

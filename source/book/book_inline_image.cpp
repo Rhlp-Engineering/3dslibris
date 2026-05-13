@@ -130,7 +130,7 @@ DecodeInlineJpegToCacheEntry3ds(const std::vector<u8> &compressed, u16 image_id,
         const unsigned char g = (comps >= 3) ? px[1] : px[0];
         const unsigned char b = (comps >= 3) ? px[2] : px[0];
         entry->pixels[(size_t)y * (size_t)draw_w + (size_t)x] =
-            RGB565FromRgb8(r, g, b);
+            0xFF000000u | ((u32)r << 16) | ((u32)g << 8) | (u32)b;
       }
     }
     ok = true;
@@ -874,9 +874,29 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
       if (draw_w_local <= 0)
         continue;
 
-      const u16 *src_row = entry.pixels.data() + (y * entry.width) + src_x;
+      const u32 *src_row = entry.pixels.data() + (y * entry.width) + src_x;
       u16 *dst_row = dst + (dy * stride) + draw_x;
-      memcpy(dst_row, src_row, draw_w_local * sizeof(u16));
+      for (int px = 0; px < draw_w_local; px++) {
+        u32 argb = src_row[px];
+        u8 a = (argb >> 24) & 0xFF;
+        u8 r8 = (argb >> 16) & 0xFF;
+        u8 g8 = (argb >>  8) & 0xFF;
+        u8 b8 =  argb        & 0xFF;
+        if (a == 255) {
+          dst_row[px] = ((u16)(r8 >> 3) << 11) | ((u16)(g8 >> 2) << 5) | (u16)(b8 >> 3);
+        } else if (a > 0) {
+          u16 bg = dst_row[px];
+          u8 bg_r = ((bg >> 11) & 0x1F) << 3;
+          u8 bg_g = ((bg >>  5) & 0x3F) << 2;
+          u8 bg_b =  (bg        & 0x1F) << 3;
+          u32 ia = 255 - a;
+          u8 out_r = (u8)((r8 * a + bg_r * ia + 127) / 255);
+          u8 out_g = (u8)((g8 * a + bg_g * ia + 127) / 255);
+          u8 out_b = (u8)((b8 * a + bg_b * ia + 127) / 255);
+          dst_row[px] = ((u16)(out_r >> 3) << 11) | ((u16)(out_g >> 2) << 5) | (u16)(out_b >> 3);
+        }
+        // a == 0: fully transparent, skip (leave screen pixel unchanged)
+      }
     }
   };
 
@@ -884,14 +904,14 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
   if (draw_w > 0 && draw_h > 0) {
     // Hash-based O(1) lookup using composite key
     u64 composite_key = ((u64)image_id << 48) | ((u64)(u16)screen_h << 32) |
-                        ((u64)bg565 << 16) | ((u64)(u8)plan.mode << 8) |
+                        ((u64)(u8)plan.mode << 8) |
                         ((u64)(u16)draw_w & 0xFF);
     auto index_it = inline_image_cache_index.find(composite_key);
     if (index_it != inline_image_cache_index.end()) {
       auto list_it = index_it->second;
       // Verify full match to guard against hash collisions
       if (list_it->image_id == image_id && list_it->screen_h == (u16)screen_h &&
-          list_it->bg565 == bg565 && list_it->layout_mode == (u8)plan.mode &&
+          list_it->layout_mode == (u8)plan.mode &&
           list_it->width == draw_w && list_it->height == draw_h) {
         inline_image_cache.splice(inline_image_cache.begin(),
                                   inline_image_cache, list_it);
@@ -958,13 +978,6 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
     entry.height = (u16)draw_h;
     entry.pixels.resize((size_t)draw_w * (size_t)draw_h);
 
-    u8 bg_r5 = (bg565 >> 11) & 0x1F;
-    u8 bg_g6 = (bg565 >> 5) & 0x3F;
-    u8 bg_b5 = bg565 & 0x1F;
-    u8 bg_r8 = (bg_r5 << 3) | (bg_r5 >> 2);
-    u8 bg_g8 = (bg_g6 << 2) | (bg_g6 >> 4);
-    u8 bg_b8 = (bg_b5 << 3) | (bg_b5 >> 2);
-
     // PRECOMPUTE: src_x and src_y lookup tables (avoids per-pixel division)
     std::vector<int> src_x_lut(draw_w);
     std::vector<int> src_y_lut(draw_h);
@@ -989,17 +1002,8 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
         u8 g8 = px[1];
         u8 b8 = px[2];
         u8 a8 = (loaded_channels >= 4) ? px[3] : 255;
-        if (a8 < 255) {
-          u32 inv_a = 255 - a8;
-          r8 = (u8)((r8 * a8 + bg_r8 * inv_a + 127) / 255);
-          g8 = (u8)((g8 * a8 + bg_g8 * inv_a + 127) / 255);
-          b8 = (u8)((b8 * a8 + bg_b8 * inv_a + 127) / 255);
-        }
-
-        u16 r = (r8 >> 3) & 0x1F;
-        u16 g = (g8 >> 2) & 0x3F;
-        u16 b = (b8 >> 3) & 0x1F;
-        entry.pixels[(y * draw_w) + x] = (r << 11) | (g << 5) | b;
+        entry.pixels[(y * draw_w) + x] =
+            ((u32)a8 << 24) | ((u32)r8 << 16) | ((u32)g8 << 8) | (u32)b8;
       }
     }
 
@@ -1007,7 +1011,7 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
     entry_ready = true;
   }
 
-  const size_t entry_bytes = entry.pixels.size() * sizeof(u16);
+  const size_t entry_bytes = entry.pixels.size() * sizeof(u32);
   if (entry_bytes <= kInlineImageCacheMaxBytes) {
     while (
         !inline_image_cache.empty() &&
@@ -1016,12 +1020,11 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
       // Remove evicted entry from hash index
       u64 evict_key = ((u64)inline_image_cache.back().image_id << 48) |
                       ((u64)inline_image_cache.back().screen_h << 32) |
-                      ((u64)inline_image_cache.back().bg565 << 16) |
                       ((u64)inline_image_cache.back().layout_mode << 8) |
                       ((u64)inline_image_cache.back().width & 0xFF);
       inline_image_cache_index.erase(evict_key);
       inline_image_cache_bytes -=
-          inline_image_cache.back().pixels.size() * sizeof(u16);
+          inline_image_cache.back().pixels.size() * sizeof(u32);
       inline_image_cache.pop_back();
     }
     inline_image_cache.push_front(std::move(entry));
@@ -1029,7 +1032,6 @@ bool Book::DrawInlineImage(Text *ts, u16 image_id,
     // Insert new entry into hash index
     u64 new_key = ((u64)inline_image_cache.front().image_id << 48) |
                   ((u64)inline_image_cache.front().screen_h << 32) |
-                  ((u64)inline_image_cache.front().bg565 << 16) |
                   ((u64)inline_image_cache.front().layout_mode << 8) |
                   ((u64)inline_image_cache.front().width & 0xFF);
     inline_image_cache_index[new_key] = inline_image_cache.begin();
