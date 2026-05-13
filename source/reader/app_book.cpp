@@ -35,6 +35,7 @@
 #include "reader/book_switch_utils.h"
 #include "reader/fixed_layout_input_utils.h"
 #include "reader/inline_link_utils.h"
+#include "reader/reader_controls.h"
 #include "reader/suspend_policy_utils.h"
 #include "formats/common/pdf_view_utils.h"
 #include "ui/button.h"
@@ -1104,28 +1105,7 @@ void ReaderController::HandleEventInBook()
     return;
   decltype(App::key) &key = app_.key;
 
-  const u32 zoom_in_keys = key.a;
-  const u32 zoom_out_keys = key.b;
-
-  const u32 fixed_prev_page_keys = key.dleft;
-  const u32 fixed_next_page_keys = key.dright;
-  const u32 fixed_prev_chapter_keys = key.dup;
-  const u32 fixed_next_chapter_keys = key.ddown;
-
-  const u32 standard_next_page_keys =
-      reader_input_utils::ReflowableNextPageKeys(
-          key.a, key.r, key.down, key.ddown, key.zl);
-  const u32 standard_prev_page_keys =
-      reader_input_utils::ReflowablePrevPageKeys(
-          key.b, key.l, key.up, key.dup, key.zr);
-
-  const u32 bookmark_prev_keys =
-      reader_input_utils::ReflowableBookmarkPrevKeys(key.right, key.dright);
-  const u32 bookmark_next_keys =
-      reader_input_utils::ReflowableBookmarkNextKeys(key.left, key.dleft);
-
-  const u32 back_to_library_keys = key.start;
-  const u32 settings_keys = key.select;
+  const ReaderControls ctrl = BuildPortraitControls(key);
   auto touch_read = [&]()
   { return app_.TouchRead(); };
   auto request_status_redraw = [&]()
@@ -1151,7 +1131,7 @@ void ReaderController::HandleEventInBook()
       const u32 delay_ms = book_renderer::GetFixedLayoutDeferredDelayMs(bookcurrent_);
       app_.SetPdfDeferredReadyAtMs(delay_ms ? (osGetTime() + delay_ms) : 0);
     };
-    if (keys & zoom_in_keys)
+    if (keys & ctrl.zoom_in)
     {
       if (book_renderer::ChangeFixedLayoutZoom(bookcurrent_, 1))
       {
@@ -1160,7 +1140,7 @@ void ReaderController::HandleEventInBook()
         delay_fixed_layout_deferred();
       }
     }
-    else if (keys & zoom_out_keys)
+    else if (keys & ctrl.zoom_out)
     {
       if (book_renderer::ChangeFixedLayoutZoom(bookcurrent_, -1))
       {
@@ -1189,7 +1169,7 @@ void ReaderController::HandleEventInBook()
         delay_fixed_layout_deferred();
       }
     }
-    else if (keys & fixed_next_page_keys)
+    else if (keys & ctrl.fixed_page_next)
     {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, 1))
       {
@@ -1197,7 +1177,7 @@ void ReaderController::HandleEventInBook()
         delay_fixed_layout_deferred();
       }
     }
-    else if (keys & fixed_prev_page_keys)
+    else if (keys & ctrl.fixed_page_prev)
     {
       if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1))
       {
@@ -1205,7 +1185,7 @@ void ReaderController::HandleEventInBook()
         delay_fixed_layout_deferred();
       }
     }
-    else if (keys & fixed_next_chapter_keys)
+    else if (keys & ctrl.fixed_chapter_next)
     {
       if (!bookcurrent_->GetChapters().empty())
       {
@@ -1223,7 +1203,7 @@ void ReaderController::HandleEventInBook()
         delay_fixed_layout_deferred();
       }
     }
-    else if (keys & fixed_prev_chapter_keys)
+    else if (keys & ctrl.fixed_chapter_prev)
     {
       if (!bookcurrent_->GetChapters().empty())
       {
@@ -1279,12 +1259,12 @@ void ReaderController::HandleEventInBook()
         }
       }
     }
-    else if (keys & back_to_library_keys)
+    else if (keys & ctrl.back_to_library)
     {
       show_library_view();
       prefs->Write();
     }
-    else if (keys & settings_keys)
+    else if (keys & ctrl.open_settings)
     {
       show_settings_view(true);
       prefs->Write();
@@ -1406,47 +1386,35 @@ void ReaderController::HandleEventInBook()
         status_dirty = true;
       }
     }
-    else if (keys & key.dleft)
-    {
-      if (MoveInlineLinkFocusSequential(bookcurrent_, ts, -1))
-        status_dirty = true;
-    }
-    else if (keys & key.dright)
+    else if (keys & ctrl.link_next)
     {
       if (MoveInlineLinkFocusSequential(bookcurrent_, ts, 1))
         status_dirty = true;
     }
-    else if (keys & key.dup)
+    else if (keys & ctrl.link_prev)
     {
-      if (MoveInlineLinkFocus(bookcurrent_, ts,
-                              inline_link_utils::INLINE_LINK_NAV_UP))
+      if (MoveInlineLinkFocusSequential(bookcurrent_, ts, -1))
         status_dirty = true;
     }
-    else if (keys & key.ddown)
-    {
-      if (MoveInlineLinkFocus(bookcurrent_, ts,
-                              inline_link_utils::INLINE_LINK_NAV_DOWN))
-        status_dirty = true;
-    }
-    else if (keys & back_to_library_keys)
+    else if (keys & ctrl.back_to_library)
     {
       ExitInlineLinkFocus(&app_, bookcurrent_);
       show_library_view();
       prefs->Write();
     }
-    else if (keys & settings_keys)
+    else if (keys & ctrl.open_settings)
     {
       ExitInlineLinkFocus(&app_, bookcurrent_);
       show_settings_view(true);
       prefs->Write();
     }
   }
-  else if (keys & standard_next_page_keys)
+  else if (keys & ctrl.page_next)
   {
     // page forward.
     AdvanceBookPage(bookcurrent_, ts, &pagecurrent, &pagecount, &status_dirty);
   }
-  else if (keys & standard_prev_page_keys)
+  else if (keys & ctrl.page_prev)
   {
     // page back.
     if (TurnBookPage(bookcurrent_, ts, &pagecurrent, pagecount, -1))
@@ -1491,25 +1459,25 @@ void ReaderController::HandleEventInBook()
       }
     }
   }
-  else if (keys & back_to_library_keys)
+  else if (keys & ctrl.back_to_library)
   {
     // Return to browser without reparsing the current book later.
     // Keep one parsed book resident in memory for fast reopen.
     show_library_view();
     prefs->Write();
   }
-  else if (keys & settings_keys)
+  else if (keys & ctrl.open_settings)
   {
     // Go directly to settings from book.
     show_settings_view(true);
     prefs->Write();
   }
-  else if (keys & (bookmark_prev_keys | bookmark_next_keys))
+  else if (keys & (ctrl.bookmark_prev | ctrl.bookmark_next))
   {
     // Navigate bookmarks.
     app_flow_utils::BookmarkJumpResult jump = app_flow_utils::FindBookmarkJumpTarget(
         bookcurrent_->GetBookmarks(), bookcurrent_->GetPosition(),
-        (keys & bookmark_prev_keys) ? app_flow_utils::BookmarkJumpDirection::Previous
+        (keys & ctrl.bookmark_prev) ? app_flow_utils::BookmarkJumpDirection::Previous
                                     : app_flow_utils::BookmarkJumpDirection::Next);
 
     if (jump.found)
