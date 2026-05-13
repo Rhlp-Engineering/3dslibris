@@ -25,6 +25,7 @@
 #include "book/book_xml_table_utils.h"
 #include "book/book_xml_table_handler.h"
 #include "book/book_xml_heading_handler.h"
+#include "book/book_xml_image_handler.h"
 #include "book/book_xml_text_emit.h"
 #include "book/book_xml.h"
 #include "book/inline_image_layout.h"
@@ -1800,6 +1801,23 @@ static HeadingHandlerFns MakeHeadingHandlerFns() {
   return f;
 }
 
+static void ImageLf(parsedata_t *p) { linefeed(p); }
+static void ImageAdvanceScreen(parsedata_t *p) { AdvanceParsedScreen(p); }
+static void ImageAdvancePageOverflow(parsedata_t *p, int lineheight) {
+  AdvanceParsedPageOnOverflow(p, lineheight);
+}
+static void ImageEmitChardata(parsedata_t *p, const char *txt, int len) {
+  chardata((void *)p, txt, len);
+}
+static ImageHandlerFns MakeImageHandlerFns() {
+  ImageHandlerFns f;
+  f.linefeed = ImageLf;
+  f.advance_screen = ImageAdvanceScreen;
+  f.advance_page_overflow = ImageAdvancePageOverflow;
+  f.emit_chardata = ImageEmitChardata;
+  return f;
+}
+
 void start(void *data, const char *el, const char **attr) {
   //! Expat callback, when starting an element.
 
@@ -2293,170 +2311,7 @@ void start(void *data, const char *el, const char **attr) {
       }
     }
   } else if (XmlNameEquals(el, "img") || XmlNameEquals(el, "image")) {
-    parse_push(p, TAG_UNKNOWN);
-
-    const char *src = NULL;
-    const char *img_style = NULL;
-    const char *img_width_attr = NULL;
-    for (int i = 0; attr && attr[i]; i += 2) {
-      if (XmlNameEquals(attr[i], "src") || XmlNameEquals(attr[i], "href"))
-        src = attr[i + 1];
-      else if (AttrNameEquals(attr[i], "style"))
-        img_style = attr[i + 1];
-      else if (AttrNameEquals(attr[i], "width"))
-        img_width_attr = attr[i + 1];
-    }
-
-    const book_xml_css_style_utils::FloatMode float_mode =
-        ParseElementFloat(attr, elem_css);
-    if (ParseElementClear(attr, elem_css) !=
-        book_xml_css_style_utils::ClearMode::None) {
-      ApplyClearBreak(p);
-    }
-
-    if (img_style) {
-      const int line_h = ts->GetHeight() + ts->linespacing;
-      const book_xml_css_style_utils::MarginTopResult mtr =
-          book_xml_css_style_utils::ParseMarginTop(img_style);
-      const int default_lf = !blankline(p) ? 1 : 0;
-      const int lf_count =
-          book_xml_parser_style_utils::ResolveBlockTopLinefeeds(default_lf,
-                                                                mtr, line_h);
-      for (int i = 0; i < lf_count; i++)
-        linefeed(p);
-    }
-
-    std::string resolved;
-    if (src && *src) {
-      std::string raw_src(src);
-      if (!raw_src.empty() && raw_src[0] == '#') {
-        // FB2 inline binary reference (<image href="#id">).
-        resolved = "fb2:" + raw_src.substr(1);
-      } else {
-        resolved = ResolveDocPath(p->docpath, raw_src);
-      }
-    }
-
-    if (!resolved.empty() && p->book) {
-      u16 image_id = p->book->RegisterInlineImage(resolved);
-      const int text_w = ts->display.width - ts->margin.left - ts->margin.right;
-      const int author_max_w =
-          ParseImgWidthPx(img_width_attr, img_style, text_w, ts->GetHeight());
-      if (author_max_w > 0)
-        p->book->SetInlineImageAuthorMaxWidth(image_id, author_max_w);
-      InlineImageLayoutPlan image_plan{};
-      const bool leading_paragraph_image =
-          p->in_paragraph && !p->paragraph_has_content;
-
-      const bool figure_with_caption =
-          parse_in(p, TAG_FIGURE);
-
-      const InlineImageContext image_context =
-          figure_with_caption
-              ? INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION
-              : (leading_paragraph_image
-                    ? INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH
-                    : INLINE_IMAGE_CONTEXT_DEFAULT);
-      p->book->PlanInlineImageLayout(ts, image_id, p->screen, p->pen.x,
-                                     p->pen.y, p->linebegan,
-                                     image_context, &image_plan);
-
-      if (float_mode != book_xml_css_style_utils::FloatMode::None)
-        ApplyFloatImageLayoutOverride(&image_plan, p->linebegan,
-                                      ts->linespacing);
-
-      // If the image can't be decoded (e.g. a pure SVG vector without an
-      // embedded raster), PAGE mode would consume a full screen worth of space
-      // while drawing nothing. Emit a text placeholder instead.
-      InlineImageMetadata img_meta{};
-      p->book->GetInlineImageMetadata(image_id, &img_meta);
-      if (!img_meta.ok && image_plan.mode == INLINE_IMAGE_LAYOUT_PAGE &&
-          ImagePathLooksLikeSvgWrapper(resolved)) {
-        const char *fallback = "[illustration]";
-        if (!blankline(p))
-          linefeed(p);
-        chardata(p, fallback, (int)strlen(fallback));
-        linefeed(p);
-        return;
-      }
-
-      // Mirror the renderer so pagination and draw agree on where the image
-      // starts and how much space it consumes.
-      if (image_plan.advance_before)
-        AdvanceParsedScreen(p);
-      if (image_plan.line_break_before && p->linebegan)
-        linefeed(p);
-
-      // The token stays format-agnostic; parser and renderer now derive the
-      // concrete inline/band/page behavior from the same layout planner.
-      if (figure_with_caption) {
-        AppendParsedByte(p, TEXT_IMAGE_FIGURE_WITH_CAPTION);
-      } else if (leading_paragraph_image) {
-        AppendParsedByte(p, TEXT_IMAGE_LEADING_PARAGRAPH);
-      } else {
-        AppendParsedByte(p, TEXT_IMAGE_CONTEXT_DEFAULT);
-      }
-      if (author_max_w > 0) {
-        AppendParsedByte(p, TEXT_IMAGE_AUTHOR_WIDTH);
-        AppendParsedByte(p, (u32)author_max_w);
-      }
-      if (float_mode == book_xml_css_style_utils::FloatMode::Left) {
-        AppendParsedByte(p, TEXT_IMAGE_ALIGN);
-        AppendParsedByte(p, 1);
-      } else if (float_mode == book_xml_css_style_utils::FloatMode::Right) {
-        AppendParsedByte(p, TEXT_IMAGE_ALIGN);
-        AppendParsedByte(p, 2);
-      }
-      AppendParsedByte(p, TEXT_IMAGE);
-      AppendParsedByte(p, (u32)image_id);
-
-      switch (image_plan.mode) {
-      case INLINE_IMAGE_LAYOUT_INLINE:
-        if (p->in_paragraph)
-          p->paragraph_has_content = true;
-        p->pen.x += image_plan.draw_width + ts->GetAdvance(' ');
-        p->linebegan = true;
-        break;
-
-      case INLINE_IMAGE_LAYOUT_BAND:
-        if (p->in_paragraph)
-          p->paragraph_has_content = true;
-        // Band images are block-level: following text resumes below, while
-        // consecutive images may stack only if there is no text between them.
-        p->pen.x = ts->margin.left;
-        p->pen.y += image_plan.vertical_space_after_draw;
-        p->linebegan = false;
-        AdvanceParsedPageOnOverflow(p, ts->GetHeight());
-        if (img_style) {
-          const int line_h = ts->GetHeight() + ts->linespacing;
-          const book_xml_css_style_utils::MarginTopResult mbr =
-              book_xml_css_style_utils::ParseMarginBottom(img_style);
-          const int lf_count =
-              book_xml_parser_style_utils::ResolveBlockBottomLinefeeds(
-                  0, mbr, line_h);
-          for (int i = 0; i < lf_count; i++)
-            linefeed(p);
-        }
-        break;
-
-      case INLINE_IMAGE_LAYOUT_PAGE:
-      default:
-        if (p->in_paragraph)
-          p->paragraph_has_content = true;
-
-        // PAGE images consume the current reading screen. Advance through the common
-        // screen transition path so parser state and render buffer stay synchronized.
-        AdvanceParsedScreen(p);
-        break;
-      }
-    } else {
-      // Keep a lightweight fallback marker when src cannot be resolved.
-      const char *fallback = "[illustration]";
-      if (!blankline(p))
-        linefeed(p);
-      chardata(p, fallback, (int)strlen(fallback));
-      linefeed(p);
-    }
+    HandleInlineImageStart(p, ts, attr, elem_css, MakeImageHandlerFns());
   } else if (XmlNameEquals(el, "binary")) {
     parse_push(p, TAG_UNKNOWN);
 
