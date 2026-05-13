@@ -2682,6 +2682,30 @@ void start(void *data, const char *el, const char **attr) {
       p->mono = true;
       SyncParsedTextStyle(ts, p->bold, p->italic, p->mono);
     }
+  } else if (!strcmp(el, "ruby")) {
+    parse_push(p, TAG_RUBY);
+  } else if (!strcmp(el, "rp")) {
+    // <rp> provides fallback parens for non-ruby renderers; we add our own
+    // around <rt>, so suppress <rp> content entirely.
+    parse_push(p, TAG_RP);
+    SetCurrentStackHidden(p, true);
+  } else if (!strcmp(el, "rt")) {
+    parse_push(p, TAG_RT);
+    if (!HasActiveStackHiddenStyle(p)) {
+      // Render annotation as (text) at ~75% size.
+      chardata(p, "(", 1);
+      const u8 current = (u8)(p->stacksize - 1);
+      const u8 saved_px = ts->GetPixelSize();
+      const u8 small_px = (u8)book_xml_parser_style_utils::ClampInlineFontSize(
+          p->base_font_size_px, (int)(saved_px * 3 / 4));
+      if (small_px != saved_px) {
+        p->style_font_size_stack[current] = small_px;
+        p->style_font_size_restore_stack[current] = saved_px;
+        ts->SetPixelSize(small_px);
+        AppendParsedByte(p, TEXT_FONT_SIZE);
+        AppendParsedByte(p, (u32)small_px);
+      }
+    }
   } else if (!strcmp(el, "a")) {
     parse_push(p, TAG_ANCHOR);
     const u8 current = (u8)(p->stacksize - 1);
@@ -3440,6 +3464,10 @@ void end(void *data, const char *el) {
     if (IsBlockLevelElement(el) || p->page_break_after_stack[current])
       had_page_break_after = p->page_break_after_stack[current];
     restore_font_size_px = p->style_font_size_restore_stack[current];
+    // Emit closing paren for <rt> at the reduced annotation size, before
+    // font restore fires below.
+    if (p->stack[current] == TAG_RT && !HasActiveStackHiddenStyle(p))
+      chardata(p, ")", 1);
   }
 
   parse_pop(p);
