@@ -240,7 +240,7 @@ static bool ApplyPlainHeadingKeepWithNext(parsedata_t *p, int heading_level) {
 
   heading_layout::KeepWithNextRequest req{};
   req.pen_y = p->pen.y;
-  req.screen_height = (p->screen == 1) ? 320 : 400;
+  req.screen_height = text_render_layout_utils::ReadingScreenHeightPx(p->screen);
   req.bottom_margin = (p->screen == 1)
                           ? text_render_layout_utils::ResolveCompactReadingBottomMargin(
                                 p->ts->margin.bottom)
@@ -259,7 +259,7 @@ static bool ApplyPlainHeadingKeepWithNext(parsedata_t *p, int heading_level) {
 static void PlainAdvanceScreenOnOverflow(parsedata_t *p) {
   if (!p || !p->ts)
     return;
-  const int screen_height = (p->screen == 1) ? 320 : 400;
+  const int screen_height = text_render_layout_utils::ReadingScreenHeightPx(p->screen);
   const int bottom_margin =
       (p->screen == 1)
           ? text_render_layout_utils::ResolveCompactReadingBottomMargin(

@@ -1,6 +1,7 @@
 #include "book/inline_image_layout.h"
 
 #include "shared/aspect_fit_utils.h"
+#include "shared/text_render_layout_utils.h"
 #include <algorithm>
 
 namespace {
@@ -48,7 +49,7 @@ static bool IsAtScreenStart(const InlineImageLayoutRequest &req) {
 
 static int NextScreenHeight(const InlineImageLayoutRequest &req,
                             int *page_breaks) {
-  const int fallback_height = (req.current_screen == 1) ? 400 : 320;
+  const int fallback_height = text_render_layout_utils::ReadingScreenHeightPx(1 - req.current_screen);
   const int next_screen_height =
       (req.next_screen_height > 0) ? req.next_screen_height : fallback_height;
   if (req.current_screen == 1) {

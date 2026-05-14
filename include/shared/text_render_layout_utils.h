@@ -6,6 +6,13 @@ namespace text_render_layout_utils {
 
 static const int kFullReadingScreenFooterGuardPx = 8;
 
+// Returns the pixel height of a reading screen by its 0-based index.
+// Screen 0 is the first/left screen (400 px); screen 1 is the second/right
+// screen (320 px). Assumes normal (non-turned) device orientation.
+inline int ReadingScreenHeightPx(int reading_screen_index) {
+  return reading_screen_index == 0 ? 400 : 320;
+}
+
 struct ReadingScreenMetrics {
   int max_height;
   int bottom_margin;
