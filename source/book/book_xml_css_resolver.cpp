@@ -11,14 +11,6 @@
 
 namespace {
 
-static bool ContainsNoCase(const std::string &haystack, const char *needle) {
-  if (!needle || !needle[0])
-    return false;
-  const std::string h = ToLowerAscii(haystack);
-  const std::string n = ToLowerAscii(std::string(needle));
-  return h.find(n) != std::string::npos;
-}
-
 static bool AttrNameEq(const char *name, const char *needle) {
   if (!name || !needle)
     return false;

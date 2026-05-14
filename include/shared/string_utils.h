@@ -49,6 +49,27 @@ inline std::string ToLowerAscii(const std::string &s) {
   return out;
 }
 
+inline bool EqualsAsciiNoCase(const char *a, const char *b) {
+  if (!a || !b)
+    return false;
+  while (*a && *b) {
+    unsigned char ca = (unsigned char)*a;
+    unsigned char cb = (unsigned char)*b;
+    if (ca >= 'A' && ca <= 'Z') ca = (unsigned char)(ca - 'A' + 'a');
+    if (cb >= 'A' && cb <= 'Z') cb = (unsigned char)(cb - 'A' + 'a');
+    if (ca != cb) return false;
+    a++; b++;
+  }
+  return *a == '\0' && *b == '\0';
+}
+
+inline bool ContainsNoCase(const std::string &haystack, const char *needle) {
+  if (!needle || !needle[0])
+    return false;
+  return ToLowerAscii(haystack).find(ToLowerAscii(std::string(needle))) !=
+         std::string::npos;
+}
+
 inline bool HasExtCI(const char *name, const char *ext) {
   if (!name || !ext)
     return false;

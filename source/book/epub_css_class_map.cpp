@@ -15,26 +15,6 @@ bool IsIdentChar(char c) {
          (c >= '0' && c <= '9') || c == '-' || c == '_';
 }
 
-std::string TrimAscii(const std::string &text) {
-  size_t start = 0;
-  while (start < text.size() && (text[start] == ' ' || text[start] == '\t' ||
-                                 text[start] == '\r' || text[start] == '\n'))
-    ++start;
-  size_t end = text.size();
-  while (end > start && (text[end - 1] == ' ' || text[end - 1] == '\t' ||
-                         text[end - 1] == '\r' || text[end - 1] == '\n'))
-    --end;
-  return text.substr(start, end - start);
-}
-
-bool ContainsNoCase(const std::string &haystack, const char *needle) {
-  if (!needle || !needle[0])
-    return false;
-  const std::string lower_haystack = ToLowerAscii(haystack.c_str());
-  const std::string lower_needle = ToLowerAscii(needle);
-  return lower_haystack.find(lower_needle) != std::string::npos;
-}
-
 void SkipWhitespace(const char *s, size_t len, size_t *pos) {
   while (*pos < len && (s[*pos] == ' ' || s[*pos] == '\t' ||
                         s[*pos] == '\r' || s[*pos] == '\n'))
@@ -65,7 +45,7 @@ bool ExtractSingleClassSelectorName(const std::string &selector,
   if (!class_name_out)
     return false;
 
-  const std::string trimmed = TrimAscii(selector);
+  const std::string trimmed = Trim(selector);
   if (trimmed.empty())
     return false;
 
@@ -94,7 +74,7 @@ static bool ExtractBareElementSelectorName(const std::string &selector,
                                            std::string *el_out) {
   if (!el_out)
     return false;
-  const std::string trimmed = TrimAscii(selector);
+  const std::string trimmed = Trim(selector);
   if (trimmed.empty())
     return false;
   // Must start with a letter (tag names never start with a digit).

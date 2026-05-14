@@ -67,31 +67,6 @@ constexpr int kCompactBottomMargin = 20;
 
 using book_xml_css_style_utils::ResolveHorizontalMarginPx;
 
-static bool EqualsAsciiNoCase(const char *a, const char *b) {
-  if (!a || !b)
-    return false;
-  while (*a && *b) {
-    unsigned char ca = (unsigned char)*a;
-    unsigned char cb = (unsigned char)*b;
-    if (ca >= 'A' && ca <= 'Z')
-      ca = (unsigned char)(ca - 'A' + 'a');
-    if (cb >= 'A' && cb <= 'Z')
-      cb = (unsigned char)(cb - 'A' + 'a');
-    if (ca != cb)
-      return false;
-    a++;
-    b++;
-  }
-  return *a == '\0' && *b == '\0';
-}
-
-static std::string ToLowerAsciiLocal(const std::string &s) {
-  std::string out = s;
-  std::transform(out.begin(), out.end(), out.begin(),
-                 [](unsigned char c) { return (char)tolower(c); });
-  return out;
-}
-
 static void AppendParsedByte(parsedata_t *p, u32 c) {
   parse_append_page_byte(p, c);
 }
@@ -138,21 +113,12 @@ static void QueueDeferredStyleSync(parsedata_t *p, bool want_bold,
       want_mono);
 }
 
-static bool ContainsAsciiNoCase(const std::string &haystack,
-                                const char *needle) {
-  if (!needle || !needle[0])
-    return false;
-  const std::string haystack_lc = ToLowerAsciiLocal(haystack);
-  const std::string needle_lc = ToLowerAsciiLocal(needle);
-  return haystack_lc.find(needle_lc) != std::string::npos;
-}
-
 static bool ClassListContains(const char *class_attr, const char *needle) {
   if (!class_attr || !needle || !needle[0])
     return false;
 
-  const std::string classes = ToLowerAsciiLocal(class_attr);
-  const std::string target = ToLowerAsciiLocal(needle);
+  const std::string classes = ToLowerAscii(std::string(class_attr));
+  const std::string target = ToLowerAscii(std::string(needle));
   size_t pos = 0;
   while (pos < classes.size()) {
     while (pos < classes.size() &&

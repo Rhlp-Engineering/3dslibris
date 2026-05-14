@@ -9,11 +9,6 @@ namespace book_xml_css_style_utils {
 
 namespace {
 
-bool ContainsNoCase(const std::string &haystack, const char *needle) {
-  return needle && needle[0] &&
-         haystack.find(ToLowerAscii(std::string(needle))) != std::string::npos;
-}
-
 bool HasTextDecorationKeyword(const std::string &style_lc,
                               const char *keyword) {
   if (!keyword || !keyword[0])
