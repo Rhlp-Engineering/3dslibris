@@ -96,6 +96,7 @@ fi
   "$TEST_ROOT/source/book/book_xml_block_utils.cpp" \
   "$TEST_ROOT/source/book/book_xml_css_resolver.cpp" \
   "$TEST_ROOT/source/book/book_xml_css_style_utils.cpp" \
+  "$TEST_ROOT/source/book/book_xml_css_inline_style.cpp" \
   "$TEST_ROOT/source/book/book_xml_flow_layout.cpp" \
   "$TEST_ROOT/source/book/book_xml_hidden_utils.cpp" \
   "$TEST_ROOT/source/book/book_xml_list_utils.cpp" \
