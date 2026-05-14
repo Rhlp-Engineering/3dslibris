@@ -263,7 +263,7 @@ void TextRenderer::ClearScreen() {
 
 void TextRenderer::ClearRect(u16 xl, u16 yl, u16 xh, u16 yh) {
   MarkCurrentScreenDirtyRect((int)xl, (int)yl, (int)xh, (int)yh);
-  int maxHeight = (parent->screen == parent->screenleft ? 400 : 320);
+  int maxHeight = ScreenHeightPx(parent->screen, parent);
   // Pre-clamp to valid range
   if (xl >= (u16)parent->display.width || yl >= (u16)maxHeight) return;
   xh = std::min((int)xh, (int)parent->display.width);
@@ -338,7 +338,7 @@ u16 TextRenderer::GetBgColor() {
 
 void TextRenderer::FillRect(u16 xl, u16 yl, u16 xh, u16 yh, u16 color) {
   MarkCurrentScreenDirtyRect((int)xl, (int)yl, (int)xh, (int)yh);
-  int maxH = (parent->screen == parent->screenleft) ? 400 : 320;
+  int maxH = ScreenHeightPx(parent->screen, parent);
   // Pre-clamp to valid range
   if (xl >= (u16)parent->display.width || yl >= (u16)maxH) return;
   xh = std::min((int)xh, (int)parent->display.width);
@@ -354,7 +354,7 @@ void TextRenderer::FillRect(u16 xl, u16 yl, u16 xh, u16 yh, u16 color) {
 
 void TextRenderer::DrawRect(u16 xl, u16 yl, u16 xh, u16 yh, u16 color) {
   MarkCurrentScreenDirtyRect((int)xl, (int)yl, (int)xh, (int)yh);
-  int maxHeight = (parent->screen == parent->screenleft ? 400 : 320);
+  int maxHeight = ScreenHeightPx(parent->screen, parent);
   for (u16 x = xl; x < xh; x++) {
     if (yl < maxHeight && x < (u16)parent->display.width)
       parent->screen[yl * parent->display.height + x] = color;
@@ -446,7 +446,7 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
   advance = asglyph->advance.x >> 6;
   buffer = bitmap.buffer;
 
-  int maxY = (parent->screen == parent->screenleft) ? 400 : 320;
+  int maxY = ScreenHeightPx(parent->screen, parent);
   int bottomClip = parent->margin.bottom;
   if (face == parent->GetFace(TEXT_STYLE_BROWSER))
     bottomClip = 0;
@@ -638,7 +638,7 @@ void TextRenderer::PrintChar(u32 ucs, FT_Face face) {
 bool TextRenderer::PrintNewLine() {
   pen.x = parent->margin.left;
   int height = parent->GetHeight();
-  int maxHeight = (parent->screen == parent->screenleft) ? 400 : 320;
+  int maxHeight = ScreenHeightPx(parent->screen, parent);
   int y = pen.y + height + parent->linespacing;
   if (!text_render_layout_utils::CurrentLineFitsScreen(
           y, height, parent->linespacing, maxHeight, parent->margin.bottom)) {

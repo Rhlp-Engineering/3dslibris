@@ -181,3 +181,8 @@ private:
   void PrintString(const char *string, FT_Face face);
   void ReportFace(FT_Face face);
 };
+
+// Returns 400 for the top screen, 320 for the bottom screen.
+inline int ScreenHeightPx(const u16 *screen, const Text *ts) {
+  return screen == ts->screenleft ? 400 : 320;
+}
