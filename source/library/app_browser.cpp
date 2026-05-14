@@ -31,6 +31,7 @@
 #include "ui/browser_nav.h"
 #include "formats/common/book_error.h"
 #include "ui/button.h"
+#include "ui/screen_layout_constants.h"
 #include "menus/chapter_menu.h"
 #include "shared/debug_log.h"
 #include "formats/cbz/cbz_parser.h"
@@ -74,7 +75,6 @@ namespace {
 // Max extraction attempts per session before a book is skipped.
 // Two retries absorb transient SD-card read failures without retrying forever.
 static const uint8_t kCoverMaxAttempts = cover_cache::kMaxAttempts;
-static const int kBrowserFooterY = 296;
 
 static BrowserViewMode CurrentBrowserViewMode(const App &app) {
   if (!app.prefs)
@@ -118,16 +118,16 @@ static size_t CountQueuedHeavyJobs(const std::deque<app_job_t> &jobs) {
 }
 
 static void LayoutBrowserNavButtons(App *app) {
-  app->buttonprev.Move(2, kBrowserFooterY);
-  app->buttonprev.Resize(66, 22);
+  app->buttonprev.Move(screen_layout::kFooterLeftX, screen_layout::kFooterY);
+  app->buttonprev.Resize(screen_layout::kFooterNavW, screen_layout::kFooterButtonH);
   app->buttonprev.Label("prev");
 
-  app->buttonnext.Move(172, kBrowserFooterY);
-  app->buttonnext.Resize(66, 22);
+  app->buttonnext.Move(screen_layout::kFooterRightX, screen_layout::kFooterY);
+  app->buttonnext.Resize(screen_layout::kFooterNavW, screen_layout::kFooterButtonH);
   app->buttonnext.Label("next");
 
-  app->buttonprefs.Move(72, kBrowserFooterY);
-  app->buttonprefs.Resize(96, 22);
+  app->buttonprefs.Move(screen_layout::kFooterMidX, screen_layout::kFooterY);
+  app->buttonprefs.Resize(screen_layout::kFooterMidW, screen_layout::kFooterButtonH);
   app->buttonprefs.Label("settings");
 }
 
@@ -1081,7 +1081,7 @@ void LibraryController::browser_draw(void) {
     char pageMsg[32];
     snprintf(pageMsg, sizeof(pageMsg), "%d/%d", currentPage, totalPages);
     app_.ts->SetPixelSize(8);
-    app_.ts->SetPen(112, kBrowserFooterY + 3);
+    app_.ts->SetPen(112, screen_layout::kFooterY + 3);
     app_.ts->PrintString(pageMsg);
     app_.ts->SetPixelSize(savedPixelSize);
   }
