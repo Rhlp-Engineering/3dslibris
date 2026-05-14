@@ -1,12 +1,9 @@
 #include "book/inline_image_layout.h"
 
+#include "shared/aspect_fit_utils.h"
 #include <algorithm>
 
 namespace {
-
-static int ClampPositive(int value, int fallback) {
-  return (value > 0) ? value : fallback;
-}
 
 static int DivRoundNearest(int numer, int denom) {
   if (denom <= 0)
@@ -24,10 +21,10 @@ static void FitWithinBoxNoUpscale(int src_w, int src_h, int max_w, int max_h,
                                   int *out_w, int *out_h) {
   if (!out_w || !out_h)
     return;
-  src_w = ClampPositive(src_w, 1);
-  src_h = ClampPositive(src_h, 1);
-  max_w = ClampPositive(max_w, src_w);
-  max_h = ClampPositive(max_h, src_h);
+  src_w = aspect_fit_utils::ClampPositive(src_w, 1);
+  src_h = aspect_fit_utils::ClampPositive(src_h, 1);
+  max_w = aspect_fit_utils::ClampPositive(max_w, src_w);
+  max_h = aspect_fit_utils::ClampPositive(max_h, src_h);
 
   int draw_w = src_w;
   int draw_h = src_h;
@@ -99,9 +96,9 @@ InlineImageLayoutPlan PlanInlineImageLayout(const InlineImageLayoutRequest &req,
       req.image_context == INLINE_IMAGE_CONTEXT_LEADING_PARAGRAPH;
   const bool figure_with_caption =
       req.image_context == INLINE_IMAGE_CONTEXT_FIGURE_WITH_CAPTION;
-  const int line_height = ClampPositive(req.line_height, 16);
-  const int screen_width = ClampPositive(req.screen_width, 240);
-  const int screen_height = ClampPositive(req.screen_height, 400);
+  const int line_height = aspect_fit_utils::ClampPositive(req.line_height, 16);
+  const int screen_width = aspect_fit_utils::ClampPositive(req.screen_width, 240);
+  const int screen_height = aspect_fit_utils::ClampPositive(req.screen_height, 400);
   const int text_width =
       std::max(1, screen_width - req.margin_left - req.margin_right);
   const int limit_y = screen_height - req.margin_bottom;
