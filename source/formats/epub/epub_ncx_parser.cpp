@@ -8,6 +8,7 @@
 
 #include "formats/common/xml_parse_utils.h"
 #include "formats/epub/epub_limits.h"
+#include "shared/string_utils.h"
 #include <algorithm>
 #include <ctype.h>
 #include <set>
@@ -26,14 +27,6 @@ static const char *AttrValue(const char **attr, const char *key) {
       return attr[i + 1];
   }
   return NULL;
-}
-
-static std::string Trim(const std::string &s) {
-  size_t start = s.find_first_not_of(" \t\n\r");
-  if (start == std::string::npos)
-    return "";
-  size_t end = s.find_last_not_of(" \t\n\r");
-  return s.substr(start, end - start + 1);
 }
 
 static std::string ResolveRelativePath(const std::string &base,

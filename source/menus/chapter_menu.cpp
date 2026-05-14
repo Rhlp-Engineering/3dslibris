@@ -20,27 +20,18 @@
 #include "book/book.h"
 #include "shared/debug_log.h"
 #include "book/page.h"
+#include "shared/string_utils.h"
 #include "shared/text_unicode_utils.h"
 #include "ui/text.h"
 
 namespace {
-
-static std::string TrimLabel(const std::string &in) {
-  size_t start = 0;
-  while (start < in.size() && isspace((unsigned char)in[start]))
-    start++;
-  size_t end = in.size();
-  while (end > start && isspace((unsigned char)in[end - 1]))
-    end--;
-  return in.substr(start, end - start);
-}
 
 static std::vector<std::string> WrapTextToLines(Text *ts,
                                                 const std::string &text,
                                                 int max_width,
                                                 int max_lines) {
   std::vector<std::string> lines;
-  std::string remaining = TrimLabel(text);
+  std::string remaining = Trim(text);
   const int style = TEXT_STYLE_BROWSER;
 
   while (!remaining.empty() && (int)lines.size() < max_lines) {
@@ -113,7 +104,7 @@ static const char *TocQualityLabel(TocQuality q) {
 }
 
 static std::string NormalizeSearchText(const std::string &raw) {
-  std::string in = TrimLabel(raw);
+  std::string in = Trim(raw);
   if (in.empty())
     return "";
 
@@ -133,7 +124,7 @@ static std::string NormalizeSearchText(const std::string &raw) {
     }
   }
   if (leader != std::string::npos) {
-    in = TrimLabel(in.substr(0, leader));
+    in = Trim(in.substr(0, leader));
     // Only strip trailing page-like numbers when a dotted leader was present;
     // without a leader the trailing digits are part of the title itself
     // (e.g. "CHAPTER 4") and must be preserved for accurate matching.
@@ -170,7 +161,7 @@ static std::string NormalizeSearchText(const std::string &raw) {
     prev_space = false;
   }
 
-  return TrimLabel(out);
+  return Trim(out);
 }
 
 static std::string BuildPageSearchText(Page *page, size_t max_out = 3072) {
@@ -273,7 +264,7 @@ static std::string BuildPageSearchText(Page *page, size_t max_out = 3072) {
       break;
   }
 
-  return TrimLabel(out);
+  return Trim(out);
 }
 
 static std::vector<std::string> BuildPageHeadingLines(Page *page,

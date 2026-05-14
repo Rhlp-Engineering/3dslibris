@@ -37,22 +37,12 @@ namespace {
 
 static const u8 kTargetsPerPage = 5;
 
-static std::string TrimLabel(const std::string &in) {
-  size_t start = 0;
-  while (start < in.size() && isspace((unsigned char)in[start]))
-    start++;
-  size_t end = in.size();
-  while (end > start && isspace((unsigned char)in[end - 1]))
-    end--;
-  return in.substr(start, end - start);
-}
-
 static std::vector<std::string> WrapTextToLines(Text *ts,
                                                 const std::string &text,
                                                 int max_width,
                                                 int max_lines) {
   std::vector<std::string> lines;
-  std::string remaining = TrimLabel(text);
+  std::string remaining = Trim(text);
   const int style = TEXT_STYLE_BROWSER;
 
   while (!remaining.empty() && (int)lines.size() < max_lines) {

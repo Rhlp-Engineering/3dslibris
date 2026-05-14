@@ -18,19 +18,10 @@
 #include "ui/text.h"
 #include "book/page.h"
 #include "shared/text_token_constants.h"
+#include "shared/string_utils.h"
 #include "shared/text_unicode_utils.h"
 
 namespace {
-
-static std::string TrimLabel(const std::string &in) {
-  size_t start = 0;
-  while (start < in.size() && isspace((unsigned char)in[start]))
-    start++;
-  size_t end = in.size();
-  while (end > start && isspace((unsigned char)in[end - 1]))
-    end--;
-  return in.substr(start, end - start);
-}
 
 static std::string SanitizePreviewText(const std::string &in) {
   std::string out;
@@ -100,7 +91,7 @@ static std::string SanitizePreviewText(const std::string &in) {
     i++;
   }
 
-  return TrimLabel(out);
+  return Trim(out);
 }
 
 static std::string ExtractPagePreview(Page *page, size_t max_chars) {
@@ -199,7 +190,7 @@ static std::vector<std::string> WrapTextToLines(Text *ts,
                                                 int max_width,
                                                 int max_lines) {
   std::vector<std::string> lines;
-  std::string remaining = TrimLabel(text);
+  std::string remaining = Trim(text);
   const int style = TEXT_STYLE_BROWSER;
 
   while (!remaining.empty() && (int)lines.size() < max_lines) {

@@ -31,6 +31,7 @@
 #include "formats/common/book_error.h"
 #include "shared/app_flow_utils.h"
 #include "shared/debug_runtime_mode.h"
+#include "shared/string_utils.h"
 #include "reader/book_page_nav.h"
 #include "reader/book_switch_utils.h"
 #include "reader/deferred_relayout_utils.h"
@@ -95,26 +96,6 @@ namespace
     std::list<int> old_bookmarks;
   };
 
-  std::string TrimAsciiWhitespaceLocal(const std::string &s)
-  {
-    size_t begin = 0;
-    while (begin < s.size())
-    {
-      const unsigned char c = (unsigned char)s[begin];
-      if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
-        break;
-      begin++;
-    }
-    size_t end = s.size();
-    while (end > begin)
-    {
-      const unsigned char c = (unsigned char)s[end - 1];
-      if (c != ' ' && c != '\t' && c != '\n' && c != '\r')
-        break;
-      end--;
-    }
-    return s.substr(begin, end - begin);
-  }
 
   std::string EllipsizeToWidth(Text *ts, const std::string &text, int max_width,
                                u8 style)
@@ -199,7 +180,7 @@ namespace
             rest.push_back(' ');
           rest += tokens[j];
         }
-        lines.push_back(EllipsizeToWidth(ts, TrimAsciiWhitespaceLocal(rest),
+        lines.push_back(EllipsizeToWidth(ts, Trim(rest),
                                          max_width, style));
         return lines;
       }
