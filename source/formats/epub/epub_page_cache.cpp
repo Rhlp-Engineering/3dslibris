@@ -10,6 +10,7 @@
 #include "book/page.h"
 #include "book/page_buffer_utils.h"
 #include "shared/debug_log.h"
+#include "formats/common/page_cache_field_limits.h"
 #include "formats/common/page_cache_utils.h"
 #include "shared/path_utils.h"
 #include "shared/open_cancel_poll.h"
@@ -37,10 +38,6 @@ static const std::string &GetEffectiveCacheDir() {
 }
 static const u32 kEpubPageCacheMagic = 0x45504347U;
 static const u16 kEpubPageCacheVersion = 10;
-static const u16 kPageCacheTitleMaxBytes = 1000;
-static const u16 kPageCachePageMaxBytes = 4096;
-static const u16 kPageCacheChapterTitleMaxBytes = 2048;
-static const u16 kPageCachePathMaxBytes = 2048;
 static const u16 kPageCacheHrefMaxBytes = 2048;
 
 struct EpubPageCacheHeader {
@@ -228,7 +225,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
 
   bool ok = true;
   std::vector<page_cache_utils::CachedPage> pages;
-  ok = page_cache_utils::ReadPages(fp, hdr.page_count, kPageCachePageMaxBytes,
+  ok = page_cache_utils::ReadPages(fp, hdr.page_count, page_cache_limits::kPageMaxBytes,
                                    &pages);
   if (ok)
     AppendPages(book, pages);
@@ -236,7 +233,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
   if (ok) {
     std::vector<page_cache_utils::CachedChapter> chapters;
     ok = page_cache_utils::ReadChapters(fp, hdr.chapter_count,
-                                        kPageCacheChapterTitleMaxBytes,
+                                        page_cache_limits::kChapterTitleMaxBytes,
                                         &chapters);
     if (ok)
       AppendChapters(book, chapters);
@@ -251,7 +248,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
       }
       std::string docpath;
       if (!page_cache_utils::ReadLengthPrefixedString16(
-              fp, kPageCachePathMaxBytes, true, &docpath)) {
+              fp, page_cache_limits::kPathMaxBytes, true, &docpath)) {
         ok = false;
         break;
       }
@@ -281,7 +278,7 @@ bool TryLoad(Book *book, const char *book_path, int pixel_size,
     for (u32 i = 0; i < hdr.image_count; i++) {
       std::string imgpath;
       if (!page_cache_utils::ReadLengthPrefixedString16(
-              fp, kPageCachePathMaxBytes, false, &imgpath)) {
+              fp, page_cache_limits::kPathMaxBytes, false, &imgpath)) {
         ok = false;
         break;
       }
@@ -343,7 +340,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
 
   const char *title_c = book->GetTitle();
   std::string title = title_c ? title_c : "";
-  title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+  title = page_cache_utils::ClampString(title, page_cache_limits::kTitleMaxBytes);
   const std::vector<ChapterEntry> &chapters = book->GetChapters();
   const std::unordered_map<std::string, u16> &doc_starts =
       book->GetChapterDocStartPages();
@@ -383,7 +380,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
     Page *page = book->GetPage((int)i);
     const int length = page ? page->GetLength() : 0;
     const u16 len16 = (u16)(length > 0 ? length : 0);
-    if (len16 > kPageCachePageMaxBytes) { ok = false; break; }
+    if (len16 > page_cache_limits::kPageMaxBytes) { ok = false; break; }
     if (fwrite(&len16, 1, sizeof(len16), fp) != sizeof(len16)) { ok = false; break; }
     if (len16 > 0) {
       const u32 *buffer = page->GetBuffer();
@@ -395,7 +392,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
 
   if (ok)
     ok = page_cache_utils::WriteChapters(fp, cached_chapters,
-                                         kPageCacheChapterTitleMaxBytes);
+                                         page_cache_limits::kChapterTitleMaxBytes);
   DBG_LOGF(r, "EPUB cache save: write-chapters done ok=%d", (int)ok);
 
   if (ok) {
@@ -411,7 +408,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
         break;
       }
       if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp, kv.first, kPageCachePathMaxBytes, true)) {
+              fp, kv.first, page_cache_limits::kPathMaxBytes, true)) {
         ok = false;
         break;
       }
@@ -453,7 +450,7 @@ void Save(Book *book, const char *book_path, int pixel_size,
         break;
       }
       if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp, *imgpath, kPageCachePathMaxBytes, false)) {
+              fp, *imgpath, page_cache_limits::kPathMaxBytes, false)) {
         ok = false;
         break;
       }
@@ -552,7 +549,7 @@ bool StreamWriter::Begin(Book *book, const char *book_path, int pixel_size,
 
   const char *title_c = book->GetTitle();
   std::string title = title_c ? title_c : "";
-  title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+  title = page_cache_utils::ClampString(title, page_cache_limits::kTitleMaxBytes);
 
   EpubPageCacheHeader hdr;
   memset(&hdr, 0, sizeof(hdr));
@@ -587,7 +584,7 @@ bool StreamWriter::FlushPages(Book *book, u16 from_page) {
     Page *page = book->GetPage((int)i);
     const int length = page ? page->GetLength() : 0;
     const u16 len16 = (u16)(length > 0 ? length : 0);
-    if (len16 > kPageCachePageMaxBytes)
+    if (len16 > page_cache_limits::kPageMaxBytes)
       return false;
     if (fwrite(&len16, 1, sizeof(len16), fp_) != sizeof(len16))
       return false;
@@ -617,7 +614,7 @@ bool StreamWriter::Finalize(Book *book) {
       book->GetChapterAnchorPages();
 
   bool ok = page_cache_utils::WriteChapters(fp_, cached_chapters,
-                                            kPageCacheChapterTitleMaxBytes);
+                                            page_cache_limits::kChapterTitleMaxBytes);
 
   if (ok) {
     for (auto &kv : doc_starts) {
@@ -632,7 +629,7 @@ bool StreamWriter::Finalize(Book *book) {
         break;
       }
       if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp_, kv.first, kPageCachePathMaxBytes, true)) {
+              fp_, kv.first, page_cache_limits::kPathMaxBytes, true)) {
         ok = false;
         break;
       }
@@ -674,7 +671,7 @@ bool StreamWriter::Finalize(Book *book) {
         break;
       }
       if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp_, *imgpath, kPageCachePathMaxBytes, false)) {
+              fp_, *imgpath, page_cache_limits::kPathMaxBytes, false)) {
         ok = false;
         break;
       }
@@ -705,7 +702,7 @@ bool StreamWriter::Finalize(Book *book) {
   if (ok) {
     const char *title_c = book->GetTitle();
     std::string title = title_c ? title_c : "";
-    title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+    title = page_cache_utils::ClampString(title, page_cache_limits::kTitleMaxBytes);
 
     EpubPageCacheHeader hdr;
     memset(&hdr, 0, sizeof(hdr));

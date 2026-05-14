@@ -3,6 +3,7 @@
 #include "book/book.h"
 #include "book/page.h"
 #include "shared/debug_log.h"
+#include "formats/common/page_cache_field_limits.h"
 #include "formats/common/page_cache_utils.h"
 #include "shared/path_utils.h"
 
@@ -17,10 +18,6 @@ namespace {
 
 static const u32 kMobiPageCacheMagic = 0x4D504347U; // "MPCG"
 static const u16 kMobiPageCacheVersion = 19;
-static const u16 kPageCacheTitleMaxBytes = 1000;
-static const u16 kPageCachePageMaxBytes = 4096;
-static const u16 kPageCacheChapterTitleMaxBytes = 2048;
-static const u16 kPageCachePathMaxBytes = 2048;
 static const size_t kPageCacheIoBufferBytes = 262144;
 
 struct MobiPageCacheHeader {
@@ -205,12 +202,12 @@ bool TryLoad(Book *book, const char *book_path,
   }
 
   bool ok = true;
-  ok = ReadPagesIntoBook(fp, hdr.page_count, kPageCachePageMaxBytes, book);
+  ok = ReadPagesIntoBook(fp, hdr.page_count, page_cache_limits::kPageMaxBytes, book);
 
   if (ok) {
     std::vector<page_cache_utils::CachedChapter> chapters;
     ok = page_cache_utils::ReadChapters(fp, hdr.chapter_count,
-                                        kPageCacheChapterTitleMaxBytes,
+                                        page_cache_limits::kChapterTitleMaxBytes,
                                         &chapters);
     if (ok)
       AppendCachedChapters(book, chapters);
@@ -220,7 +217,7 @@ bool TryLoad(Book *book, const char *book_path,
     for (u32 i = 0; i < hdr.image_count; i++) {
       std::string imgpath;
       if (!page_cache_utils::ReadLengthPrefixedString16(
-              fp, kPageCachePathMaxBytes, false, &imgpath)) {
+              fp, page_cache_limits::kPathMaxBytes, false, &imgpath)) {
         ok = false;
         break;
       }
@@ -278,7 +275,7 @@ void Save(Book *book, const char *book_path,
 
   const char *title_c = book->GetTitle();
   std::string title = title_c ? title_c : "";
-  title = page_cache_utils::ClampString(title, kPageCacheTitleMaxBytes);
+  title = page_cache_utils::ClampString(title, page_cache_limits::kTitleMaxBytes);
   const std::vector<ChapterEntry> &chapters = book->GetChapters();
   const std::vector<page_cache_utils::CachedChapter> cached_chapters =
       CollectCachedChapters(chapters);
@@ -306,11 +303,11 @@ void Save(Book *book, const char *book_path,
     ok = page_cache_utils::WriteRawString(fp, title);
 
   if (ok)
-    ok = WritePagesFromBook(fp, book, kPageCachePageMaxBytes);
+    ok = WritePagesFromBook(fp, book, page_cache_limits::kPageMaxBytes);
 
   if (ok)
     ok = page_cache_utils::WriteChapters(fp, cached_chapters,
-                                         kPageCacheChapterTitleMaxBytes);
+                                         page_cache_limits::kChapterTitleMaxBytes);
 
   if (ok) {
     u32 img_count = book->GetInlineImageCount();
@@ -321,7 +318,7 @@ void Save(Book *book, const char *book_path,
         break;
       }
       if (!page_cache_utils::WriteLengthPrefixedString16(
-              fp, *imgpath, kPageCachePathMaxBytes, false)) {
+              fp, *imgpath, page_cache_limits::kPathMaxBytes, false)) {
         ok = false;
         break;
       }
