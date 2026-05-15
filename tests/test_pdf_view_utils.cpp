@@ -54,7 +54,7 @@ void TestDevicePolicies() {
 
   ExpectEq("old 3ds default zoom", old_policy.default_zoom_index, 2);
   ExpectEq("new 3ds default zoom", new_policy.default_zoom_index, 2);
-  ExpectEq("old 3ds max zoom", old_policy.max_zoom_index, 4);
+  ExpectEq("old 3ds max zoom", old_policy.max_zoom_index, 6);
   ExpectEq("new 3ds max zoom", new_policy.max_zoom_index, 6);
   ExpectTrue("old 3ds keeps preview cache", old_policy.keep_preview_cache);
   ExpectTrue("new 3ds keeps preview cache", new_policy.keep_preview_cache);
@@ -65,9 +65,9 @@ void TestDevicePolicies() {
   ExpectEqU32("new 3ds MuPDF store bytes", new_policy.mupdf_store_bytes,
               20u * 1024u * 1024u);
 
-  ExpectEq("old 3ds clamps to extra zoom tier",
-           pdf_view_utils::ClampZoomIndexForDevice(99, false), 4);
-  ExpectEq("new 3ds keeps top zoom tier",
+  ExpectEq("old 3ds clamps to top zoom tier",
+           pdf_view_utils::ClampZoomIndexForDevice(99, false), 6);
+  ExpectEq("new 3ds clamps to top zoom tier",
            pdf_view_utils::ClampZoomIndexForDevice(99, true), 6);
 }
 

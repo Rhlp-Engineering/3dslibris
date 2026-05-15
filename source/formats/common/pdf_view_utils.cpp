@@ -43,7 +43,7 @@ int ClampZoomIndex(int zoom_index) {
 DevicePolicy GetDevicePolicy(bool is_new_3ds) {
   DevicePolicy policy;
   policy.default_zoom_index = 2;
-  policy.max_zoom_index = is_new_3ds ? 6 : 4;
+  policy.max_zoom_index = 6;
   policy.keep_preview_cache = true;
   policy.keep_tile_cache = is_new_3ds;
   policy.mupdf_store_bytes =
