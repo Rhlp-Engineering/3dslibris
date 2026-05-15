@@ -693,11 +693,6 @@ void Page::Draw(Text *ts) {
         int line_width = page_alignment_utils::MeasureAlignedLineWidth(
             buf, length, (size_t)(i - 1), ts->bold, ts->italic, mono,
             measure_fn, ts);
-        if (line_width > available_width) {
-          line_width = page_alignment_utils::MeasureFirstVisualLineWidth(
-              buf, length, (size_t)(i - 1), ts->bold, ts->italic, mono,
-              available_width, measure_fn, ts);
-        }
         int x_offset = 0;
         if (paragraph_align == book_xml_css_style_utils::TextAlign::Center) {
           x_offset = (available_width - line_width) / 2;

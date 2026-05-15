@@ -582,3 +582,8 @@ void TextRenderer::SetClipToContentEnabled(bool enabled) {
 }
 
 void TextRenderer::SetScriptScale(float s) { script_scale_ = s; }
+
+void TextRenderer::InitPen() {
+  pen.x = parent->margin.left;
+  pen.y = parent->margin.top + parent->GetHeight();
+}

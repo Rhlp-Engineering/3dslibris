@@ -84,15 +84,19 @@ int MeasureAlignedLineWidth(const uint32_t *buf, size_t length, size_t start,
     case TEXT_OVERLINE_OFF:
     case TEXT_PRE_ON:
     case TEXT_PRE_OFF:
+    case TEXT_IMAGE_LEADING_PARAGRAPH:
+    case TEXT_IMAGE_FIGURE_WITH_CAPTION:
+    case TEXT_IMAGE_CONTEXT_DEFAULT:
+      continue;
+    // Paragraph boundary tokens: stop measurement rather than scanning into the
+    // next paragraph's characters (can happen when the inter-paragraph \n is
+    // suppressed at the end of a screen due to no room for block spacing).
     case TEXT_PARAGRAPH_LEFT:
     case TEXT_PARAGRAPH_CENTER:
     case TEXT_PARAGRAPH_RIGHT:
     case TEXT_PARAGRAPH_LTR:
     case TEXT_PARAGRAPH_RTL:
-    case TEXT_IMAGE_LEADING_PARAGRAPH:
-    case TEXT_IMAGE_FIGURE_WITH_CAPTION:
-    case TEXT_IMAGE_CONTEXT_DEFAULT:
-      continue;
+      return line_width;
     case TEXT_IMAGE:
     case TEXT_HR:
     case TEXT_HR_BOUNDS:
@@ -170,15 +174,16 @@ int MeasureFirstVisualLineWidth(const uint32_t *buf, size_t length, size_t start
     case TEXT_OVERLINE_OFF:
     case TEXT_PRE_ON:
     case TEXT_PRE_OFF:
+    case TEXT_IMAGE_LEADING_PARAGRAPH:
+    case TEXT_IMAGE_FIGURE_WITH_CAPTION:
+    case TEXT_IMAGE_CONTEXT_DEFAULT:
+      continue;
     case TEXT_PARAGRAPH_LEFT:
     case TEXT_PARAGRAPH_CENTER:
     case TEXT_PARAGRAPH_RIGHT:
     case TEXT_PARAGRAPH_LTR:
     case TEXT_PARAGRAPH_RTL:
-    case TEXT_IMAGE_LEADING_PARAGRAPH:
-    case TEXT_IMAGE_FIGURE_WITH_CAPTION:
-    case TEXT_IMAGE_CONTEXT_DEFAULT:
-      continue;
+      return line_width;
     case TEXT_IMAGE:
     case TEXT_HR:
     case TEXT_HR_BOUNDS:

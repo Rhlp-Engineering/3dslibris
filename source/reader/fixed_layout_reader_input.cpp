@@ -13,6 +13,7 @@
 #include <3ds.h>
 
 #include "app/app.h"
+#include "settings/prefs.h"
 #include "book/book.h"
 #include "book/book_renderer.h"
 #include "formats/common/pdf_view_utils.h"
