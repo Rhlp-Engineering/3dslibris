@@ -25,6 +25,11 @@ struct FlowEmitMetrics {
   int overflow_threshold;
   int screen_max_height;
   int screen_bottom_margin;
+  // First-line text-indent in pixels. Non-zero only for the first chardata
+  // call of a paragraph (paragraph_has_content == false at build time).
+  // Applied to pen.x before the first word is emitted; wrap lines are not
+  // indented (they reset pen.x to margin_left, not margin_left+text_indent).
+  int text_indent_px;
 };
 
 typedef void (*AdvancePageOnOverflowFn)(parsedata_t *p, int lineheight,

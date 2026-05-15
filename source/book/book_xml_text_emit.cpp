@@ -239,6 +239,11 @@ void EmitFlowedShapedText(
       metrics.display_width - metrics.margin_right - metrics.margin_left;
   size_t unit_index = 0;
   AlignFreshLineToEffectiveLeftMargin(p, metrics);
+  if (metrics.text_indent_px > 0) {
+    const int indent_limit =
+        metrics.display_width - metrics.margin_right - p->pen.x - 1;
+    p->pen.x += std::min(metrics.text_indent_px, std::max(0, indent_limit));
+  }
 
   while (unit_index < run.size()) {
     const text_layout_utils::ShapedGlyph &unit = run[unit_index];

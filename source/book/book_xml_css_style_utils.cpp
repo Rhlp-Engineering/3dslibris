@@ -75,6 +75,12 @@ MarginTopResult ParseOneLengthToken(const std::string &lc, size_t *pos) {
     result.unit = MarginTopResult::Unit::Px;
     result.negative = negative;
     p += 2;
+  } else if (p + 1 < lc.size() && lc[p] == 'i' && lc[p + 1] == 'n') {
+    // 1in = 96px (96dpi).
+    result.value = value * 96 + (frac_x10 * 96 + 9) / 10;
+    result.unit = MarginTopResult::Unit::Px;
+    result.negative = negative;
+    p += 2;
   } else if (value == 0 && !has_decimal) {
     // CSS allows bare unitless zero for lengths (e.g. "margin: 0").
     result.value = 0;

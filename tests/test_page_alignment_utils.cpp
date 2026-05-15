@@ -133,13 +133,16 @@ void TestVisualLineWidthTracksStyleChanges() {
                  3);
 }
 
-void TestVisualLineWidthSkipsControlTokens() {
-  // TEXT_PARAGRAPH_CENTER then "AA BB"; center token must not affect width
-  const uint32_t buf[] = {TEXT_PARAGRAPH_CENTER, 'A','A',' ','B','B','\n'};
-  test::ExpectEq("paragraph-align token skipped in visual line measurement",
+void TestVisualLineWidthStopsAtParagraphAlignToken() {
+  // Simulates the suppressed-newline case: measurement starts at 'A' (the
+  // current glyph, mirroring the renderer's i-1 after i++) and hits a
+  // paragraph boundary token mid-line. The scan must stop at the token and
+  // return only the width of the glyphs seen so far.
+  const uint32_t buf[] = {'A', 'A', TEXT_PARAGRAPH_CENTER, 'B', 'B', '\n'};
+  test::ExpectEq("paragraph-align token stops visual line measurement",
                  page_alignment_utils::MeasureFirstVisualLineWidth(
                      buf, sizeof(buf) / sizeof(buf[0]), 0, false, false, false,
-                     3, MeasureGlyph, NULL),
+                     10, MeasureGlyph, NULL),
                  2);
 }
 

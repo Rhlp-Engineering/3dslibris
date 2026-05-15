@@ -16,6 +16,7 @@
 #include "book/book_xml_css_style_utils.h"
 #include "book/book_xml_parser_style_utils.h"
 #include "book/book_xml_text_emit.h"
+#include "book/epub_css_class_map.h"
 #include "parse.h"
 #include "shared/text_layout_utils.h"
 #include "shared/text_render_layout_utils.h"
@@ -484,6 +485,21 @@ void EmitFlowedFragmentRaw(parsedata_t *p, const char *txt, int txtlen,
   emit_metrics.linespacing = linespacing;
   emit_metrics.spaceadvance = spaceadvance;
   emit_metrics.text_already_transformed = text_already_transformed;
+
+  if (p->in_paragraph && !p->paragraph_has_content) {
+    using book_xml_css_style_utils::MarginTopResult;
+    MarginTopResult ti = book_xml_css_style_utils::ParseTextIndent(
+        p->last_p_style.c_str());
+    if (ti.unit == MarginTopResult::Unit::None)
+      ti = epub_css_class_map::LookupTextIndentForClassAttr(
+          p->last_p_class, p->css_class_map);
+    if (ti.unit != MarginTopResult::Unit::None && !ti.negative) {
+      const int px = book_xml_css_style_utils::ResolveHorizontalMarginPx(
+          ti, ts->display.width);
+      if (px > 0)
+        emit_metrics.text_indent_px = px;
+    }
+  }
 
   if (p->buflen == 0) {
     p->pen.x = ts->margin.left;

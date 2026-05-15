@@ -125,6 +125,17 @@ void TestParseMarginTopPtUnit() {
   test::ExpectEq("12pt -> 16px", r.value, 16);
 }
 
+void TestParseMarginTopInUnit() {
+  using R = book_xml_css_style_utils::MarginTopResult;
+  R one_in = book_xml_css_style_utils::ParseMarginTop("margin-top: 1in;");
+  test::ExpectEq("1in -> Px unit", (int)one_in.unit, (int)R::Unit::Px);
+  test::ExpectEq("1in -> 96px", one_in.value, 96);
+  R frac = book_xml_css_style_utils::ParseMarginTop("margin-top: 0.5in;");
+  test::ExpectEq("0.5in -> Px unit", (int)frac.unit, (int)R::Unit::Px);
+  // frac_x10=5 → (5*96+9)/10 = 489/10 = 48
+  test::ExpectEq("0.5in -> 48px", frac.value, 48);
+}
+
 void TestTryParseFontSizePt() {
   book_xml_css_style_utils::FontSizeSpec spec{};
   const bool ok = book_xml_css_style_utils::TryParseFontSize("font-size: 12pt;", &spec);
@@ -403,6 +414,13 @@ void TestParseTextIndent() {
   R neg = book_xml_css_style_utils::ParseTextIndent("text-indent: -8px;");
   test::ExpectEq("negative text-indent -> Px", (int)neg.unit, (int)R::Unit::Px);
   test::ExpectTrue("negative text-indent is negative", neg.negative);
+
+  // 0.25in at 96dpi = 24px (first decimal digit 2 → (2*96+9)/10 = 19 fractional,
+  // plus 0 whole inches = 19px). Verify unit resolves and value is positive.
+  R in_indent = book_xml_css_style_utils::ParseTextIndent("text-indent: 0.25in;");
+  test::ExpectEq("0.25in -> Px unit", (int)in_indent.unit, (int)R::Unit::Px);
+  test::ExpectTrue("0.25in -> positive value", in_indent.value > 0);
+  test::ExpectFalse("0.25in -> not negative", in_indent.negative);
 }
 
 void TestParseTextAlignStartEnd() {
@@ -569,6 +587,7 @@ int main() {
   TestParseMarginTopNull();
   TestParseMarginTopEmUnit();
   TestParseMarginTopPtUnit();
+  TestParseMarginTopInUnit();
   TestParseMarginBottomZeroUnitless();
   TestParseMarginLeftPx();
   TestParseMarginLeftPercent();
