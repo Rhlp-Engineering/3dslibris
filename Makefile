@@ -266,7 +266,7 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean package-sdmc zip-sdmc source-release debug-3dsx debug-cia cia stage-romfs mupdf-minimal test-host coverage-host
+.PHONY: all clean clean-build package-sdmc zip-sdmc source-release debug-3dsx debug-cia cia stage-romfs mupdf-minimal test-host coverage-host
 
 #---------------------------------------------------------------------------------
 all: stage-romfs mupdf-minimal $(BUILD) $(GFXBUILD) $(DEPSDIR) $(ROMFS_T3XFILES) $(T3XHFILES)
@@ -319,6 +319,17 @@ clean:
 	@echo clean ...
 	@rm -fr $(BUILD) $(DEBUG_BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf \
 		$(GFXBUILD) $(DISTDIR) $(MUPDF_OUT) build-tests/mupdf \
+		$(BASE_TARGET).3dsx $(BASE_TARGET).smdh $(BASE_TARGET).elf \
+		$(BASE_TARGET).cia $(BASE_TARGET)-debug.cia \
+		$(DEBUG_TARGET).3dsx $(DEBUG_TARGET).smdh $(DEBUG_TARGET).elf
+
+#---------------------------------------------------------------------------------
+# Like clean but preserves the MuPDF build artifacts — use this for incremental
+# rebuilds when only app source changed. MuPDF rebuild (the slow part) is skipped.
+clean-build:
+	@echo clean build dirs \(preserving MuPDF\) ...
+	@rm -fr $(BUILD) $(DEBUG_BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf \
+		$(GFXBUILD) $(DISTDIR) build-tests/mupdf \
 		$(BASE_TARGET).3dsx $(BASE_TARGET).smdh $(BASE_TARGET).elf \
 		$(BASE_TARGET).cia $(BASE_TARGET)-debug.cia \
 		$(DEBUG_TARGET).3dsx $(DEBUG_TARGET).smdh $(DEBUG_TARGET).elf
