@@ -45,6 +45,8 @@
 #include "settings/prefs.h"
 #include "reader/book_switch_utils.h"
 #include "ui/text.h"
+#include "shared/screen_dimensions.h"
+#include "ui/screen_layout_constants.h"
 
 #ifndef ORIENTATION_DIAG
 #define ORIENTATION_DIAG 0
@@ -969,12 +971,12 @@ touchPosition App::TouchRead()
 
 void App::DrawBottomGradientBackground()
 {
-  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenright, 320);
+  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenright, screen_dims::kBottomScreenHeightPx);
 }
 
 void App::DrawTopGradientBackground()
 {
-  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenleft, 400);
+  gradient_utils::DrawToScreen(ts.get(), colorMode, ts->screenleft, screen_dims::kTopScreenHeightPx);
 }
 
 // Show the font selection menu, initializing it with the specified font mode (regular, bold, italic, etc.).
@@ -997,14 +999,14 @@ void App::ShowFontView(AppMode app_font_mode)
 void App::ShowLibraryView()
 {
   // Reset shared bottom buttons immediately; prefs view reuses/moves them.
-  buttonprev.Move(2, 296);
-  buttonprev.Resize(66, 22);
+  buttonprev.Move(screen_layout::kFooterLeftX, screen_layout::kFooterY);
+  buttonprev.Resize(screen_layout::kFooterNavW, screen_layout::kFooterButtonH);
   buttonprev.Label("prev");
-  buttonnext.Move(172, 296);
-  buttonnext.Resize(66, 22);
+  buttonnext.Move(screen_layout::kFooterRightX, screen_layout::kFooterY);
+  buttonnext.Resize(screen_layout::kFooterNavW, screen_layout::kFooterButtonH);
   buttonnext.Label("next");
-  buttonprefs.Move(72, 296);
-  buttonprefs.Resize(96, 22);
+  buttonprefs.Move(screen_layout::kFooterMidX, screen_layout::kFooterY);
+  buttonprefs.Resize(screen_layout::kFooterMidW, screen_layout::kFooterButtonH);
   buttonprefs.Label("settings");
 
   Book *bookcurrent_ = GetCurrentBook();
