@@ -29,6 +29,7 @@ private:
   GoToPageDialog go_to_page_dialog_;
   int prefs_general_page_;
   Button button_prefs_page_nav_;
+  Button button_prefs_library_;  // "library" button shown in book context
 
   void ResetToDefaults();
   void ClearAllCaches();

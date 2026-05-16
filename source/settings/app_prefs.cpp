@@ -46,6 +46,12 @@ static const int PREFS_LIBRARY_BTN_Y = 286;
 static const int PREFS_LIBRARY_BTN_W = 104;
 static const int PREFS_LIBRARY_BTN_H = 26;
 
+// Book context: two footer buttons side-by-side
+static const int PREFS_BOOK_BACK_BTN_X = 5;
+static const int PREFS_BOOK_BACK_BTN_W = 140;
+static const int PREFS_BOOK_LIB_BTN_X  = 152;
+static const int PREFS_BOOK_LIB_BTN_W  = 160;
+
 static const int kPage2Buttons[] = {
     PREFS_BUTTON_PUBLISHER_FONTSIZE,
     PREFS_BUTTON_RESET_DEFAULTS,
@@ -69,12 +75,15 @@ static void ClampSelectedIndex(int *selected, u8 visibleCount) {
 }
 
 
-static void SyncLibraryButtonLayout(Button *button, bool paged) {
+static void SyncLibraryButtonLayout(Button *button, bool paged, bool book_ctx) {
   if (!button)
     return;
   if (paged) {
     button->Move(screen_layout::kFooterMidX, screen_layout::kFooterY);
     button->Resize(screen_layout::kFooterMidW, screen_layout::kFooterButtonH);
+  } else if (book_ctx) {
+    button->Move(PREFS_BOOK_BACK_BTN_X, screen_layout::kFooterY);
+    button->Resize(PREFS_BOOK_BACK_BTN_W, screen_layout::kFooterButtonH);
   } else {
     button->Move(PREFS_LIBRARY_BTN_X, PREFS_LIBRARY_BTN_Y);
     button->Resize(PREFS_LIBRARY_BTN_W, PREFS_LIBRARY_BTN_H);
@@ -256,6 +265,11 @@ void SettingsController::PrefsInit() {
   button_prefs_page_nav_.Init(app_.ts.get());
   button_prefs_page_nav_.SetStyle(BUTTON_STYLE_BOOK);
   button_prefs_page_nav_.Resize(screen_layout::kFooterNavW, screen_layout::kFooterButtonH);
+
+  button_prefs_library_.Init(app_.ts.get());
+  button_prefs_library_.SetStyle(BUTTON_STYLE_BOOK);
+  button_prefs_library_.Label("library");
+  button_prefs_library_.Resize(PREFS_BOOK_LIB_BTN_W, screen_layout::kFooterButtonH);
 }
 
 void SettingsController::PrefsDraw() {
@@ -293,9 +307,14 @@ void SettingsController::PrefsDraw() {
     go_to_page_dialog_.Draw();
 
   const bool paged = !app_.IsBookSettingsContext();
-  SyncLibraryButtonLayout(&app_.buttonprefs, paged);
+  const bool book_ctx = app_.IsBookSettingsContext();
+  SyncLibraryButtonLayout(&app_.buttonprefs, paged, book_ctx);
   app_.buttonprefs.Draw(ts->screenright);
-  if (paged) {
+  if (book_ctx) {
+    button_prefs_library_.Move(PREFS_BOOK_LIB_BTN_X, screen_layout::kFooterY);
+    button_prefs_library_.Resize(PREFS_BOOK_LIB_BTN_W, screen_layout::kFooterButtonH);
+    button_prefs_library_.Draw(ts->screenright);
+  } else if (paged) {
     if (prefs_general_page_ == 0) {
       button_prefs_page_nav_.Label("next");
       button_prefs_page_nav_.Move(screen_layout::kFooterRightX, screen_layout::kFooterY);
@@ -402,7 +421,10 @@ void SettingsController::PrefsHandleEvent() {
     PrefsHandlePress();
     if (app_.GetMode() != AppMode::Prefs)
       return;
-  } else if (keys & (KEY_SELECT | KEY_START | KEY_B | KEY_Y)) {
+  } else if (app_.IsBookSettingsContext() && (keys & KEY_START)) {
+    app_.ShowLibraryView();
+    app_.prefs->Write();
+  } else if (keys & (KEY_SELECT | KEY_B | KEY_Y)) {
     app_.ReturnFromPrefs();
   } else if (keys & (app_.key.left | app_.key.l)) {
     if (app_.GetPrefsSelectedIndex() > 0) {
@@ -441,7 +463,12 @@ void SettingsController::PrefsHandleTouch() {
   const int footerX = (int)coord.px;
   const int footerY = (int)coord.py;
 
-  SyncLibraryButtonLayout(&app_.buttonprefs, !app_.IsBookSettingsContext());
+  const bool book_ctx_touch = app_.IsBookSettingsContext();
+  SyncLibraryButtonLayout(&app_.buttonprefs, !book_ctx_touch, book_ctx_touch);
+  if (book_ctx_touch) {
+    button_prefs_library_.Move(PREFS_BOOK_LIB_BTN_X, screen_layout::kFooterY);
+    button_prefs_library_.Resize(PREFS_BOOK_LIB_BTN_W, screen_layout::kFooterButtonH);
+  }
   auto enclosesWithSlack = [&](Button &button, int x, int y) {
     for (int dy = -8; dy <= 8; dy += 4) {
       for (int dx = -8; dx <= 8; dx += 4) {
@@ -461,7 +488,14 @@ void SettingsController::PrefsHandleTouch() {
     return;
   }
 
-  if (!app_.IsBookSettingsContext() &&
+  if (book_ctx_touch &&
+      enclosesWithSlack(button_prefs_library_, footerX, footerY)) {
+    app_.ShowLibraryView();
+    app_.prefs->Write();
+    return;
+  }
+
+  if (!book_ctx_touch &&
       enclosesWithSlack(button_prefs_page_nav_, footerX, footerY)) {
     GoToPrefsPage(prefs_general_page_ == 0 ? 1 : 0);
     return;

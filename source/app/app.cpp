@@ -1041,6 +1041,8 @@ void App::ReturnFromPrefs()
       OpenBook();
     } else {
       ShowCurrentBookView();
+      book_renderer::DrawCurrentView(book, ts.get());
+      RequestStatusRedraw();
     }
   } else {
     ShowLibraryView();
