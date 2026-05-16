@@ -128,21 +128,44 @@ bool HandleBlockElementStart(
     parse_push(p, TAG_HTML);
   } else if (!strcmp(el, "aside")) {
     parse_push(p, TAG_ASIDE);
+    p->last_aside_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_aside_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 1, "aside", "aside-top", false);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "aside", "aside-top", mtr, line_h, 1);
+    }
   } else if (!strcmp(el, "blockquote")) {
     parse_push(p, TAG_BLOCKQUOTE);
+    p->last_blockquote_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_blockquote_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 1, "blockquote", "blockquote-top", false);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "blockquote", "blockquote-top", mtr, line_h, 1);
+    }
   } else if (!strcmp(el, "caption")) {
     parse_push(p, TAG_CAPTION);
+    p->last_caption_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_caption_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 1, "caption", "caption-top", false);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "caption", "caption-top", mtr, line_h, 1);
+    }
   } else if (!strcmp(el, "dd")) {
     parse_push(p, TAG_DD);
+    p->last_dd_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_dd_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
     if (elem_css.margin_left.unit ==
         book_xml_css_style_utils::MarginTopResult::Unit::None) {
@@ -154,20 +177,42 @@ bool HandleBlockElementStart(
           parse_current_block_margin_left(p) + legacy_dd_indent_px,
           parse_current_block_margin_right(p));
     }
-    book_xml_screen_advance::QueueBlockSpacingLines(p, 1, "dd", "dd-top", false);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "dd", "dd-top", mtr, line_h, 1);
+    }
   } else if (!strcmp(el, "body")) {
     parse_push(p, TAG_BODY);
   } else if (!strcmp(el, "div")) {
     parse_push(p, TAG_DIV);
+    p->last_div_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_div_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "div", "div-top", mtr, line_h, 0);
+    }
   } else if (!strcmp(el, "dt")) {
     parse_push(p, TAG_DT);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
   } else if (!strcmp(el, "figure")) {
     parse_push(p, TAG_FIGURE);
+    p->last_figure_style = book_xml_css_resolver::ExtractStyleAttr(attr);
+    p->last_figure_class = book_xml_css_resolver::ExtractClassAttr(attr);
     book_xml_element_style::ApplyElementBlockMargins(p, ts, attr, elem_css);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 1, "figure", "figure-top", false);
+    {
+      const book_xml_css_style_utils::MarginTopResult mtr =
+          book_xml_element_style::ParseElementMarginTopWithClass(attr, elem_css);
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "figure", "figure-top", mtr, line_h, 1);
+    }
   } else if (!strcmp(el, "h4")) {
     parse_push(p, TAG_H4);
     p->last_h_style = book_xml_css_resolver::ExtractStyleAttr(attr);
@@ -454,15 +499,65 @@ bool HandleBlockElementEnd(parsedata_t *p, Text *ts, const char *el) {
     book_xml_screen_advance::Linefeed(p);
   } else if (!strcmp(el, "aside")) {
     book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 2, "aside", "aside-bottom", false);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_aside_style, p->last_aside_class, p->css_class_map, "aside");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "aside", "aside-bottom", mbr, line_h, 2);
+    }
     p->block_margin_left = 0;
     p->block_margin_right = 0;
-  } else if (!strcmp(el, "blockquote") || !strcmp(el, "caption") ||
-             !strcmp(el, "dd") || !strcmp(el, "figure")) {
+  } else if (!strcmp(el, "blockquote")) {
     book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
-    book_xml_screen_advance::QueueBlockSpacingLines(
-        p, 1, el, "block-bottom", false);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_blockquote_style, p->last_blockquote_class,
+              p->css_class_map, "blockquote");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "blockquote", "blockquote-bottom", mbr, line_h, 1);
+    }
+    p->block_margin_left = 0;
+    p->block_margin_right = 0;
+  } else if (!strcmp(el, "caption")) {
+    book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_caption_style, p->last_caption_class,
+              p->css_class_map, "caption");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "caption", "caption-bottom", mbr, line_h, 1);
+    }
+    p->block_margin_left = 0;
+    p->block_margin_right = 0;
+  } else if (!strcmp(el, "dd")) {
+    book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_dd_style, p->last_dd_class, p->css_class_map, "dd");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "dd", "dd-bottom", mbr, line_h, 1);
+    }
+    p->block_margin_left = 0;
+    p->block_margin_right = 0;
+  } else if (!strcmp(el, "figure")) {
+    book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_figure_style, p->last_figure_class,
+              p->css_class_map, "figure");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "figure", "figure-bottom", mbr, line_h, 1);
+    }
     p->block_margin_left = 0;
     p->block_margin_right = 0;
   } else if (!strcmp(el, "p")) {
@@ -490,6 +585,15 @@ bool HandleBlockElementEnd(parsedata_t *p, Text *ts, const char *el) {
     p->block_margin_left = 0;
     p->block_margin_right = 0;
   } else if (!strcmp(el, "div")) {
+    book_xml_flow_emission::FlushInlineTailAndDeferredStyle(p, ts, fns);
+    {
+      const int line_h = ts->GetHeight() + ts->linespacing;
+      const book_xml_css_style_utils::MarginTopResult mbr =
+          book_xml_css_resolver::ParseElementMarginBottomWithClass(
+              p->last_div_style, p->last_div_class, p->css_class_map, "div");
+      book_xml_screen_advance::QueueBlockSpacingFromMarginResult(
+          p, "div", "div-bottom", mbr, line_h, 0);
+    }
     p->block_margin_left = 0;
     p->block_margin_right = 0;
   } else if (!strcmp(el, "h1")) {

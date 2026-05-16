@@ -165,11 +165,23 @@ struct parsedata_t {
 	std::string last_h2_style;   //! style= attr of the most-recently-opened <h2>.
 	std::string last_h_style;    //! style= attr of the most-recently-opened <h3..h6>.
 	std::string last_hr_style;   //! style= attr of the most-recently-opened <hr>.
+	std::string last_div_style;
+	std::string last_aside_style;
+	std::string last_blockquote_style;
+	std::string last_figure_style;
+	std::string last_caption_style;
+	std::string last_dd_style;
 	std::string last_p_class;
 	std::string last_h1_class;
 	std::string last_h2_class;
 	std::string last_h_class;
 	std::string last_hr_class;
+	std::string last_div_class;
+	std::string last_aside_class;
+	std::string last_blockquote_class;
+	std::string last_figure_class;
+	std::string last_caption_class;
+	std::string last_dd_class;
 	epub_css_class_map::CssClassMap css_class_map;
 	int block_margin_left;
 	int block_margin_right;
