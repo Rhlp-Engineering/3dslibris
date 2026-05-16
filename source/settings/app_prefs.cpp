@@ -212,7 +212,7 @@ void SettingsController::ShowSettingsView(bool from_book) {
   if (app_.GetPrefsSelectedIndex() >= visible_count)
     app_.SetPrefsSelectedIndex(visible_count - 1);
   app_.SetMode(AppMode::Prefs);
-  app_.buttonprefs.Label("library");
+  app_.buttonprefs.Label(from_book ? "back" : "library");
   app_.ts->SetScreen(app_.ts->screenright);
   app_.MarkPrefsDirty();
 }
